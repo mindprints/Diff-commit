@@ -1,0 +1,5 @@
+{
+  "name": "Diff & Commit AI",
+  "description": "A smart text comparison tool that highlights differences between two text versions, allowing users to interactively accept or reject changes and generate AI-powered summaries of the modifications.",
+  "requestFramePermissions": []
+}
