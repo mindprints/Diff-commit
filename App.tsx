@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Diff from 'diff';
-import { DiffSegment, ViewMode } from './types';
+import { DiffSegment, ViewMode, FontFamily } from './types';
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
@@ -17,7 +17,9 @@ import {
   HelpCircle,
   Undo,
   Redo,
-  Edit3
+  Edit3,
+  Type as TypeIcon,
+  GripVertical
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -36,6 +38,11 @@ function App() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  // Appearance & Layout
+  const [fontFamily, setFontFamily] = useState<FontFamily>('sans');
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50); // Percentage
+  const isResizing = useRef(false);
   
   // When segments change, update preview text
   useEffect(() => {
@@ -46,6 +53,36 @@ function App() {
     
     setPreviewText(computedText);
   }, [segments]);
+
+  // Resizing Logic
+  const startResizing = useCallback(() => {
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    isResizing.current = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const handleResize = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const newWidth = (e.clientX / window.innerWidth) * 100;
+    if (newWidth > 20 && newWidth < 80) {
+      setLeftPanelWidth(newWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleResize);
+    window.addEventListener('mouseup', stopResizing);
+    return () => {
+      window.removeEventListener('mousemove', handleResize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [handleResize, stopResizing]);
 
   const addToHistory = (newSegments: DiffSegment[]) => {
     const newHistory = history.slice(0, historyIndex + 1);
@@ -69,10 +106,8 @@ function App() {
     }
   };
 
-  const handleCompare = () => {
-    if (!originalText || !modifiedText) return;
-
-    const diffResult = Diff.diffWords(originalText, modifiedText);
+  const performDiff = (source: string, target: string) => {
+    const diffResult = Diff.diffWords(source, target);
     
     let uniqueIdCounter = 0;
     let groupCounter = 0;
@@ -118,6 +153,11 @@ function App() {
     setHistory([initialSegments]);
     setHistoryIndex(0);
     setSegments(initialSegments);
+  };
+
+  const handleCompare = () => {
+    if (!originalText || !modifiedText) return;
+    performDiff(originalText, modifiedText);
     setMode(ViewMode.DIFF);
     setSummary(''); 
   };
@@ -176,12 +216,26 @@ function App() {
   const handlePolish = async () => {
       setIsPolishing(true);
       const polished = await polishMergedText(previewText);
-      setPreviewText(polished); // Update the preview directly
+      
+      // Update state to reflect the new comparison: Current Committed vs Polished
+      setOriginalText(previewText);
+      setModifiedText(polished);
+      
+      // Run the diff immediately
+      performDiff(previewText, polished);
+      
       setIsPolishing(false);
+      setSummary("Comparision updated: Showing changes between your previous draft and the AI polished version.");
   };
 
   const copyFinal = () => {
     navigator.clipboard.writeText(previewText);
+  };
+
+  const fontClasses = {
+    sans: 'font-sans',
+    serif: 'font-serif',
+    mono: 'font-mono'
   };
 
   // Keyboard shortcut for Undo
@@ -213,6 +267,30 @@ function App() {
         </div>
         
         <div className="flex items-center gap-3">
+          <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2 border border-gray-200">
+             <button 
+                onClick={() => setFontFamily('sans')}
+                className={clsx("p-1.5 rounded text-xs font-semibold transition-all", fontFamily === 'sans' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                title="Sans Serif"
+             >
+               Sans
+             </button>
+             <button 
+                onClick={() => setFontFamily('serif')}
+                className={clsx("p-1.5 rounded text-xs font-serif font-semibold transition-all", fontFamily === 'serif' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                title="Serif"
+             >
+               Serif
+             </button>
+             <button 
+                onClick={() => setFontFamily('mono')}
+                className={clsx("p-1.5 rounded text-xs font-mono font-semibold transition-all", fontFamily === 'mono' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                title="Monospace"
+             >
+               Mono
+             </button>
+          </div>
+
           <button 
             onClick={() => setShowHelp(true)}
             className="text-gray-500 hover:text-indigo-600 transition-colors p-2"
@@ -272,7 +350,10 @@ function App() {
             <div className="flex-1 flex flex-col gap-2">
               <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Original Version</label>
               <textarea
-                className="flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none font-mono text-sm leading-relaxed shadow-sm"
+                className={clsx(
+                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none text-sm leading-relaxed shadow-sm",
+                  fontClasses[fontFamily]
+                )}
                 placeholder="Paste original text here..."
                 value={originalText}
                 onChange={(e) => setOriginalText(e.target.value)}
@@ -288,7 +369,10 @@ function App() {
             <div className="flex-1 flex flex-col gap-2">
               <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Revised Version</label>
               <textarea
-                className="flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none font-mono text-sm leading-relaxed shadow-sm"
+                 className={clsx(
+                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none text-sm leading-relaxed shadow-sm",
+                  fontClasses[fontFamily]
+                )}
                 placeholder="Paste revised text here..."
                 value={modifiedText}
                 onChange={(e) => setModifiedText(e.target.value)}
@@ -305,9 +389,12 @@ function App() {
 
         {/* DIFF MODE */}
         {mode === ViewMode.DIFF && (
-          <div className="w-full h-full flex flex-col lg:flex-row">
-            {/* Editor Panel */}
-            <div className="flex-1 flex flex-col border-r border-gray-200 h-full overflow-hidden bg-gray-50/50">
+          <div className="w-full h-full flex flex-row">
+            {/* Editor Panel (Resizable) */}
+            <div 
+                className="flex flex-col border-r border-gray-200 h-full overflow-hidden bg-gray-50/50"
+                style={{ width: `${leftPanelWidth}%` }}
+            >
               <div className="flex-none p-4 border-b border-gray-200 bg-white/80 backdrop-blur-sm flex justify-between items-center">
                  <h2 className="font-semibold text-gray-700 flex items-center gap-2">
                    <FileText className="w-4 h-4" /> 
@@ -319,7 +406,12 @@ function App() {
                  </div>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-8 leading-7 font-mono text-sm text-gray-800 bg-white m-4 rounded-xl shadow-sm border border-gray-100">
+              <div 
+                className={clsx(
+                    "flex-1 overflow-y-auto p-8 leading-7 text-sm text-gray-800 bg-white m-4 rounded-xl shadow-sm border border-gray-100",
+                    fontClasses[fontFamily]
+                )}
+              >
                 {segments.map((seg) => (
                   <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
                 ))}
@@ -341,8 +433,19 @@ function App() {
               </div>
             </div>
 
-            {/* Preview/Output Panel */}
-            <div className="flex-1 lg:max-w-xl flex flex-col h-full bg-white relative z-0">
+            {/* Resizer Handle */}
+            <div
+                className="w-1 bg-gray-200 hover:bg-indigo-400 cursor-col-resize transition-colors active:bg-indigo-600 flex items-center justify-center z-20"
+                onMouseDown={startResizing}
+            >
+                <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300"></div>
+            </div>
+
+            {/* Preview/Output Panel (Resizable) */}
+            <div 
+                className="flex flex-col h-full bg-white relative z-0"
+                style={{ width: `${100 - leftPanelWidth}%` }}
+            >
                <div className="flex-none p-4 border-b border-gray-200 flex justify-between items-center bg-white">
                  <h2 className="font-semibold text-gray-700 flex items-center gap-2">
                     <Edit3 className="w-4 h-4" />
@@ -350,7 +453,7 @@ function App() {
                  </h2>
                  <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={handlePolish} isLoading={isPolishing} icon={<Wand2 className="w-3 h-3" />}>
-                        AI Polish
+                        AI Polish & Review
                     </Button>
                     <Button variant="primary" size="sm" onClick={copyFinal} icon={<Copy className="w-3 h-3" />}>
                         Copy
@@ -360,7 +463,10 @@ function App() {
 
               <div className="flex-1 flex flex-col bg-gray-50/30">
                 <textarea 
-                   className="flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 font-serif text-lg leading-relaxed text-gray-800 focus:bg-white transition-colors outline-none"
+                   className={clsx(
+                     "flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 text-lg leading-relaxed text-gray-800 focus:bg-white transition-colors outline-none",
+                     fontClasses[fontFamily]
+                   )}
                    value={previewText}
                    onChange={(e) => setPreviewText(e.target.value)}
                    spellCheck={false}

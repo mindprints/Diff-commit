@@ -16,3 +16,5 @@ export interface SummaryResponse {
   summary: string;
   toneShift?: string;
 }
+
+export type FontFamily = 'sans' | 'serif' | 'mono';
