@@ -18,3 +18,5 @@ export interface SummaryResponse {
 }
 
 export type FontFamily = 'sans' | 'serif' | 'mono';
+
+export type PolishMode = 'spelling' | 'grammar' | 'polish';

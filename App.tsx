@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Diff from 'diff';
-import { DiffSegment, ViewMode, FontFamily } from './types';
+import { DiffSegment, ViewMode, FontFamily, PolishMode } from './types';
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
@@ -21,7 +21,8 @@ import {
   Type as TypeIcon,
   GripVertical,
   Volume2,
-  Square
+  Square,
+  Check
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -41,6 +42,7 @@ function App() {
   const [summary, setSummary] = useState<string>('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
+  const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
   // Text to Speech
@@ -229,9 +231,10 @@ function App() {
     setIsSummarizing(false);
   };
   
-  const handlePolish = async () => {
+  const handlePolish = async (mode: PolishMode) => {
+      setIsPolishMenuOpen(false);
       setIsPolishing(true);
-      const polished = await polishMergedText(previewText);
+      const polished = await polishMergedText(previewText, mode);
       
       // Update state to reflect the new comparison: Current Committed vs Polished
       setOriginalText(previewText);
@@ -241,7 +244,12 @@ function App() {
       performDiff(previewText, polished);
       
       setIsPolishing(false);
-      setSummary("Comparision updated: Showing changes between your previous draft and the AI polished version.");
+      
+      let summaryText = "Comparison updated: Showing changes between your previous draft and the AI polished version.";
+      if (mode === 'spelling') summaryText = "Comparison updated: Showing spelling corrections.";
+      if (mode === 'grammar') summaryText = "Comparison updated: Showing grammar and spelling corrections.";
+      
+      setSummary(summaryText);
   };
 
   const handleReadAloud = () => {
@@ -453,9 +461,13 @@ function App() {
             </div>
             
             <div className="flex-none flex items-center justify-center py-4 md:py-0">
-               <div className="p-2 bg-gray-100 rounded-full md:rotate-0 rotate-90">
-                 <ChevronRight className="text-gray-400 w-6 h-6" />
-               </div>
+               <button 
+                 onClick={() => setModifiedText(originalText)}
+                 className="p-2 bg-gray-100 hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 rounded-full md:rotate-0 rotate-90 transition-all shadow-sm active:scale-95 active:shadow-inner group"
+                 title="Copy Original to Revised"
+               >
+                 <ChevronRight className="w-6 h-6 group-hover:scale-110 transition-transform" />
+               </button>
             </div>
 
             <div className="flex-1 flex flex-col gap-2">
@@ -540,7 +552,7 @@ function App() {
                 className="flex flex-col h-full bg-white relative z-0"
                 style={{ width: `${100 - leftPanelWidth}%` }}
             >
-               <div className="flex-none p-4 border-b border-gray-200 flex justify-between items-center bg-white">
+               <div className="flex-none p-4 border-b border-gray-200 flex justify-between items-center bg-white relative">
                  <h2 className="font-semibold text-gray-700 flex items-center gap-2">
                     <Edit3 className="w-4 h-4" />
                     Committed Preview
@@ -557,9 +569,41 @@ function App() {
                       {isSpeaking ? "Stop" : "Read"}
                     </Button>
                     <div className="w-px h-6 bg-gray-200 mx-1"></div>
-                    <Button variant="outline" size="sm" onClick={handlePolish} isLoading={isPolishing} icon={<Wand2 className="w-3 h-3" />}>
-                        AI Polish & Review
-                    </Button>
+                    
+                    <div className="relative">
+                        {isPolishMenuOpen && (
+                            <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
+                        )}
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)} 
+                            isLoading={isPolishing} 
+                            icon={<Wand2 className="w-3 h-3" />}
+                            className={clsx(isPolishMenuOpen && "bg-gray-50 ring-2 ring-indigo-100")}
+                        >
+                            AI Edit...
+                        </Button>
+                        
+                        {isPolishMenuOpen && (
+                            <div className="absolute top-full right-0 mt-2 w-52 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50 border-b border-gray-50">Correction Level</div>
+                                <button onClick={() => handlePolish('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                                    Spelling Only
+                                </button>
+                                <button onClick={() => handlePolish('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                    Grammar Fix
+                                </button>
+                                <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 font-medium transition-colors flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                                    Full Polish
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <Button variant="primary" size="sm" onClick={copyFinal} icon={<Copy className="w-3 h-3" />}>
                         Copy
                     </Button>
