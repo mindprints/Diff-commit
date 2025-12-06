@@ -248,6 +248,7 @@ function App() {
       let summaryText = "Comparison updated: Showing changes between your previous draft and the AI polished version.";
       if (mode === 'spelling') summaryText = "Comparison updated: Showing spelling corrections.";
       if (mode === 'grammar') summaryText = "Comparison updated: Showing grammar and spelling corrections.";
+      if (mode === 'prompt') summaryText = "Comparison updated: Showing expanded detailed prompt instructions.";
       
       setSummary(summaryText);
   };
@@ -599,6 +600,11 @@ function App() {
                                 <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 font-medium transition-colors flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
                                     Full Polish
+                                </button>
+                                <div className="border-t border-gray-100 my-1"></div>
+                                <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                    Prompt Expansion
                                 </button>
                             </div>
                         )}

@@ -52,6 +52,10 @@ export const polishMergedText = async (text: string, mode: PolishMode = 'polish'
             systemInstruction = "You are a strict grammarian. Correct spelling, punctuation, and grammatical errors (subject-verb agreement, tense consistency, etc.). Do not rephrase sentences for style or tone unless they are grammatically incorrect.";
             promptTask = "Correct spelling and grammatical errors in the following text. Maintain the original style and flow.";
             break;
+        case 'prompt':
+            systemInstruction = "You are an expert prompt engineer and technical writer. Your goal is to expand brief user intents into highly detailed, optimized instructions for AI models.";
+            promptTask = "Analyze the following text. If it describes a coding/software task (e.g. 'use tailwind'), expand it into a detailed technical instruction including libraries, best practices, and implementation details. If it describes media generation (e.g. 'image of man in office'), expand it into a rich, descriptive prompt optimized for image generators (specifying lighting, composition, style, mood, camera settings). If it is general text, expand the instructions to be comprehensive and unambiguous. Return only the expanded prompt.";
+            break;
         case 'polish':
         default:
             systemInstruction = "You are an expert editor. Polish the text to be smooth, coherent, and professional while preserving the intended meaning.";
