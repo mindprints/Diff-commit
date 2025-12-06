@@ -19,9 +19,13 @@ import {
   Redo,
   Edit3,
   Type as TypeIcon,
-  GripVertical
+  GripVertical,
+  Volume2,
+  Square
 } from 'lucide-react';
 import clsx from 'clsx';
+
+type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
 function App() {
   const [mode, setMode] = useState<ViewMode>(ViewMode.INPUT);
@@ -39,8 +43,13 @@ function App() {
   const [isPolishing, setIsPolishing] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
+  // Text to Speech
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const previewTextareaRef = useRef<HTMLTextAreaElement>(null);
+
   // Appearance & Layout
   const [fontFamily, setFontFamily] = useState<FontFamily>('sans');
+  const [fontSize, setFontSize] = useState<FontSize>('base');
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50); // Percentage
   const isResizing = useRef(false);
   
@@ -53,6 +62,13 @@ function App() {
     
     setPreviewText(computedText);
   }, [segments]);
+
+  // Clean up speech on unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   // Resizing Logic
   const startResizing = useCallback(() => {
@@ -228,6 +244,39 @@ function App() {
       setSummary("Comparision updated: Showing changes between your previous draft and the AI polished version.");
   };
 
+  const handleReadAloud = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    const textarea = previewTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    let textToSpeak = previewText;
+    // If there's a selection, speak only that
+    if (start !== end) {
+      textToSpeak = previewText.substring(start, end);
+    }
+
+    if (!textToSpeak.trim()) return;
+
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    // Optional: Select a voice if needed, but default is usually fine
+    // const voices = window.speechSynthesis.getVoices();
+    // utterance.voice = voices[0]; 
+
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const copyFinal = () => {
     navigator.clipboard.writeText(previewText);
   };
@@ -236,6 +285,13 @@ function App() {
     sans: 'font-sans',
     serif: 'font-serif',
     mono: 'font-mono'
+  };
+
+  const sizeClasses = {
+    sm: 'text-sm leading-loose',
+    base: 'text-base leading-relaxed',
+    lg: 'text-lg leading-relaxed',
+    xl: 'text-xl leading-relaxed'
   };
 
   // Keyboard shortcut for Undo
@@ -267,28 +323,63 @@ function App() {
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2 border border-gray-200">
-             <button 
-                onClick={() => setFontFamily('sans')}
-                className={clsx("p-1.5 rounded text-xs font-semibold transition-all", fontFamily === 'sans' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
-                title="Sans Serif"
-             >
-               Sans
-             </button>
-             <button 
-                onClick={() => setFontFamily('serif')}
-                className={clsx("p-1.5 rounded text-xs font-serif font-semibold transition-all", fontFamily === 'serif' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
-                title="Serif"
-             >
-               Serif
-             </button>
-             <button 
-                onClick={() => setFontFamily('mono')}
-                className={clsx("p-1.5 rounded text-xs font-mono font-semibold transition-all", fontFamily === 'mono' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
-                title="Monospace"
-             >
-               Mono
-             </button>
+          <div className="flex items-center gap-2 mr-2">
+            {/* Font Family */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+              <button 
+                  onClick={() => setFontFamily('sans')}
+                  className={clsx("p-1.5 rounded text-xs font-semibold transition-all w-10", fontFamily === 'sans' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Sans Serif"
+              >
+                Sans
+              </button>
+              <button 
+                  onClick={() => setFontFamily('serif')}
+                  className={clsx("p-1.5 rounded text-xs font-serif font-semibold transition-all w-10", fontFamily === 'serif' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Serif"
+              >
+                Serif
+              </button>
+              <button 
+                  onClick={() => setFontFamily('mono')}
+                  className={clsx("p-1.5 rounded text-xs font-mono font-semibold transition-all w-10", fontFamily === 'mono' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Monospace"
+              >
+                Mono
+              </button>
+            </div>
+
+            {/* Font Size */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+               <button 
+                  onClick={() => setFontSize('sm')} 
+                  className={clsx("w-8 p-1.5 rounded text-xs font-semibold transition-all", fontSize === 'sm' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Small Text"
+                >
+                  S
+                </button>
+                <button 
+                  onClick={() => setFontSize('base')} 
+                  className={clsx("w-8 p-1.5 rounded text-sm font-semibold transition-all", fontSize === 'base' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Medium Text"
+                >
+                  M
+                </button>
+                <button 
+                  onClick={() => setFontSize('lg')} 
+                  className={clsx("w-8 p-1.5 rounded text-base font-semibold transition-all", fontSize === 'lg' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Large Text"
+                >
+                  L
+                </button>
+                 <button 
+                  onClick={() => setFontSize('xl')} 
+                  className={clsx("w-8 p-1.5 rounded text-lg font-semibold transition-all", fontSize === 'xl' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  title="Extra Large Text"
+                >
+                  XL
+                </button>
+            </div>
           </div>
 
           <button 
@@ -351,8 +442,9 @@ function App() {
               <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Original Version</label>
               <textarea
                 className={clsx(
-                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none text-sm leading-relaxed shadow-sm",
-                  fontClasses[fontFamily]
+                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
+                  fontClasses[fontFamily],
+                  sizeClasses[fontSize]
                 )}
                 placeholder="Paste original text here..."
                 value={originalText}
@@ -370,8 +462,9 @@ function App() {
               <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Revised Version</label>
               <textarea
                  className={clsx(
-                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none text-sm leading-relaxed shadow-sm",
-                  fontClasses[fontFamily]
+                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
+                  fontClasses[fontFamily],
+                  sizeClasses[fontSize]
                 )}
                 placeholder="Paste revised text here..."
                 value={modifiedText}
@@ -408,8 +501,9 @@ function App() {
               
               <div 
                 className={clsx(
-                    "flex-1 overflow-y-auto p-8 leading-7 text-sm text-gray-800 bg-white m-4 rounded-xl shadow-sm border border-gray-100",
-                    fontClasses[fontFamily]
+                    "flex-1 overflow-y-auto p-8 text-gray-800 bg-white m-4 rounded-xl shadow-sm border border-gray-100",
+                    fontClasses[fontFamily],
+                    sizeClasses[fontSize]
                 )}
               >
                 {segments.map((seg) => (
@@ -452,6 +546,17 @@ function App() {
                     Committed Preview
                  </h2>
                  <div className="flex gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleReadAloud} 
+                      className={clsx("text-indigo-600 hover:bg-indigo-50", isSpeaking && "bg-indigo-100")}
+                      title={isSpeaking ? "Stop Speaking" : "Read Aloud (Select text to read section)"}
+                      icon={isSpeaking ? <Square className="w-3 h-3 fill-current" /> : <Volume2 className="w-4 h-4" />}
+                    >
+                      {isSpeaking ? "Stop" : "Read"}
+                    </Button>
+                    <div className="w-px h-6 bg-gray-200 mx-1"></div>
                     <Button variant="outline" size="sm" onClick={handlePolish} isLoading={isPolishing} icon={<Wand2 className="w-3 h-3" />}>
                         AI Polish & Review
                     </Button>
@@ -463,12 +568,20 @@ function App() {
 
               <div className="flex-1 flex flex-col bg-gray-50/30">
                 <textarea 
+                   ref={previewTextareaRef}
                    className={clsx(
-                     "flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 text-lg leading-relaxed text-gray-800 focus:bg-white transition-colors outline-none",
-                     fontClasses[fontFamily]
+                     "flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 focus:bg-white transition-colors outline-none",
+                     fontClasses[fontFamily],
+                     sizeClasses[fontSize]
                    )}
                    value={previewText}
-                   onChange={(e) => setPreviewText(e.target.value)}
+                   onChange={(e) => {
+                     if (isSpeaking) {
+                       window.speechSynthesis.cancel();
+                       setIsSpeaking(false);
+                     }
+                     setPreviewText(e.target.value);
+                   }}
                    spellCheck={false}
                    placeholder="Result will appear here. You can also edit this text directly."
                 />
