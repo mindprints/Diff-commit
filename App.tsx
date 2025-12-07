@@ -22,7 +22,9 @@ import {
   GripVertical,
   Volume2,
   Square,
-  Check
+  Check,
+  Moon,
+  Sun
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -53,8 +55,18 @@ function App() {
   const [fontFamily, setFontFamily] = useState<FontFamily>('sans');
   const [fontSize, setFontSize] = useState<FontSize>('base');
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50); // Percentage
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const isResizing = useRef(false);
   
+  // Dark Mode Effect
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
   // When segments change, update preview text
   useEffect(() => {
     const computedText = segments
@@ -319,39 +331,39 @@ function App() {
   }, [historyIndex, history]);
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className={clsx("flex flex-col h-full bg-white dark:bg-slate-900 transition-colors duration-200")}>
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       
       {/* Header */}
-      <header className="flex-none h-16 border-b border-gray-200 px-6 flex items-center justify-between bg-white z-10 shadow-sm">
+      <header className="flex-none h-16 border-b border-gray-200 dark:border-slate-800 px-6 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shadow-sm transition-colors duration-200">
         <div className="flex items-center gap-2">
           <div className="bg-indigo-600 p-1.5 rounded-lg">
             <ArrowRightLeft className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Diff & Commit AI</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">Diff & Commit AI</h1>
         </div>
         
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 mr-2">
             {/* Font Family */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+            <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1 border border-gray-200 dark:border-slate-700">
               <button 
                   onClick={() => setFontFamily('sans')}
-                  className={clsx("p-1.5 rounded text-xs font-semibold transition-all w-10", fontFamily === 'sans' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("p-1.5 rounded text-xs font-semibold transition-all w-10", fontFamily === 'sans' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Sans Serif"
               >
                 Sans
               </button>
               <button 
                   onClick={() => setFontFamily('serif')}
-                  className={clsx("p-1.5 rounded text-xs font-serif font-semibold transition-all w-10", fontFamily === 'serif' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("p-1.5 rounded text-xs font-serif font-semibold transition-all w-10", fontFamily === 'serif' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Serif"
               >
                 Serif
               </button>
               <button 
                   onClick={() => setFontFamily('mono')}
-                  className={clsx("p-1.5 rounded text-xs font-mono font-semibold transition-all w-10", fontFamily === 'mono' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("p-1.5 rounded text-xs font-mono font-semibold transition-all w-10", fontFamily === 'mono' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Monospace"
               >
                 Mono
@@ -359,41 +371,49 @@ function App() {
             </div>
 
             {/* Font Size */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+            <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1 border border-gray-200 dark:border-slate-700">
                <button 
                   onClick={() => setFontSize('sm')} 
-                  className={clsx("w-8 p-1.5 rounded text-xs font-semibold transition-all", fontSize === 'sm' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("w-8 p-1.5 rounded text-xs font-semibold transition-all", fontSize === 'sm' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Small Text"
                 >
                   S
                 </button>
                 <button 
                   onClick={() => setFontSize('base')} 
-                  className={clsx("w-8 p-1.5 rounded text-sm font-semibold transition-all", fontSize === 'base' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("w-8 p-1.5 rounded text-sm font-semibold transition-all", fontSize === 'base' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Medium Text"
                 >
                   M
                 </button>
                 <button 
                   onClick={() => setFontSize('lg')} 
-                  className={clsx("w-8 p-1.5 rounded text-base font-semibold transition-all", fontSize === 'lg' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("w-8 p-1.5 rounded text-base font-semibold transition-all", fontSize === 'lg' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Large Text"
                 >
                   L
                 </button>
                  <button 
                   onClick={() => setFontSize('xl')} 
-                  className={clsx("w-8 p-1.5 rounded text-lg font-semibold transition-all", fontSize === 'xl' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                  className={clsx("w-8 p-1.5 rounded text-lg font-semibold transition-all", fontSize === 'xl' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
                   title="Extra Large Text"
                 >
                   XL
                 </button>
             </div>
           </div>
+          
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
+            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
 
           <button 
             onClick={() => setShowHelp(true)}
-            className="text-gray-500 hover:text-indigo-600 transition-colors p-2"
+            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
             title="Help & Instructions"
           >
             <HelpCircle className="w-5 h-5" />
@@ -401,12 +421,12 @@ function App() {
           
           {mode === ViewMode.DIFF && (
             <>
-               <div className="h-6 w-px bg-gray-200 mx-1"></div>
+               <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
                <div className="flex items-center gap-1">
                  <button 
                     onClick={undo} 
                     disabled={historyIndex <= 0}
-                    className="p-2 text-gray-600 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-600 transition-colors"
+                    className="p-2 text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-600 dark:disabled:hover:text-slate-400 transition-colors"
                     title="Undo (Ctrl+Z)"
                  >
                    <Undo className="w-5 h-5" />
@@ -414,14 +434,14 @@ function App() {
                  <button 
                     onClick={redo} 
                     disabled={historyIndex >= history.length - 1}
-                    className="p-2 text-gray-600 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-600 transition-colors"
+                    className="p-2 text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-600 dark:disabled:hover:text-slate-400 transition-colors"
                     title="Redo (Ctrl+Shift+Z)"
                  >
                    <Redo className="w-5 h-5" />
                  </button>
                </div>
 
-              <div className="h-6 w-px bg-gray-200 mx-1"></div>
+              <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
               
               <Button variant="ghost" onClick={() => setMode(ViewMode.INPUT)} size="sm" icon={<RotateCcw className="w-4 h-4" />}>
                 Reset
@@ -448,10 +468,10 @@ function App() {
         {mode === ViewMode.INPUT && (
           <div className="w-full h-full flex flex-col md:flex-row p-6 gap-6 overflow-y-auto">
             <div className="flex-1 flex flex-col gap-2">
-              <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Original Version</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Original Version</label>
               <textarea
                 className={clsx(
-                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
+                  "flex-1 p-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
                   fontClasses[fontFamily],
                   sizeClasses[fontSize]
                 )}
@@ -464,7 +484,7 @@ function App() {
             <div className="flex-none flex items-center justify-center py-4 md:py-0">
                <button 
                  onClick={() => setModifiedText(originalText)}
-                 className="p-2 bg-gray-100 hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 rounded-full md:rotate-0 rotate-90 transition-all shadow-sm active:scale-95 active:shadow-inner group"
+                 className="p-2 bg-gray-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-gray-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full md:rotate-0 rotate-90 transition-all shadow-sm active:scale-95 active:shadow-inner group"
                  title="Copy Original to Revised"
                >
                  <ChevronRight className="w-6 h-6 group-hover:scale-110 transition-transform" />
@@ -472,10 +492,10 @@ function App() {
             </div>
 
             <div className="flex-1 flex flex-col gap-2">
-              <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Revised Version</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Revised Version</label>
               <textarea
                  className={clsx(
-                  "flex-1 p-4 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
+                  "flex-1 p-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
                   fontClasses[fontFamily],
                   sizeClasses[fontSize]
                 )}
@@ -498,23 +518,23 @@ function App() {
           <div className="w-full h-full flex flex-row">
             {/* Editor Panel (Resizable) */}
             <div 
-                className="flex flex-col border-r border-gray-200 h-full overflow-hidden bg-gray-50/50"
+                className="flex flex-col border-r border-gray-200 dark:border-slate-800 h-full overflow-hidden bg-gray-50/50 dark:bg-slate-900/50"
                 style={{ width: `${leftPanelWidth}%` }}
             >
-              <div className="flex-none p-4 border-b border-gray-200 bg-white/80 backdrop-blur-sm flex justify-between items-center">
-                 <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+              <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex justify-between items-center transition-colors duration-200">
+                 <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                    <FileText className="w-4 h-4" /> 
                    Interactive Diff
                  </h2>
                  <div className="flex gap-2 text-xs">
-                   <button onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100 border border-green-200 transition">Accept All</button>
-                   <button onClick={handleRejectAll} className="px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100 border border-red-200 transition">Reject All</button>
+                   <button onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
+                   <button onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
                  </div>
               </div>
               
               <div 
                 className={clsx(
-                    "flex-1 overflow-y-auto p-8 text-gray-800 bg-white m-4 rounded-xl shadow-sm border border-gray-100",
+                    "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200",
                     fontClasses[fontFamily],
                     sizeClasses[fontSize]
                 )}
@@ -524,17 +544,17 @@ function App() {
                 ))}
               </div>
               
-              <div className="p-3 text-xs text-gray-500 text-center bg-gray-50 border-t border-gray-200 flex justify-center gap-4">
+              <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
                  <div className="flex items-center gap-1.5">
-                   <span className="w-2.5 h-2.5 bg-green-100 border border-green-500 rounded-sm"></span>
+                   <span className="w-2.5 h-2.5 bg-green-100 dark:bg-green-900/50 border border-green-500 dark:border-green-500/50 rounded-sm"></span>
                    <span>Added</span>
                  </div>
                  <div className="flex items-center gap-1.5">
-                   <span className="w-2.5 h-2.5 bg-red-100 border border-red-500 rounded-sm"></span>
+                   <span className="w-2.5 h-2.5 bg-red-100 dark:bg-red-900/50 border border-red-500 dark:border-red-500/50 rounded-sm"></span>
                    <span>Removed</span>
                  </div>
                  <div className="flex items-center gap-1.5">
-                   <span className="w-2.5 h-2.5 bg-blue-50 border border-blue-400 border-dashed rounded-sm"></span>
+                   <span className="w-2.5 h-2.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-500/50 border-dashed rounded-sm"></span>
                    <span>Restored</span>
                  </div>
               </div>
@@ -542,19 +562,19 @@ function App() {
 
             {/* Resizer Handle */}
             <div
-                className="w-1 bg-gray-200 hover:bg-indigo-400 cursor-col-resize transition-colors active:bg-indigo-600 flex items-center justify-center z-20"
+                className="w-1 bg-gray-200 dark:bg-slate-800 hover:bg-indigo-400 dark:hover:bg-indigo-500 cursor-col-resize transition-colors active:bg-indigo-600 dark:active:bg-indigo-500 flex items-center justify-center z-20"
                 onMouseDown={startResizing}
             >
-                <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300"></div>
+                <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300 dark:bg-slate-600"></div>
             </div>
 
             {/* Preview/Output Panel (Resizable) */}
             <div 
-                className="flex flex-col h-full bg-white relative z-0"
+                className="flex flex-col h-full bg-white dark:bg-slate-900 relative z-0 transition-colors duration-200"
                 style={{ width: `${100 - leftPanelWidth}%` }}
             >
-               <div className="flex-none p-4 border-b border-gray-200 flex justify-between items-center bg-white relative">
-                 <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+               <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 relative transition-colors duration-200">
+                 <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                     <Edit3 className="w-4 h-4" />
                     Committed Preview
                  </h2>
@@ -563,13 +583,13 @@ function App() {
                       variant="ghost" 
                       size="sm" 
                       onClick={handleReadAloud} 
-                      className={clsx("text-indigo-600 hover:bg-indigo-50", isSpeaking && "bg-indigo-100")}
+                      className={clsx("text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20", isSpeaking && "bg-indigo-100 dark:bg-indigo-900/40")}
                       title={isSpeaking ? "Stop Speaking" : "Read Aloud (Select text to read section)"}
                       icon={isSpeaking ? <Square className="w-3 h-3 fill-current" /> : <Volume2 className="w-4 h-4" />}
                     >
                       {isSpeaking ? "Stop" : "Read"}
                     </Button>
-                    <div className="w-px h-6 bg-gray-200 mx-1"></div>
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1"></div>
                     
                     <div className="relative">
                         {isPolishMenuOpen && (
@@ -581,28 +601,28 @@ function App() {
                             onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)} 
                             isLoading={isPolishing} 
                             icon={<Wand2 className="w-3 h-3" />}
-                            className={clsx(isPolishMenuOpen && "bg-gray-50 ring-2 ring-indigo-100")}
+                            className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
                         >
                             AI Edit...
                         </Button>
                         
                         {isPolishMenuOpen && (
-                            <div className="absolute top-full right-0 mt-2 w-52 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50 border-b border-gray-50">Correction Level</div>
-                                <button onClick={() => handlePolish('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2">
+                            <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">Correction Level</div>
+                                <button onClick={() => handlePolish('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
                                     Spelling Only
                                 </button>
-                                <button onClick={() => handlePolish('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2">
+                                <button onClick={() => handlePolish('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
                                     Grammar Fix
                                 </button>
-                                <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 font-medium transition-colors flex items-center gap-2">
+                                <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 font-medium transition-colors flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
                                     Full Polish
                                 </button>
-                                <div className="border-t border-gray-100 my-1"></div>
-                                <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2">
+                                <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
+                                <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                                     Prompt Expansion
                                 </button>
@@ -616,11 +636,11 @@ function App() {
                  </div>
               </div>
 
-              <div className="flex-1 flex flex-col bg-gray-50/30">
+              <div className="flex-1 flex flex-col bg-gray-50/30 dark:bg-slate-950/30">
                 <textarea 
                    ref={previewTextareaRef}
                    className={clsx(
-                     "flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 focus:bg-white transition-colors outline-none",
+                     "flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none",
                      fontClasses[fontFamily],
                      sizeClasses[fontSize]
                    )}
@@ -639,14 +659,14 @@ function App() {
 
               {/* Summary Drawer / Overlay */}
               {summary && (
-                <div className="absolute bottom-0 left-0 right-0 bg-indigo-50 border-t border-indigo-100 p-6 shadow-lg transform transition-transform duration-300 max-h-[50%] overflow-y-auto z-10">
+                <div className="absolute bottom-0 left-0 right-0 bg-indigo-50 dark:bg-indigo-950 border-t border-indigo-100 dark:border-indigo-900 p-6 shadow-lg transform transition-transform duration-300 max-h-[50%] overflow-y-auto z-10">
                     <div className="flex justify-between items-start mb-2">
-                        <h3 className="text-indigo-900 font-semibold flex items-center gap-2">
+                        <h3 className="text-indigo-900 dark:text-indigo-100 font-semibold flex items-center gap-2">
                             <Sparkles className="w-4 h-4" /> AI Summary
                         </h3>
-                        <button onClick={() => setSummary('')} className="text-indigo-400 hover:text-indigo-700">&times;</button>
+                        <button onClick={() => setSummary('')} className="text-indigo-400 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-100">&times;</button>
                     </div>
-                    <div className="prose prose-sm prose-indigo text-indigo-800">
+                    <div className="prose prose-sm prose-indigo dark:prose-invert text-indigo-800 dark:text-indigo-200">
                         <p className="whitespace-pre-wrap">{summary}</p>
                     </div>
                 </div>

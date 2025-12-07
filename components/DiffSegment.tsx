@@ -12,7 +12,7 @@ export const DiffSegment: React.FC<Props> = ({ segment, onClick }) => {
   const { type, value, isIncluded } = segment;
 
   if (type === 'unchanged') {
-    return <span className="text-gray-700 font-light leading-relaxed">{value}</span>;
+    return <span className="text-gray-700 dark:text-slate-300 font-light leading-relaxed">{value}</span>;
   }
 
   // Styles for ADDED segments
@@ -24,8 +24,8 @@ export const DiffSegment: React.FC<Props> = ({ segment, onClick }) => {
         className={clsx(
           "cursor-pointer px-0.5 rounded transition-all duration-200 select-none border-b-2",
           isIncluded 
-            ? "bg-green-100 text-green-900 border-green-500 hover:bg-green-200" 
-            : "bg-gray-100 text-gray-400 border-transparent decoration-gray-400 line-through opacity-60 hover:opacity-100"
+            ? "bg-green-100 text-green-900 border-green-500 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-600 dark:hover:bg-green-900/50" 
+            : "bg-gray-100 text-gray-400 border-transparent decoration-gray-400 line-through opacity-60 hover:opacity-100 dark:bg-slate-800 dark:text-slate-600 dark:decoration-slate-600"
         )}
       >
         {value}
@@ -44,8 +44,8 @@ export const DiffSegment: React.FC<Props> = ({ segment, onClick }) => {
         className={clsx(
           "cursor-pointer px-0.5 rounded transition-all duration-200 select-none border-b-2",
           !isIncluded
-            ? "bg-red-100 text-red-900 border-red-500 line-through hover:bg-red-200 decoration-red-500" // "Deleted" state
-            : "bg-blue-50 text-blue-900 border-blue-400 border-dashed hover:bg-blue-100" // "Restored" state
+            ? "bg-red-100 text-red-900 border-red-500 line-through hover:bg-red-200 decoration-red-500 dark:bg-red-900/30 dark:text-red-300 dark:border-red-600 dark:decoration-red-600" // "Deleted" state
+            : "bg-blue-50 text-blue-900 border-blue-400 border-dashed hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-500" // "Restored" state
         )}
       >
         {value}
