@@ -20,9 +20,35 @@ Diff & Commit AI is a modern, interactive desktop application designed to stream
 -   **AI Polish**: Smooths out your final text with distinct modes:
     -   **Spelling Only**: Fixes typos without altering style.
     -   **Grammar Fix**: Corrects syntax and punctuation while preserving tone.
-    -   **Full Polish**: Improves flow, clarity, and vocabulary.
-    -   **Prompt Expansion**: Expands brief logic into high-fidelity AI prompt instructions.
+    -   **Full Polish**: Improves flow, clarity, and vocabulary (never alters opinions or factual claims).
+    -   **Prompt Expansion**: Expands brief ideas into detailed AI instructions.
+    -   **Execute Prompt**: Runs the current text as a prompt—the AI carries out the instructions and returns the result.
 -   **Cancellable Operations**: Cancel any in-progress AI operation with a single click to avoid getting stuck.
+
+### 🛡️ AI Fact Checker
+Verify factual claims in your text using **Perplexity Sonar Pro** with real-time web search capabilities.
+
+-   **Two-Stage Verification**:
+    1.  **Claim Extraction**: Uses a fast, cost-effective model (DeepSeek v3.2) to identify all factual claims in your text.
+    2.  **Web Verification**: Each claim is verified using Perplexity's search-enabled AI, which cites real sources.
+
+-   **Claim Categories Detected**:
+    -   📊 **Statistical** - Numbers, percentages, data points
+    -   📅 **Historical** - Dates, events, historical facts
+    -   🔬 **Scientific** - Research findings, scientific consensus
+    -   🔗 **Causal** - "X causes Y" claims
+    -   📈 **Frequency** - "always", "never", "most" claims
+    -   💊 **Medical** - Health and treatment claims
+    -   🕵️ **Conspiracy** - Claims about hidden agendas/coverups
+    -   📝 **General** - Other factual assertions
+
+-   **Verification Statuses**:
+    -   ✅ **Verified** - Claim is accurate and well-sourced
+    -   ❌ **False** - Claim is demonstrably incorrect
+    -   ⚠️ **Misleading** - Technically true but lacks important context
+    -   ❓ **Unverifiable** - Cannot be confirmed or denied
+
+-   **Access**: Available in the "AI Edit..." dropdown menu.
 
 ### 📊 Cost Tracking & Quality Control
 -   **Real-time Cost Estimation**: Tracks token usage per session and calculates exact costs based on the selected model's pricing.
@@ -81,6 +107,7 @@ We support a curated list of high-performance models to give users flexibility b
     -   **Google**: `gemini-3-pro-preview` - Large context window (1M tokens).
     -   **Anthropic**: `claude-haiku-4.5` - Fast and accurate.
     -   **OpenAI**: `gpt-oss-120b` - Budget-friendly option.
+    -   **Perplexity**: `sonar-pro` - Search-enabled AI for fact-checking with web citations.
     -   **Others**: Moonshot AI (Kimi K2), xAI (Grok 4.1), MiniMax M2, Z-AI (GLM 4.6), Amazon Nova 2.
 
 ## Tech Stack

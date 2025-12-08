@@ -1,6 +1,6 @@
 {
   "name": "diff-commit-ai",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.",
   "author": "Diff & Commit AI Team",
   "main": "electron/main.js",
@@ -28,7 +28,7 @@
       "target": [
         "nsis"
       ],
-      "icon": "public/icon.ico"
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": false,

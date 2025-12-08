@@ -6,6 +6,7 @@ import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
 import { generateDiffSummary, polishMergedText } from './services/ai';
+import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
 import { LogsModal } from './components/LogsModal';
@@ -31,7 +32,8 @@ import {
   Sun,
   X,
   BarChart3,
-  Trash2
+  Trash2,
+  Shield
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -51,6 +53,8 @@ function App() {
   const [summary, setSummary] = useState<string>('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
+  const [isFactChecking, setIsFactChecking] = useState(false);
+  const [factCheckProgress, setFactCheckProgress] = useState<string>('');
   const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
@@ -303,6 +307,8 @@ function App() {
     }
     setIsSummarizing(false);
     setIsPolishing(false);
+    setIsFactChecking(false);
+    setFactCheckProgress('');
   };
 
   const handleGenerateSummary = async () => {
@@ -380,6 +386,91 @@ function App() {
     if (mode === 'prompt') summaryText = "Comparison updated: Showing expanded detailed prompt instructions.";
 
     setSummary(summaryText);
+  };
+
+  const handleFactCheck = async () => {
+    // Cancel any existing request
+    cancelAIOperation();
+
+    // Create new AbortController
+    abortControllerRef.current = new AbortController();
+
+    setIsPolishMenuOpen(false);
+    setIsFactChecking(true);
+    setFactCheckProgress('Starting fact check...');
+    setErrorMessage(null);
+
+    const { session, usage, isError, isCancelled, errorMessage } = await runFactCheck(
+      previewText,
+      (stage, _percent) => setFactCheckProgress(stage),
+      abortControllerRef.current.signal
+    );
+
+    // Don't update state if cancelled
+    if (isCancelled) return;
+
+    if (isError) {
+      setErrorMessage(errorMessage || 'Fact check failed.');
+      setIsFactChecking(false);
+      setFactCheckProgress('');
+      return;
+    }
+
+    // Display the report in the summary field
+    setSummary(session.report);
+
+    // Calculate and update cost
+    if (usage) {
+      const models = getFactCheckModels();
+      // Rough split: extraction uses ~20% of tokens, verification ~80%
+      const extractionCost = (usage.inputTokens * 0.2 / 1_000_000 * models.extraction.inputPrice) +
+        (usage.outputTokens * 0.2 / 1_000_000 * models.extraction.outputPrice);
+      const verificationCost = (usage.inputTokens * 0.8 / 1_000_000 * models.verification.inputPrice) +
+        (usage.outputTokens * 0.8 / 1_000_000 * models.verification.outputPrice);
+      setSessionCost(prev => prev + extractionCost + verificationCost);
+
+      // Log usage for both stages
+      const sessionId = crypto.randomUUID();
+
+      // Log extraction
+      const extractionLog: AILogEntry = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        modelId: models.extraction.id,
+        modelName: models.extraction.name,
+        taskType: 'fact-check-extraction',
+        inputTokens: Math.round(usage.inputTokens * 0.2),
+        outputTokens: Math.round(usage.outputTokens * 0.2),
+        cost: extractionCost,
+        sessionId
+      };
+
+      // Log verification  
+      const verificationLog: AILogEntry = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        modelId: models.verification.id,
+        modelName: models.verification.name,
+        taskType: 'fact-check-verification',
+        inputTokens: Math.round(usage.inputTokens * 0.8),
+        outputTokens: Math.round(usage.outputTokens * 0.8),
+        cost: verificationCost,
+        sessionId
+      };
+
+      // Persist to Electron store if available
+      if (window.electron && window.electron.logUsage) {
+        await window.electron.logUsage(extractionLog);
+        await window.electron.logUsage(verificationLog);
+      }
+
+      // Trigger rating prompt
+      setActiveLogId(verificationLog.id);
+    }
+
+    setIsFactChecking(false);
+    setFactCheckProgress('');
+    abortControllerRef.current = null;
   };
 
   const handleReadAloud = () => {
@@ -795,14 +886,14 @@ function App() {
                     variant="outline"
                     size="sm"
                     onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
-                    isLoading={isPolishing}
-                    disabled={isPolishing || isSummarizing}
+                    isLoading={isPolishing || isFactChecking}
+                    disabled={isPolishing || isSummarizing || isFactChecking}
                     icon={<Wand2 className="w-3 h-3" />}
                     className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
                   >
-                    AI Edit...
+                    {isFactChecking ? 'Checking...' : 'AI Edit...'}
                   </Button>
-                  {isPolishing && (
+                  {(isPolishing || isFactChecking) && (
                     <button
                       onClick={cancelAIOperation}
                       className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
@@ -810,6 +901,11 @@ function App() {
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  )}
+                  {isFactChecking && factCheckProgress && (
+                    <span className="text-xs text-gray-500 dark:text-slate-400 max-w-32 truncate">
+                      {factCheckProgress}
+                    </span>
                   )}
 
                   {isPolishMenuOpen && (
@@ -831,6 +927,17 @@ function App() {
                       <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                         Prompt Expansion
+                      </button>
+                      <button onClick={() => handlePolish('execute')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                        Execute Prompt
+                      </button>
+                      <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">Verification</div>
+                      <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-cyan-500" />
+                        Fact Check
+                        <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
                       </button>
                     </div>
                   )}

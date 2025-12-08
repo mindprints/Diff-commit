@@ -80,6 +80,14 @@ export const MODELS: Model[] = [
         contextWindow: 1000000,
         inputPrice: 0.30,
         outputPrice: 2.50
+    },
+    {
+        id: "perplexity/sonar-pro",
+        name: "Perplexity Sonar Pro",
+        provider: "Perplexity",
+        contextWindow: 200000,
+        inputPrice: 3.00,
+        outputPrice: 15.00
     }
 ];
 
