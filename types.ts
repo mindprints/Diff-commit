@@ -20,3 +20,16 @@ export interface SummaryResponse {
 export type FontFamily = 'sans' | 'serif' | 'mono';
 
 export type PolishMode = 'spelling' | 'grammar' | 'polish' | 'prompt';
+
+export interface AILogEntry {
+  id: string;
+  timestamp: number;
+  modelId: string;
+  modelName: string;
+  taskType: 'summary' | 'polish';
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  rating?: number; // 1-5
+  feedback?: string;
+}

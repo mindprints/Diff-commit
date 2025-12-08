@@ -7,10 +7,39 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+.nyc_output
+
+# Production Build
 dist
 dist-ssr
-*.local
+build
+release
+
+# Electron
+dist_electron
+electron/dist
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.app
+*.snap
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+key.json
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +51,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.history/
+
+# OS Generated
+Thumbs.db
+ehthumbs.db
+Desktop.ini
