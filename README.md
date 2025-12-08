@@ -11,20 +11,28 @@ Diff & Commit AI is a modern, interactive desktop application designed to stream
     -   *Restore* a deletion to keep the original text.
 -   **Smart Swapping**: Automatically links replaced text (e.g., changing "cat" to "dog") so clicking one instantly toggles the other, preventing logical errors.
 -   **Undo/Redo History**: Full state management allows you to safely roll back changes.
+-   **Clear Text Panels**: Individual and "Clear All" buttons to quickly reset input panels.
 
 ### 🤖 AI-Powered Enhancements
--   **Multi-Model Support**: Switch instantly between top-tier models like **DeepSeek v3.5**, **Claude Haiku**, **GPT-OSS**, **Google Gemini**, and more via OpenRouter.
+-   **Multi-Model Support**: Switch instantly between top-tier models like **DeepSeek v3.2**, **Claude Haiku 4.5**, **GPT-OSS 120B**, **Google Gemini 3 Pro**, and more via OpenRouter.
+-   **Cost Tier Indicators**: Models display dollar sign indicators ($-$$$$) in the dropdown to help anticipate costs before selection.
 -   **AI Summary**: Generates a concise changelog of differences between versions.
 -   **AI Polish**: Smooths out your final text with distinct modes:
     -   **Spelling Only**: Fixes typos without altering style.
     -   **Grammar Fix**: Corrects syntax and punctuation while preserving tone.
     -   **Full Polish**: Improves flow, clarity, and vocabulary.
     -   **Prompt Expansion**: Expands brief logic into high-fidelity AI prompt instructions.
+-   **Cancellable Operations**: Cancel any in-progress AI operation with a single click to avoid getting stuck.
 
 ### 📊 Cost Tracking & Quality Control
 -   **Real-time Cost Estimation**: Tracks token usage per session and calculates exact costs based on the selected model's pricing.
 -   **Performance Logging**: Automatically logs every AI request (Task, Model, Tokens, Cost) to local storage.
--   **User Rating System**: Built-in 5-star rating prompt allows you to score generic model performance and save feedback for later review.
+-   **User Rating System**: Built-in 5-star rating prompt appears after each AI operation, allowing you to score model performance and save feedback.
+-   **Logs Viewer**: Access your complete AI usage history through the logs modal (📊 icon in header):
+    -   View all requests with date, model, task type, tokens, cost, and rating.
+    -   See aggregate statistics: total cost, token counts, and average rating.
+    -   Export logs to CSV for analysis.
+    -   Clear all logs to start fresh.
 
 ### 📝 Committed Preview & Editing
 -   **Real-time Preview**: See exactly what the final text looks like as you toggle differences.
@@ -37,7 +45,7 @@ Diff & Commit AI is a modern, interactive desktop application designed to stream
 -   **Resizable Split Pane**: Drag the divider to adjust the ratio between the Diff View and the Preview.
 -   **Non-Intrusive Alerts**: Error messages and notifications appear as sleek, dismissible toasts.
 
-## Architecture & Implementation Plan
+## Architecture & Implementation
 
 ### 🚀 Desktop Application (Electron)
 Built as a robust desktop application using **Electron** to ensure better system integration, offline capability, and secure local storage.
@@ -46,7 +54,8 @@ Built as a robust desktop application using **Electron** to ensure better system
 -   **Bundler**: Vite (configured with `base: './'` for relative path resolution).
 -   **Electron Builder**: Packages the application as a standalone `.exe` for Windows.
 -   **Scripts**:
-    -   `npm run electron:dev`: Runs React (Vite) and Electron concurrently for development.
+    -   `npm run dev`: Runs the Vite development server (browser mode).
+    -   `npm run electron:dev`: Runs React (Vite) and Electron concurrently for desktop development.
     -   `npm run electron:build:win`: Builds the production executable for Windows.
 
 ### 🔑 API Key Management & Security
@@ -62,11 +71,17 @@ To ensure security and user privacy, we implement a dual-storage strategy for AP
 We support a curated list of high-performance models to give users flexibility between cost, speed, and intelligence.
 
 -   **Model Registry**: Managed in `constants/models.ts`.
+-   **Cost Tiers**: Each model displays a cost indicator:
+    -   **$** = Budget (< $0.50/M tokens avg)
+    -   **$$** = Standard ($0.50 - $2.00/M tokens avg)
+    -   **$$$** = Premium ($2.00 - $5.00/M tokens avg)
+    -   **$$$$** = Expensive (> $5.00/M tokens avg)
 -   **Supported Providers** (via OpenRouter):
-    -   **DeepSeek**: (e.g., `deepseek-v3.2`) - Excellent price/performance ratio.
-    -   **Google**: (e.g., `gemini-3-pro-preview`) - Large context window.
-    -   **Anthropic**: (e.g., `claude-haiku-4.5`) - fast and accurate.
-    -   **Others**: Moonshot AI, xAI (Grok), MiniMax, Z-AI, Amazon Nova.
+    -   **DeepSeek**: `deepseek-v3.2` - Excellent price/performance ratio.
+    -   **Google**: `gemini-3-pro-preview` - Large context window (1M tokens).
+    -   **Anthropic**: `claude-haiku-4.5` - Fast and accurate.
+    -   **OpenAI**: `gpt-oss-120b` - Budget-friendly option.
+    -   **Others**: Moonshot AI (Kimi K2), xAI (Grok 4.1), MiniMax M2, Z-AI (GLM 4.6), Amazon Nova 2.
 
 ## Tech Stack
 
@@ -82,7 +97,7 @@ We support a curated list of high-performance models to give users flexibility b
 
 ### Prerequisites
 -   Node.js installed.
--   An **OpenRouter API Key**.
+-   An **OpenRouter API Key** (get one at [openrouter.ai](https://openrouter.ai)).
 
 ### Installation
 
@@ -97,13 +112,19 @@ We support a curated list of high-performance models to give users flexibility b
     ```
     Add your `OPENROUTER_API_KEY`.
 
-4.  **Run Development Mode**:
+4.  **Run Development Mode (Browser)**:
+    ```bash
+    npm run dev
+    ```
+    Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+5.  **Run Development Mode (Electron)**:
     ```bash
     npm run electron:dev
     ```
-    This launches the standalone Electron window.
+    This launches the standalone Electron window with hot reload.
 
-5.  **Build for Windows**:
+6.  **Build for Windows**:
     ```bash
     npm run electron:build:win
     ```

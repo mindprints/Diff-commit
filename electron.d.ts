@@ -7,6 +7,8 @@ export interface IElectronAPI {
     setApiKey: (provider: string, apiKey: string) => Promise<void>;
     logUsage: (logEntry: AILogEntry) => Promise<boolean>;
     updateLogRating: (id: string, rating: number, feedback?: string) => Promise<boolean>;
+    getLogs: () => Promise<AILogEntry[]>;
+    clearLogs: () => Promise<boolean>;
 }
 
 declare global {

@@ -10,9 +10,7 @@ export interface Model {
 
 export const MODELS: Model[] = [
     {
-        id: "deepseek/deepseek-v3.2", // Note: The file said v3.2 but typically IDs form is model_provider/model_name. I will use the ID from the md file if possible. The md says "deepseek/deepseek-v3.2". Wait, I should double check the exact IDs from the md file carefully.
-        // The md says: ### [deepseek](https://openrouter.ai/deepseek)/deepseek-v3.2
-        // So ID is "deepseek/deepseek-v3.2" likely.
+        id: "deepseek/deepseek-v3.2",
         name: "DeepSeek v3.2",
         provider: "DeepSeek",
         contextWindow: 163840,
@@ -86,3 +84,32 @@ export const MODELS: Model[] = [
 ];
 
 export const DEFAULT_MODEL = MODELS[0];
+
+/**
+ * Returns a cost tier indicator ($ to $$$$) based on average price per million tokens
+ * $    = < $0.50 (budget)
+ * $$   = $0.50 - $2.00 (standard)
+ * $$$  = $2.00 - $5.00 (premium)
+ * $$$$ = > $5.00 (expensive)
+ */
+export function getCostTier(model: Model): string {
+    const avgPrice = (model.inputPrice + model.outputPrice) / 2;
+    if (avgPrice < 0.50) return '$';
+    if (avgPrice < 2.00) return '$$';
+    if (avgPrice < 5.00) return '$$$';
+    return '$$$$';
+}
+
+/**
+ * Returns a CSS color class based on cost tier
+ */
+export function getCostTierColor(model: Model): string {
+    const tier = getCostTier(model);
+    switch (tier) {
+        case '$': return 'text-green-600 dark:text-green-400';
+        case '$$': return 'text-yellow-600 dark:text-yellow-400';
+        case '$$$': return 'text-orange-600 dark:text-orange-400';
+        case '$$$$': return 'text-red-600 dark:text-red-400';
+        default: return 'text-gray-600 dark:text-gray-400';
+    }
+}

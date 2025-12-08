@@ -13,18 +13,20 @@ interface AIResponse {
         outputTokens: number;
     };
     isError?: boolean;
+    isCancelled?: boolean;
 }
 
 async function callOpenRouter(
     model: Model,
     messages: { role: string, content: string }[],
     temperature: number = 0.3,
-    responseFormat?: any
+    responseFormat?: any,
+    signal?: AbortSignal
 ): Promise<AIResponse> {
     if (!OPENROUTER_API_KEY) {
         console.warn("OpenRouter API Key is missing.");
         // Fallback or error handling
-        return { text: "API Key missing. Check .env configuration." };
+        return { text: "API Key missing. Check .env configuration.", isError: true };
     }
 
     try {
@@ -41,7 +43,8 @@ async function callOpenRouter(
                 messages: messages,
                 temperature: temperature,
                 response_format: responseFormat
-            })
+            }),
+            signal // Pass abort signal to fetch
         });
 
         if (!response.ok) {
@@ -69,13 +72,17 @@ async function callOpenRouter(
 
         return { text, usage };
 
-    } catch (error) {
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.log("AI request was cancelled.");
+            return { text: "Request cancelled.", isError: true, isCancelled: true };
+        }
         console.error("Network Error:", error);
         return { text: "Network error occurred. Please check your connection.", isError: true };
     }
 }
 
-export const generateDiffSummary = async (original: string, modified: string, model: Model): Promise<AIResponse> => {
+export const generateDiffSummary = async (original: string, modified: string, model: Model, signal?: AbortSignal): Promise<AIResponse> => {
     const prompt = `
       Compare the following two texts and provide a concise summary of the key changes.
       Focus on meaning, tone, and significant structural edits.
@@ -90,10 +97,10 @@ export const generateDiffSummary = async (original: string, modified: string, mo
     return callOpenRouter(model, [
         { role: "system", content: "You are an expert editor. Provide a bulleted list of changes." },
         { role: "user", content: prompt }
-    ]);
+    ], 0.3, undefined, signal);
 };
 
-export const polishMergedText = async (text: string, mode: PolishMode, model: Model): Promise<AIResponse> => {
+export const polishMergedText = async (text: string, mode: PolishMode, model: Model, signal?: AbortSignal): Promise<AIResponse> => {
     let systemInstruction = "";
     let promptTask = "";
 
@@ -132,7 +139,7 @@ export const polishMergedText = async (text: string, mode: PolishMode, model: Mo
     const response = await callOpenRouter(model, [
         { role: "system", content: systemInstruction },
         { role: "user", content: userContent }
-    ], 0.3, { type: "json_object" });
+    ], 0.3, { type: "json_object" }, signal);
 
     if (response.isError) {
         return response;

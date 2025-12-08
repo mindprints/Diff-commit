@@ -75,6 +75,15 @@ app.whenReady().then(() => {
         return false;
     });
 
+    ipcMain.handle('get-logs', () => {
+        return store.get('aiLogs') || [];
+    });
+
+    ipcMain.handle('clear-logs', () => {
+        store.set('aiLogs', []);
+        return true;
+    });
+
     createWindow();
 });
 

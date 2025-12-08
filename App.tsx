@@ -6,8 +6,9 @@ import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
 import { generateDiffSummary, polishMergedText } from './services/ai';
-import { MODELS, Model } from './constants/models';
+import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
+import { LogsModal } from './components/LogsModal';
 import { AILogEntry } from './types';
 import {
   ArrowRightLeft,
@@ -27,7 +28,10 @@ import {
   Square,
   Check,
   Moon,
-  Sun
+  Sun,
+  X,
+  BarChart3,
+  Trash2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -35,8 +39,8 @@ type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
 function App() {
   const [mode, setMode] = useState<ViewMode>(ViewMode.INPUT);
-  const [originalText, setOriginalText] = useState<string>("The sky above the port was the color of television, tuned to a dead channel.\n\nIt was a bright cold day in April, and the clocks were striking thirteen.");
-  const [modifiedText, setModifiedText] = useState<string>("The sky above the port was the color of a tablet, tuned to a streaming service.\n\nIt was a bright warm day in May, and the clocks were striking one.");
+  const [originalText, setOriginalText] = useState<string>("Welcome to Diff & Commit AI!\n\nPaste your ORIGINAL text here. This is typically your first draft, the previous version, or the source you want to compare against.\n\nOnce you have text in both panels, click \"Compare Versions\" to see the differences highlighted interactively.");
+  const [modifiedText, setModifiedText] = useState<string>("Welcome to Diff & Commit AI!\n\nPaste your REVISED text here. This is typically your edited version, AI-generated alternative, or the target you want to merge into.\n\nClick any highlighted difference to toggle it on or off. Use AI Polish to refine your final result!");
 
   // History Management
   const [segments, setSegments] = useState<DiffSegment[]>([]);
@@ -49,6 +53,7 @@ function App() {
   const [isPolishing, setIsPolishing] = useState(false);
   const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
 
   // Model & Cost Management
   const [selectedModel, setSelectedModel] = useState<Model>(MODELS[0]);
@@ -64,6 +69,9 @@ function App() {
   // Text to Speech
   const [isSpeaking, setIsSpeaking] = useState(false);
   const previewTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // AI Request Cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Error Handling
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -88,10 +96,13 @@ function App() {
       cost
     };
 
+    // Persist to electron-store if available
     if (window.electron && window.electron.logUsage) {
       await window.electron.logUsage(logEntry);
-      setActiveLogId(logEntry.id);
     }
+
+    // Always show rating prompt after AI call
+    setActiveLogId(logEntry.id);
   };
 
   const handleRate = async (id: string, rating: number, feedback?: string) => {
@@ -285,10 +296,33 @@ function App() {
     addToHistory(newSegments);
   };
 
+  const cancelAIOperation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsSummarizing(false);
+    setIsPolishing(false);
+  };
+
   const handleGenerateSummary = async () => {
+    // Cancel any existing request
+    cancelAIOperation();
+
+    // Create new AbortController
+    abortControllerRef.current = new AbortController();
+
     setIsSummarizing(true);
     setErrorMessage(null);
-    const { text, usage, isError } = await generateDiffSummary(originalText, modifiedText, selectedModel);
+    const { text, usage, isError, isCancelled } = await generateDiffSummary(
+      originalText,
+      modifiedText,
+      selectedModel,
+      abortControllerRef.current.signal
+    );
+
+    // Don't update state if cancelled
+    if (isCancelled) return;
 
     if (isError) {
       setErrorMessage(text);
@@ -298,13 +332,28 @@ function App() {
       if (usage) logAIUsage('summary', usage);
     }
     setIsSummarizing(false);
+    abortControllerRef.current = null;
   };
 
   const handlePolish = async (mode: PolishMode) => {
+    // Cancel any existing request
+    cancelAIOperation();
+
+    // Create new AbortController
+    abortControllerRef.current = new AbortController();
+
     setIsPolishMenuOpen(false);
     setIsPolishing(true);
     setErrorMessage(null);
-    const { text: polished, usage, isError } = await polishMergedText(previewText, mode, selectedModel);
+    const { text: polished, usage, isError, isCancelled } = await polishMergedText(
+      previewText,
+      mode,
+      selectedModel,
+      abortControllerRef.current.signal
+    );
+
+    // Don't update state if cancelled
+    if (isCancelled) return;
 
     if (isError) {
       setErrorMessage(polished);
@@ -323,6 +372,7 @@ function App() {
     performDiff(previewText, polished);
 
     setIsPolishing(false);
+    abortControllerRef.current = null;
 
     let summaryText = "Comparison updated: Showing changes between your previous draft and the AI polished version.";
     if (mode === 'spelling') summaryText = "Comparison updated: Showing spelling corrections.";
@@ -400,6 +450,7 @@ function App() {
   return (
     <div className={clsx("flex flex-col h-full bg-white dark:bg-slate-900 transition-colors duration-200")}>
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
 
       {/* Header */}
       <header className="flex-none h-16 border-b border-gray-200 dark:border-slate-800 px-6 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shadow-sm transition-colors duration-200">
@@ -418,17 +469,17 @@ function App() {
                 ${sessionCost.toFixed(4)}
               </span>
               <select
-                className="text-xs bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[12rem] truncate"
+                className="text-xs bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[14rem] truncate"
                 value={selectedModel.id}
                 onChange={(e) => {
                   const model = MODELS.find(m => m.id === e.target.value);
                   if (model) setSelectedModel(model);
                 }}
-                title="Select AI Model"
+                title={`Select AI Model - Current: ${selectedModel.name} (${getCostTier(selectedModel)})`}
               >
                 {MODELS.map(m => (
                   <option key={m.id} value={m.id}>
-                    {m.name}
+                    {getCostTier(m)} {m.name}
                   </option>
                 ))}
               </select>
@@ -503,6 +554,14 @@ function App() {
           </button>
 
           <button
+            onClick={() => setShowLogs(true)}
+            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
+            title="View AI Usage Logs"
+          >
+            <BarChart3 className="w-5 h-5" />
+          </button>
+
+          <button
             onClick={() => setShowHelp(true)}
             className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
             title="Help & Instructions"
@@ -538,15 +597,27 @@ function App() {
                 Reset
               </Button>
 
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleGenerateSummary}
-                isLoading={isSummarizing}
-                icon={<Sparkles className="w-4 h-4 text-amber-500" />}
-              >
-                AI Summary
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleGenerateSummary}
+                  isLoading={isSummarizing}
+                  disabled={isSummarizing || isPolishing}
+                  icon={<Sparkles className="w-4 h-4 text-amber-500" />}
+                >
+                  AI Summary
+                </Button>
+                {isSummarizing && (
+                  <button
+                    onClick={cancelAIOperation}
+                    className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                    title="Cancel AI Operation"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -556,7 +627,19 @@ function App() {
       {mode === ViewMode.INPUT && (
         <div className="w-full h-full flex flex-col md:flex-row p-6 gap-6 overflow-y-auto">
           <div className="flex-1 flex flex-col gap-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Original Version</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Original Version</label>
+              {originalText && (
+                <button
+                  onClick={() => setOriginalText('')}
+                  className="text-xs text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors flex items-center gap-1"
+                  title="Clear Original"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Clear
+                </button>
+              )}
+            </div>
             <textarea
               className={clsx(
                 "flex-1 p-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
@@ -569,7 +652,7 @@ function App() {
             />
           </div>
 
-          <div className="flex-none flex items-center justify-center py-4 md:py-0">
+          <div className="flex-none flex flex-col items-center justify-center py-4 md:py-0 gap-3">
             <button
               onClick={() => setModifiedText(originalText)}
               className="p-2 bg-gray-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-gray-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full md:rotate-0 rotate-90 transition-all shadow-sm active:scale-95 active:shadow-inner group"
@@ -577,10 +660,35 @@ function App() {
             >
               <ChevronRight className="w-6 h-6 group-hover:scale-110 transition-transform" />
             </button>
+            {(originalText || modifiedText) && (
+              <button
+                onClick={() => {
+                  setOriginalText('');
+                  setModifiedText('');
+                }}
+                className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                title="Clear Both Panels"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear All
+              </button>
+            )}
           </div>
 
           <div className="flex-1 flex flex-col gap-2">
-            <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Revised Version</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Revised Version</label>
+              {modifiedText && (
+                <button
+                  onClick={() => setModifiedText('')}
+                  className="text-xs text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors flex items-center gap-1"
+                  title="Clear Revised"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Clear
+                </button>
+              )}
+            </div>
             <textarea
               className={clsx(
                 "flex-1 p-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
@@ -679,7 +787,7 @@ function App() {
                 </Button>
                 <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1"></div>
 
-                <div className="relative">
+                <div className="relative flex items-center gap-1">
                   {isPolishMenuOpen && (
                     <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
                   )}
@@ -688,11 +796,21 @@ function App() {
                     size="sm"
                     onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
                     isLoading={isPolishing}
+                    disabled={isPolishing || isSummarizing}
                     icon={<Wand2 className="w-3 h-3" />}
                     className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
                   >
                     AI Edit...
                   </Button>
+                  {isPolishing && (
+                    <button
+                      onClick={cancelAIOperation}
+                      className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      title="Cancel AI Operation"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
 
                   {isPolishMenuOpen && (
                     <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
@@ -760,6 +878,20 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Rating Prompt Toast */}
+      {activeLogId && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <RatingPrompt
+            logId={activeLogId}
+            onRate={(id, rating, feedback) => {
+              handleRate(id, rating, feedback);
+              setActiveLogId(null);
+            }}
+            onDismiss={() => setActiveLogId(null)}
+          />
         </div>
       )}
     </div>
