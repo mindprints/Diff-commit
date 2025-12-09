@@ -5,15 +5,16 @@ Diff & Commit AI is a modern, interactive desktop application designed to stream
 ## Key Features
 
 ### 🔍 Interactive Difference Engine
--   **Smart Diffing**: Highlights additions (Green), removals (Red), and modifications.
+-   **Smart Diffing**: Highlights additions (Green), removals (Red), and modifications with proper line break preservation.
 -   **Interactive Merging**: Click any highlighted segment to toggle its state.
     -   *Reject* an addition to remove it.
     -   *Restore* a deletion to keep the original text.
 -   **Smart Swapping**: Automatically links replaced text (e.g., changing "cat" to "dog") so clicking one instantly toggles the other, preventing logical errors.
 -   **Undo/Redo History**: Full state management allows you to safely roll back changes.
--   **Clear Text Panels**: Individual and "Clear All" buttons to quickly reset input panels.
+-   **Refresh Diff**: After editing the preview, click "Refresh Diff" to re-compare against the original.
 
 ### 🤖 AI-Powered Enhancements
+-   **AI Available Immediately**: AI editing functions are available as soon as you enter text—no need to compare first.
 -   **Multi-Model Support**: Switch instantly between top-tier models like **DeepSeek v3.2**, **Claude Haiku 4.5**, **GPT-OSS 120B**, **Google Gemini 3 Pro**, and more via OpenRouter.
 -   **Cost Tier Indicators**: Models display dollar sign indicators ($-$$$$) in the dropdown to help anticipate costs before selection.
 -   **AI Summary**: Generates a concise changelog of differences between versions.
@@ -63,13 +64,43 @@ Verify factual claims in your text using **Perplexity Sonar Pro** with real-time
 ### 📝 Committed Preview & Editing
 -   **Real-time Preview**: See exactly what the final text looks like as you toggle differences.
 -   **Manual Editing**: The preview pane is fully editable, allowing for final manual tweaks before copying.
+-   **Refresh Diff**: After editing the preview, click "Refresh Diff" to see changes compared to the original.
 -   **Text-to-Speech**: Built-in "Read Aloud" functionality to audit the rhythm and flow of your text. Select a section to hear just that part.
+
+### 🔄 Git-Style Version Control
+-   **Commit Changes**: When satisfied with your edits, click the green "Commit" button to save the current version.
+-   **Version History**: Each commit saves the previous text with a version number and timestamp.
+-   **Version Badge**: The Commit button displays a badge showing how many versions have been saved.
+-   **Workflow**:
+    1.  Edit or apply AI polish to your text
+    2.  Click "Commit" to save and promote the current text
+    3.  Previous version is archived, current becomes the new baseline
+    4.  Continue editing from the new baseline
 
 ### 🎨 Customization & Accessibility
 -   **Dark Mode**: Fully supported high-contrast dark theme.
 -   **Typography Controls**: Switch between Sans, Serif, and Monospace fonts, and adjust font sizes (S, M, L, XL).
 -   **Resizable Split Pane**: Drag the divider to adjust the ratio between the Diff View and the Preview.
 -   **Non-Intrusive Alerts**: Error messages and notifications appear as sleek, dismissible toasts.
+-   **Clean Slate**: "Clear All" button resets everything for a fresh session.
+
+## Streamlined Workflow
+
+### Quick Start
+1.  **Paste or type** text in either the left (Original) or right (Revised) panel
+2.  **AI Edit** button appears immediately—apply spelling, grammar, or full polish
+3.  **Compare Now** (when both panels have text) to see differences
+4.  **Toggle segments** to accept/reject individual changes
+5.  **Commit** when satisfied to save and start fresh
+
+### Comparison Flow
+| Action | Result |
+|--------|--------|
+| Text in one panel → AI Edit | AI processes text, shows diff |
+| Text in both panels → Compare Now | Shows side-by-side differences |
+| Edit preview → Refresh Diff | Updates comparison with edits |
+| Commit | Archives current, starts new cycle |
+| Clear All | Complete reset for new session |
 
 ## Architecture & Implementation
 

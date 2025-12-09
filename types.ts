@@ -61,3 +61,12 @@ export interface FactCheckSession {
   verifications: VerificationResult[];
   report: string;
 }
+
+// Git-style versioning
+export interface TextVersion {
+  id: string;
+  versionNumber: number;
+  content: string;
+  timestamp: number;
+  summary?: string; // Optional: AI-generated summary of what was in this version
+}

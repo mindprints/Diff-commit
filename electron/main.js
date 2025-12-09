@@ -84,6 +84,23 @@ app.whenReady().then(() => {
         return true;
     });
 
+    // Version History Handlers
+    ipcMain.handle('get-versions', () => {
+        return store.get('textVersions') || [];
+    });
+
+    ipcMain.handle('save-versions', (event, versions) => {
+        // Limit to 50 versions to prevent excessive storage
+        const trimmedVersions = versions.slice(-50);
+        store.set('textVersions', trimmedVersions);
+        return true;
+    });
+
+    ipcMain.handle('clear-versions', () => {
+        store.set('textVersions', []);
+        return true;
+    });
+
     createWindow();
 });
 

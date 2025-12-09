@@ -1,5 +1,5 @@
 
-import { AILogEntry } from './types';
+import { AILogEntry, TextVersion } from './types';
 
 export interface IElectronAPI {
     platform: string;
@@ -9,6 +9,10 @@ export interface IElectronAPI {
     updateLogRating: (id: string, rating: number, feedback?: string) => Promise<boolean>;
     getLogs: () => Promise<AILogEntry[]>;
     clearLogs: () => Promise<boolean>;
+    // Version History
+    getVersions: () => Promise<TextVersion[]>;
+    saveVersions: (versions: TextVersion[]) => Promise<boolean>;
+    clearVersions: () => Promise<boolean>;
 }
 
 declare global {

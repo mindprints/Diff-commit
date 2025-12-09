@@ -8,5 +8,9 @@ contextBridge.exposeInMainWorld('electron', {
     logUsage: (logEntry) => ipcRenderer.invoke('log-usage', logEntry),
     updateLogRating: (id, rating, feedback) => ipcRenderer.invoke('update-log-rating', id, rating, feedback),
     getLogs: () => ipcRenderer.invoke('get-logs'),
-    clearLogs: () => ipcRenderer.invoke('clear-logs')
+    clearLogs: () => ipcRenderer.invoke('clear-logs'),
+    // Version History
+    getVersions: () => ipcRenderer.invoke('get-versions'),
+    saveVersions: (versions) => ipcRenderer.invoke('save-versions', versions),
+    clearVersions: () => ipcRenderer.invoke('clear-versions')
 });
