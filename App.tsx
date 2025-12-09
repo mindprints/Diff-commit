@@ -13,7 +13,6 @@ import { LogsModal } from './components/LogsModal';
 import { AILogEntry } from './types';
 import {
   ArrowRightLeft,
-  RotateCcw,
   Copy,
   FileText,
   Sparkles,
@@ -33,7 +32,8 @@ import {
   X,
   BarChart3,
   Trash2,
-  Shield
+  Shield,
+  RefreshCw
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -41,8 +41,8 @@ type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
 function App() {
   const [mode, setMode] = useState<ViewMode>(ViewMode.INPUT);
-  const [originalText, setOriginalText] = useState<string>("Welcome to Diff & Commit AI!\n\nPaste your ORIGINAL text here. This is typically your first draft, the previous version, or the source you want to compare against.\n\nOnce you have text in both panels, click \"Compare Versions\" to see the differences highlighted interactively.");
-  const [modifiedText, setModifiedText] = useState<string>("Welcome to Diff & Commit AI!\n\nPaste your REVISED text here. This is typically your edited version, AI-generated alternative, or the target you want to merge into.\n\nClick any highlighted difference to toggle it on or off. Use AI Polish to refine your final result!");
+  const [originalText, setOriginalText] = useState<string>('');
+  const [modifiedText, setModifiedText] = useState<string>('');
 
   // History Management
   const [segments, setSegments] = useState<DiffSegment[]>([]);
@@ -140,6 +140,10 @@ function App() {
 
     setPreviewText(computedText);
   }, [segments]);
+
+  // NOTE: Auto-diff was removed because it interfered with manual editing.
+  // AI operations (handlePolish, handleFactCheck, etc.) call performDiff() directly.
+  // For manual comparison, users click the "Compare Now" button.
 
   // Clean up speech on unmount
   useEffect(() => {
@@ -341,9 +345,42 @@ function App() {
     abortControllerRef.current = null;
   };
 
-  const handlePolish = async (mode: PolishMode) => {
+  // Helper to get the source text for AI operations
+  // Handles both diff mode (uses previewText) and input mode (uses available tab text)
+  const getSourceTextForAI = (): { sourceText: string; fromRightTab: boolean } => {
+    // If we're in DIFF mode, use the committed/preview text
+    if (mode === ViewMode.DIFF && previewText.trim()) {
+      return { sourceText: previewText, fromRightTab: false };
+    }
+
+    // In INPUT mode, determine which tab has content
+    const hasLeft = originalText.trim().length > 0;
+    const hasRight = modifiedText.trim().length > 0;
+
+    if (hasRight && !hasLeft) {
+      // Only right tab has text - will need to move it to left
+      return { sourceText: modifiedText, fromRightTab: true };
+    } else if (hasLeft) {
+      // Left tab has text (or both have text - prefer left as source)
+      return { sourceText: originalText, fromRightTab: false };
+    } else if (hasRight) {
+      return { sourceText: modifiedText, fromRightTab: true };
+    }
+
+    return { sourceText: '', fromRightTab: false };
+  };
+
+  const handlePolish = async (polishMode: PolishMode) => {
     // Cancel any existing request
     cancelAIOperation();
+
+    // Get source text (handles both diff and input modes)
+    const { sourceText, fromRightTab } = getSourceTextForAI();
+
+    if (!sourceText.trim()) {
+      setErrorMessage('Please enter some text first.');
+      return;
+    }
 
     // Create new AbortController
     abortControllerRef.current = new AbortController();
@@ -351,9 +388,10 @@ function App() {
     setIsPolishMenuOpen(false);
     setIsPolishing(true);
     setErrorMessage(null);
+
     const { text: polished, usage, isError, isCancelled } = await polishMergedText(
-      previewText,
-      mode,
+      sourceText,
+      polishMode,
       selectedModel,
       abortControllerRef.current.signal
     );
@@ -370,20 +408,25 @@ function App() {
     updateCost(usage);
     if (usage) logAIUsage('polish', usage);
 
-    // Update state to reflect the new comparison: Current Committed vs Polished
-    setOriginalText(previewText);
+    // If text was in right tab only, move it to left first
+    if (fromRightTab) {
+      setOriginalText(sourceText);
+    } else {
+      setOriginalText(sourceText);
+    }
     setModifiedText(polished);
 
-    // Run the diff immediately
-    performDiff(previewText, polished);
+    // Run the diff immediately and switch to DIFF mode
+    performDiff(sourceText, polished);
+    setMode(ViewMode.DIFF);
 
     setIsPolishing(false);
     abortControllerRef.current = null;
 
     let summaryText = "Comparison updated: Showing changes between your previous draft and the AI polished version.";
-    if (mode === 'spelling') summaryText = "Comparison updated: Showing spelling corrections.";
-    if (mode === 'grammar') summaryText = "Comparison updated: Showing grammar and spelling corrections.";
-    if (mode === 'prompt') summaryText = "Comparison updated: Showing expanded detailed prompt instructions.";
+    if (polishMode === 'spelling') summaryText = "Comparison updated: Showing spelling corrections.";
+    if (polishMode === 'grammar') summaryText = "Comparison updated: Showing grammar and spelling corrections.";
+    if (polishMode === 'prompt') summaryText = "Comparison updated: Showing expanded detailed prompt instructions.";
 
     setSummary(summaryText);
   };
@@ -391,6 +434,14 @@ function App() {
   const handleFactCheck = async () => {
     // Cancel any existing request
     cancelAIOperation();
+
+    // Get source text (handles both diff and input modes)
+    const { sourceText } = getSourceTextForAI();
+
+    if (!sourceText.trim()) {
+      setErrorMessage('Please enter some text first.');
+      return;
+    }
 
     // Create new AbortController
     abortControllerRef.current = new AbortController();
@@ -401,7 +452,7 @@ function App() {
     setErrorMessage(null);
 
     const { session, usage, isError, isCancelled, errorMessage } = await runFactCheck(
-      previewText,
+      sourceText,
       (stage, _percent) => setFactCheckProgress(stage),
       abortControllerRef.current.signal
     );
@@ -684,8 +735,37 @@ function App() {
 
               <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
 
-              <Button variant="ghost" onClick={() => setMode(ViewMode.INPUT)} size="sm" icon={<RotateCcw className="w-4 h-4" />}>
-                Reset
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setOriginalText('');
+                  setModifiedText('');
+                  setPreviewText('');
+                  setSegments([]);
+                  setHistory([]);
+                  setHistoryIndex(-1);
+                  setSummary('');
+                  setMode(ViewMode.INPUT);
+                }}
+                size="sm"
+                icon={<Trash2 className="w-4 h-4" />}
+              >
+                Clear All
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Re-compare: use current previewText as the new modified text
+                  setModifiedText(previewText);
+                  performDiff(originalText, previewText);
+                  setSummary('');
+                }}
+                size="sm"
+                icon={<RefreshCw className="w-4 h-4" />}
+                title="Re-compare after editing the preview"
+              >
+                Refresh Diff
               </Button>
 
               <div className="flex items-center gap-1">
@@ -792,10 +872,88 @@ function App() {
             />
           </div>
 
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-            <Button size="lg" onClick={handleCompare} className="shadow-xl rounded-full px-8">
-              Compare Versions
-            </Button>
+          {/* Bottom Action Bar - AI Edit and Compare */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3">
+            {/* AI Edit Dropdown - Available when any text exists */}
+            {(originalText.trim() || modifiedText.trim()) && (
+              <div className="relative">
+                {isPolishMenuOpen && (
+                  <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
+                )}
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
+                  isLoading={isPolishing || isFactChecking}
+                  disabled={isPolishing || isSummarizing || isFactChecking}
+                  icon={<Wand2 className="w-4 h-4" />}
+                  className={clsx("shadow-xl rounded-full px-6", isPolishMenuOpen && "ring-2 ring-indigo-300 dark:ring-indigo-600")}
+                >
+                  {isFactChecking ? 'Checking...' : isPolishing ? 'Processing...' : 'AI Edit...'}
+                </Button>
+                {(isPolishing || isFactChecking) && (
+                  <button
+                    onClick={cancelAIOperation}
+                    className="absolute -right-10 top-1/2 -translate-y-1/2 p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                    title="Cancel AI Operation"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+                {isFactChecking && factCheckProgress && (
+                  <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                    {factCheckProgress}
+                  </span>
+                )}
+
+                {isPolishMenuOpen && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">Correction Level</div>
+                    <button onClick={() => handlePolish('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                      Spelling Only
+                    </button>
+                    <button onClick={() => handlePolish('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                      Grammar Fix
+                    </button>
+                    <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 font-medium transition-colors flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                      Full Polish
+                    </button>
+                    <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
+                    <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                      Prompt Expansion
+                    </button>
+                    <button onClick={() => handlePolish('execute')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                      Execute Prompt
+                    </button>
+                    <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
+                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">Verification</div>
+                    <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-cyan-500" />
+                      Fact Check
+                      <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Manual Compare Button - Only when both tabs have content */}
+            {originalText.trim() && modifiedText.trim() && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleCompare}
+                className="shadow-lg rounded-full px-6"
+                icon={<ArrowRightLeft className="w-4 h-4" />}
+              >
+                Compare Now
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -821,7 +979,7 @@ function App() {
 
             <div
               className={clsx(
-                "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200",
+                "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200 whitespace-pre-wrap",
                 fontClasses[fontFamily],
                 sizeClasses[fontSize]
               )}
@@ -999,6 +1157,26 @@ function App() {
             }}
             onDismiss={() => setActiveLogId(null)}
           />
+        </div>
+      )}
+
+      {/* Error Toast */}
+      {errorMessage && (
+        <div className="fixed bottom-6 left-6 z-50 max-w-md animate-in slide-in-from-bottom-2 duration-200">
+          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg shadow-lg p-4 flex items-start gap-3">
+            <div className="flex-shrink-0 w-5 h-5 text-red-500 dark:text-red-400 mt-0.5">
+              <X className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
+            </div>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="flex-shrink-0 text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>
