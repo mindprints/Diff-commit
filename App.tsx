@@ -961,7 +961,7 @@ function App() {
                 icon={<RefreshCw className="w-4 h-4" />}
                 title="Re-compare after editing the preview"
               >
-                Refresh Diff
+                Compare
               </Button>
 
               <div className="flex items-center gap-1">
@@ -1138,7 +1138,7 @@ function App() {
               </div>
             )}
 
-            {/* Manual Compare Button - Only when both tabs have content */}
+            {/* Compare Button - Only when both tabs have content */}
             {originalText.trim() && modifiedText.trim() && (
               <Button
                 variant="outline"
@@ -1147,7 +1147,7 @@ function App() {
                 className="shadow-lg rounded-full px-6"
                 icon={<ArrowRightLeft className="w-4 h-4" />}
               >
-                Compare Now
+                Compare
               </Button>
             )}
           </div>
