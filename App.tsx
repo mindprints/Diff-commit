@@ -36,7 +36,8 @@ import {
   Shield,
   RefreshCw,
   History,
-  GitBranch
+  GitBranch,
+  Link2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -210,6 +211,32 @@ function App() {
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50); // Percentage
   const [isDarkMode, setIsDarkMode] = useState(true);
   const isResizing = useRef(false);
+
+  // Scroll Sync for DIFF mode
+  const [isScrollSyncEnabled, setIsScrollSyncEnabled] = useState(true);
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  const isSyncing = useRef(false);
+
+  const handleScrollSync = useCallback((source: 'left' | 'right') => {
+    if (!isScrollSyncEnabled || isSyncing.current) return;
+    isSyncing.current = true;
+
+    const sourceEl = source === 'left' ? leftPaneRef.current : previewTextareaRef.current;
+    const targetEl = source === 'left' ? previewTextareaRef.current : leftPaneRef.current;
+
+    if (sourceEl && targetEl) {
+      const maxScroll = sourceEl.scrollHeight - sourceEl.clientHeight;
+      if (maxScroll > 0) {
+        const scrollPercentage = sourceEl.scrollTop / maxScroll;
+        const targetMaxScroll = targetEl.scrollHeight - targetEl.clientHeight;
+        targetEl.scrollTop = scrollPercentage * targetMaxScroll;
+      }
+    }
+
+    requestAnimationFrame(() => {
+      isSyncing.current = false;
+    });
+  }, [isScrollSyncEnabled]);
 
   // Dark Mode Effect
   useEffect(() => {
@@ -929,6 +956,19 @@ function App() {
                 </button>
               </div>
 
+              <button
+                onClick={() => setIsScrollSyncEnabled(!isScrollSyncEnabled)}
+                className={clsx(
+                  "p-2 rounded transition-colors",
+                  isScrollSyncEnabled
+                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30"
+                    : "text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400"
+                )}
+                title={isScrollSyncEnabled ? "Scroll Sync: ON" : "Scroll Sync: OFF"}
+              >
+                <Link2 className="w-5 h-5" />
+              </button>
+
               <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
 
               <Button
@@ -1174,6 +1214,8 @@ function App() {
             </div>
 
             <div
+              ref={leftPaneRef}
+              onScroll={() => handleScrollSync('left')}
               className={clsx(
                 "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200 whitespace-pre-wrap",
                 fontClasses[fontFamily],
@@ -1322,6 +1364,7 @@ function App() {
             <div className="flex-1 flex flex-col bg-gray-50/30 dark:bg-slate-950/30 min-h-0 overflow-hidden">
               <textarea
                 ref={previewTextareaRef}
+                onScroll={() => handleScrollSync('right')}
                 className={clsx(
                   "flex-1 w-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none overflow-y-auto",
                   fontClasses[fontFamily],

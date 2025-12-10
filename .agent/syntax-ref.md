@@ -50,6 +50,7 @@
 | `accept` | Accept All button |
 | `reject` | Reject All button |
 | `refresh` | Refresh Diff button |
+| `scrollSync` | Scroll sync toggle (Link2 icon) |
 
 ## AI Operations
 | Short | PolishMode Value |
