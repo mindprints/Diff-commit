@@ -1,8 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Star } from 'lucide-react';
 import clsx from 'clsx';
-import { Button } from './Button';
 
 interface RatingProps {
     logId: string;
@@ -12,17 +11,25 @@ interface RatingProps {
 }
 
 export function RatingPrompt({ logId, onRate, onDismiss, className }: RatingProps) {
-    const [rating, setRating] = useState<number>(0);
     const [hoveredRating, setHoveredRating] = useState<number>(0);
     const [feedback, setFeedback] = useState('');
     const [submitted, setSubmitted] = useState(false);
 
-    const handleSubmit = () => {
-        if (rating > 0) {
-            onRate(logId, rating, feedback);
-            setSubmitted(true);
-            setTimeout(onDismiss, 2000); // Auto dismiss after thank you
-        }
+    // Auto-dismiss after 5 seconds if no rating submitted
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (!submitted) {
+                onDismiss();
+            }
+        }, 5000);
+        return () => clearTimeout(timer);
+    }, [submitted, onDismiss]);
+
+    // Click a star to immediately submit
+    const handleStarClick = (star: number) => {
+        onRate(logId, star, feedback);
+        setSubmitted(true);
+        setTimeout(onDismiss, 1500); // Brief thank you, then dismiss
     };
 
     if (submitted) {
@@ -46,7 +53,7 @@ export function RatingPrompt({ logId, onRate, onDismiss, className }: RatingProp
                 {[1, 2, 3, 4, 5].map((star) => (
                     <button
                         key={star}
-                        onClick={() => setRating(star)}
+                        onClick={() => handleStarClick(star)}
                         onMouseEnter={() => setHoveredRating(star)}
                         onMouseLeave={() => setHoveredRating(0)}
                         className="focus:outline-none transition-transform hover:scale-110"
@@ -54,7 +61,7 @@ export function RatingPrompt({ logId, onRate, onDismiss, className }: RatingProp
                         <Star
                             className={clsx(
                                 "w-6 h-6 transition-colors",
-                                (hoveredRating ? star <= hoveredRating : star <= rating)
+                                star <= hoveredRating
                                     ? "fill-amber-400 text-amber-400"
                                     : "text-gray-300 dark:text-slate-600"
                             )}
@@ -66,13 +73,9 @@ export function RatingPrompt({ logId, onRate, onDismiss, className }: RatingProp
             <textarea
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Optional comments..."
-                className="w-full text-xs p-2 rounded bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 mb-2 resize-none h-16 text-gray-700 dark:text-slate-300"
+                placeholder="Optional comment (add before clicking a star)..."
+                className="w-full text-xs p-2 rounded bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none h-12 text-gray-700 dark:text-slate-300"
             />
-
-            <Button onClick={handleSubmit} size="sm" className="w-full" disabled={rating === 0}>
-                Submit Score
-            </Button>
         </div>
     );
 }
