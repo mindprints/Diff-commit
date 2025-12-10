@@ -227,7 +227,7 @@ function createMenu() {
                             type: 'info',
                             title: 'About Diff & Commit AI',
                             message: 'Diff & Commit AI',
-                            detail: 'A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.\n\nVersion 1.2.0'
+                            detail: 'A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.\n\nVersion 1.2.1'
                         });
                     }
                 }
