@@ -1,0 +1,127 @@
+import { useEffect } from 'react';
+import { ViewMode } from '../types';
+
+type FontSize = 'sm' | 'base' | 'lg' | 'xl';
+type FontFamily = 'sans' | 'serif' | 'mono';
+
+interface UseElectronMenuOptions {
+    // Current state values
+    mode: ViewMode;
+    previewText: string;
+    originalText: string;
+    versions: any[];
+
+    // File handlers
+    onFileOpened: (content: string) => void;
+    getSaveText: () => string;
+    onClearAll: () => void;
+
+    // Version handlers
+    onVersionsImported: (versions: any[]) => void;
+
+    // Edit handlers
+    onUndo: () => void;
+    onRedo: () => void;
+
+    // Appearance handlers
+    onToggleDark: () => void;
+    onFontSize: (size: FontSize) => void;
+    onFontFamily: (family: FontFamily) => void;
+
+    // Modal handlers
+    onShowHelp: () => void;
+    onShowLogs: () => void;
+    onShowVersionHistory: () => void;
+}
+
+export function useElectronMenu(options: UseElectronMenuOptions) {
+    const {
+        mode,
+        previewText,
+        originalText,
+        versions,
+        onFileOpened,
+        getSaveText,
+        onClearAll,
+        onVersionsImported,
+        onUndo,
+        onRedo,
+        onToggleDark,
+        onFontSize,
+        onFontFamily,
+        onShowHelp,
+        onShowLogs,
+        onShowVersionHistory,
+    } = options;
+
+    useEffect(() => {
+        if (!window.electron) return;
+
+        // File menu handlers
+        window.electron.onFileOpened((content, _path) => {
+            onFileOpened(content);
+        });
+
+        window.electron.onRequestSave(async () => {
+            const textToSave = getSaveText();
+            if (textToSave.trim()) {
+                await window.electron.saveFile(textToSave, 'document.txt');
+            }
+        });
+
+        window.electron.onRequestExportVersions(async () => {
+            if (versions.length > 0) {
+                await window.electron.exportVersions(versions);
+            }
+        });
+
+        window.electron.onVersionsImported((importedVersions) => {
+            if (Array.isArray(importedVersions)) {
+                onVersionsImported(importedVersions);
+            }
+        });
+
+        // Edit menu handlers
+        window.electron.onMenuUndo(() => onUndo());
+        window.electron.onMenuRedo(() => onRedo());
+        window.electron.onMenuClearAll(() => onClearAll());
+
+        // View menu handlers
+        window.electron.onMenuToggleDark(() => onToggleDark());
+        window.electron.onMenuFontSize((size) => {
+            if (['sm', 'base', 'lg', 'xl'].includes(size)) {
+                onFontSize(size as FontSize);
+            }
+        });
+        window.electron.onMenuFontFamily((family) => {
+            if (['sans', 'serif', 'mono'].includes(family)) {
+                onFontFamily(family as FontFamily);
+            }
+        });
+
+        // Help menu handlers
+        window.electron.onMenuShowHelp(() => onShowHelp());
+        window.electron.onMenuShowLogs(() => onShowLogs());
+        window.electron.onMenuShowVersions(() => onShowVersionHistory());
+
+        // Cleanup listeners on unmount
+        return () => {
+            if (window.electron?.removeAllListeners) {
+                window.electron.removeAllListeners('file-opened');
+                window.electron.removeAllListeners('request-save');
+                window.electron.removeAllListeners('request-export-versions');
+                window.electron.removeAllListeners('versions-imported');
+                window.electron.removeAllListeners('menu-undo');
+                window.electron.removeAllListeners('menu-redo');
+                window.electron.removeAllListeners('menu-clear-all');
+                window.electron.removeAllListeners('menu-toggle-dark');
+                window.electron.removeAllListeners('menu-font-size');
+                window.electron.removeAllListeners('menu-font-family');
+                window.electron.removeAllListeners('menu-show-help');
+                window.electron.removeAllListeners('menu-show-logs');
+                window.electron.removeAllListeners('menu-show-versions');
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mode, previewText, originalText, versions]);
+}

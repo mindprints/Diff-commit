@@ -51,6 +51,7 @@
 | `reject` | Reject All button |
 | `refresh` | Refresh Diff button |
 | `scrollSync` | Scroll sync toggle (Link2 icon) |
+| `contextMenu` | Right-click context menu on preview |
 
 ## AI Operations
 | Short | PolishMode Value |

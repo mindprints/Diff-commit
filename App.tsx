@@ -11,6 +11,11 @@ import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
 import { LogsModal } from './components/LogsModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { ContextMenu } from './components/ContextMenu';
+import { useVersionHistory } from './hooks/useVersionHistory';
+import { useDiffState } from './hooks/useDiffState';
+import { useScrollSync } from './hooks/useScrollSync';
+import { useElectronMenu } from './hooks/useElectronMenu';
 import { AILogEntry } from './types';
 import {
   ArrowRightLeft,
@@ -48,10 +53,20 @@ function App() {
   const [originalText, setOriginalText] = useState<string>('');
   const [modifiedText, setModifiedText] = useState<string>('');
 
-  // History Management
-  const [segments, setSegments] = useState<DiffSegment[]>([]);
-  const [history, setHistory] = useState<DiffSegment[][]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  // Diff State Management (extracted to custom hook)
+  const {
+    segments,
+    setSegments,
+    history,
+    historyIndex,
+    addToHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    resetDiffState,
+    initializeHistory,
+  } = useDiffState();
 
   const [previewText, setPreviewText] = useState<string>('');
   const [summary, setSummary] = useState<string>('');
@@ -87,9 +102,33 @@ function App() {
   // Rating & Logging
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
 
-  // Version History (Git-style versioning)
-  const [versions, setVersions] = useState<TextVersion[]>([]);
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  // Version History (extracted to custom hook)
+  const getCommitText = useCallback(() => {
+    return mode === ViewMode.DIFF ? previewText : originalText;
+  }, [mode, previewText, originalText]);
+
+  const onAfterCommit = useCallback((committedText: string) => {
+    // After commit: both panes should have matching content
+    setOriginalText(committedText);
+    setPreviewText(committedText);
+    setModifiedText('');
+    resetDiffState();
+    setSummary('Committed! Both panes now contain your saved version.');
+    setMode(ViewMode.INPUT);
+  }, [resetDiffState]);
+
+  const {
+    versions,
+    setVersions,
+    showVersionHistory,
+    setShowVersionHistory,
+    handleCommit,
+    handleDeleteVersion,
+    handleClearAllVersions,
+  } = useVersionHistory({ getCommitText, onAfterCommit });
+
+  // Context Menu for text selection
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
 
   const logAIUsage = async (taskType: 'summary' | 'polish', usage: { inputTokens: number; outputTokens: number }) => {
     if (!selectedModel || !usage) return;
@@ -123,61 +162,7 @@ function App() {
     }
   };
 
-  // Version History: Load from Electron store or localStorage
-  useEffect(() => {
-    const loadVersions = async () => {
-      if (window.electron && window.electron.getVersions) {
-        const storedVersions = await window.electron.getVersions();
-        if (storedVersions && Array.isArray(storedVersions)) {
-          setVersions(storedVersions);
-        }
-      } else {
-        // Fallback to localStorage for web/localhost testing
-        const stored = localStorage.getItem('diff-commit-versions');
-        if (stored) {
-          try {
-            setVersions(JSON.parse(stored));
-          } catch (e) {
-            console.warn('Failed to parse stored versions:', e);
-          }
-        }
-      }
-    };
-    loadVersions();
-  }, []);
-
-  // Version History: Save to Electron store or localStorage
-  useEffect(() => {
-    const saveVersions = async () => {
-      if (window.electron && window.electron.saveVersions) {
-        await window.electron.saveVersions(versions);
-      } else {
-        // Fallback to localStorage for web/localhost testing
-        localStorage.setItem('diff-commit-versions', JSON.stringify(versions));
-      }
-    };
-    if (versions.length > 0) {
-      saveVersions();
-    }
-  }, [versions]);
-
-  // Version History Handlers
-  const handleCommit = () => {
-    // In DIFF mode, commit the preview text (the finalized result)
-    // In INPUT mode, commit the original text
-    const textToCommit = mode === ViewMode.DIFF ? previewText : originalText;
-    if (!textToCommit.trim()) return;
-
-    const newVersion: TextVersion = {
-      id: crypto.randomUUID(),
-      versionNumber: versions.length + 1,
-      content: textToCommit,
-      timestamp: Date.now(),
-    };
-
-    setVersions(prev => [...prev, newVersion]);
-  };
-
+  // Version handlers that need access to other state (kept in App)
   const handleRestoreVersion = (version: TextVersion) => {
     setOriginalText(version.content);
     setModifiedText('');
@@ -192,19 +177,6 @@ function App() {
     setMode(ViewMode.DIFF);
   };
 
-  const handleDeleteVersion = (versionId: string) => {
-    setVersions(prev => prev.filter(v => v.id !== versionId));
-  };
-
-  const handleClearAllVersions = async () => {
-    setVersions([]);
-    if (window.electron && window.electron.clearVersions) {
-      await window.electron.clearVersions();
-    } else {
-      localStorage.removeItem('diff-commit-versions');
-    }
-  };
-
   // Appearance & Layout
   const [fontFamily, setFontFamily] = useState<FontFamily>('sans');
   const [fontSize, setFontSize] = useState<FontSize>('base');
@@ -212,31 +184,13 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const isResizing = useRef(false);
 
-  // Scroll Sync for DIFF mode
-  const [isScrollSyncEnabled, setIsScrollSyncEnabled] = useState(true);
+  // Scroll Sync (extracted to custom hook)
   const leftPaneRef = useRef<HTMLDivElement>(null);
-  const isSyncing = useRef(false);
-
-  const handleScrollSync = useCallback((source: 'left' | 'right') => {
-    if (!isScrollSyncEnabled || isSyncing.current) return;
-    isSyncing.current = true;
-
-    const sourceEl = source === 'left' ? leftPaneRef.current : previewTextareaRef.current;
-    const targetEl = source === 'left' ? previewTextareaRef.current : leftPaneRef.current;
-
-    if (sourceEl && targetEl) {
-      const maxScroll = sourceEl.scrollHeight - sourceEl.clientHeight;
-      if (maxScroll > 0) {
-        const scrollPercentage = sourceEl.scrollTop / maxScroll;
-        const targetMaxScroll = targetEl.scrollHeight - targetEl.clientHeight;
-        targetEl.scrollTop = scrollPercentage * targetMaxScroll;
-      }
-    }
-
-    requestAnimationFrame(() => {
-      isSyncing.current = false;
-    });
-  }, [isScrollSyncEnabled]);
+  const {
+    isScrollSyncEnabled,
+    setIsScrollSyncEnabled,
+    handleScrollSync,
+  } = useScrollSync({ leftPaneRef, rightPaneRef: previewTextareaRef });
 
   // Dark Mode Effect
   useEffect(() => {
@@ -268,99 +222,39 @@ function App() {
     };
   }, []);
 
-  // Electron Menu Event Listeners
-  useEffect(() => {
-    if (!window.electron) return;
-
-    // File menu handlers
-    window.electron.onFileOpened((content, _path) => {
+  // Electron Menu Event Listeners (extracted to custom hook)
+  useElectronMenu({
+    mode,
+    previewText,
+    originalText,
+    versions,
+    onFileOpened: (content) => {
       setOriginalText(content);
       setModifiedText('');
       setSegments([]);
       setMode(ViewMode.INPUT);
-    });
-
-    window.electron.onRequestSave(async () => {
-      const textToSave = mode === ViewMode.DIFF ? previewText : originalText;
-      if (textToSave.trim()) {
-        await window.electron.saveFile(textToSave, 'document.txt');
-      }
-    });
-
-    window.electron.onRequestExportVersions(async () => {
-      if (versions.length > 0) {
-        await window.electron.exportVersions(versions);
-      }
-    });
-
-    window.electron.onVersionsImported((importedVersions) => {
-      if (Array.isArray(importedVersions)) {
-        setVersions(prev => [...prev, ...importedVersions]);
-      }
-    });
-
-    // Edit menu handlers - inline logic to avoid hoisting issues
-    window.electron.onMenuUndo(() => {
-      if (historyIndex > 0) {
-        setHistoryIndex(historyIndex - 1);
-        setSegments(history[historyIndex - 1]);
-      }
-    });
-    window.electron.onMenuRedo(() => {
-      if (historyIndex < history.length - 1) {
-        setHistoryIndex(historyIndex + 1);
-        setSegments(history[historyIndex + 1]);
-      }
-    });
-    window.electron.onMenuClearAll(() => {
+    },
+    getSaveText: () => mode === ViewMode.DIFF ? previewText : originalText,
+    onClearAll: () => {
       setOriginalText('');
       setModifiedText('');
       setPreviewText('');
-      setSegments([]);
-      setHistory([]);
-      setHistoryIndex(-1);
+      resetDiffState();
       setSummary('');
       setMode(ViewMode.INPUT);
-    });
-
-    // View menu handlers
-    window.electron.onMenuToggleDark(() => setIsDarkMode(prev => !prev));
-    window.electron.onMenuFontSize((size) => {
-      if (['sm', 'base', 'lg', 'xl'].includes(size)) {
-        setFontSize(size as FontSize);
-      }
-    });
-    window.electron.onMenuFontFamily((family) => {
-      if (['sans', 'serif', 'mono'].includes(family)) {
-        setFontFamily(family as FontFamily);
-      }
-    });
-
-    // Help menu handlers
-    window.electron.onMenuShowHelp(() => setShowHelp(true));
-    window.electron.onMenuShowLogs(() => setShowLogs(true));
-    window.electron.onMenuShowVersions(() => setShowVersionHistory(true));
-
-    // Cleanup listeners on unmount
-    return () => {
-      if (window.electron?.removeAllListeners) {
-        window.electron.removeAllListeners('file-opened');
-        window.electron.removeAllListeners('request-save');
-        window.electron.removeAllListeners('request-export-versions');
-        window.electron.removeAllListeners('versions-imported');
-        window.electron.removeAllListeners('menu-undo');
-        window.electron.removeAllListeners('menu-redo');
-        window.electron.removeAllListeners('menu-clear-all');
-        window.electron.removeAllListeners('menu-toggle-dark');
-        window.electron.removeAllListeners('menu-font-size');
-        window.electron.removeAllListeners('menu-font-family');
-        window.electron.removeAllListeners('menu-show-help');
-        window.electron.removeAllListeners('menu-show-logs');
-        window.electron.removeAllListeners('menu-show-versions');
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, previewText, originalText, versions, history, historyIndex]);
+    },
+    onVersionsImported: (importedVersions) => {
+      setVersions(prev => [...prev, ...importedVersions]);
+    },
+    onUndo: undo,
+    onRedo: redo,
+    onToggleDark: () => setIsDarkMode(prev => !prev),
+    onFontSize: (size) => setFontSize(size as FontSize),
+    onFontFamily: (family) => setFontFamily(family as FontFamily),
+    onShowHelp: () => setShowHelp(true),
+    onShowLogs: () => setShowLogs(true),
+    onShowVersionHistory: () => setShowVersionHistory(true),
+  });
 
   // Resizing Logic
   const startResizing = useCallback(() => {
@@ -391,28 +285,6 @@ function App() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [handleResize, stopResizing]);
-
-  const addToHistory = (newSegments: DiffSegment[]) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newSegments);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-    setSegments(newSegments);
-  };
-
-  const undo = () => {
-    if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      setSegments(history[historyIndex - 1]);
-    }
-  };
-
-  const redo = () => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      setSegments(history[historyIndex + 1]);
-    }
-  };
 
   const performDiff = (source: string, target: string) => {
     const diffResult = Diff.diffWords(source, target);
@@ -458,9 +330,7 @@ function App() {
       }
     }
 
-    setHistory([initialSegments]);
-    setHistoryIndex(0);
-    setSegments(initialSegments);
+    initializeHistory(initialSegments);
   };
 
   const handleCompare = () => {
@@ -734,6 +604,72 @@ function App() {
     abortControllerRef.current = null;
   };
 
+  // Handle AI polish on selected text only
+  const handlePolishSelection = async (polishMode: PolishMode, selection: string) => {
+    if (!selection.trim()) return;
+
+    // Cancel any existing request
+    cancelAIOperation();
+
+    // Create new AbortController
+    abortControllerRef.current = new AbortController();
+
+    setIsPolishing(true);
+    setErrorMessage(null);
+
+    const { text: polished, usage, isError, isCancelled } = await polishMergedText(
+      selection,
+      polishMode,
+      selectedModel,
+      abortControllerRef.current.signal
+    );
+
+    // Don't update state if cancelled
+    if (isCancelled) return;
+
+    if (isError) {
+      setErrorMessage(polished);
+      setIsPolishing(false);
+      return;
+    }
+
+    updateCost(usage);
+    if (usage) logAIUsage('polish', usage);
+
+    // Replace selection in preview text
+    const textarea = previewTextareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newText = previewText.substring(0, start) + polished + previewText.substring(end);
+      setPreviewText(newText);
+
+      // Trigger a re-diff with the updated preview
+      setModifiedText(newText);
+      performDiff(originalText, newText);
+    }
+
+    setIsPolishing(false);
+    abortControllerRef.current = null;
+
+    setSummary(`Selection updated with ${polishMode} polish.`);
+  };
+
+  // Open context menu on right-click
+  const handleOpenContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selection = start !== end ? previewText.substring(start, end) : '';
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      selection
+    });
+  };
+
   const handleReadAloud = () => {
     if (isSpeaking) {
       window.speechSynthesis.cancel();
@@ -977,9 +913,7 @@ function App() {
                   setOriginalText('');
                   setModifiedText('');
                   setPreviewText('');
-                  setSegments([]);
-                  setHistory([]);
-                  setHistoryIndex(-1);
+                  resetDiffState();
                   setSummary('');
                   setMode(ViewMode.INPUT);
                 }}
@@ -1365,6 +1299,7 @@ function App() {
               <textarea
                 ref={previewTextareaRef}
                 onScroll={() => handleScrollSync('right')}
+                onContextMenu={handleOpenContextMenu}
                 className={clsx(
                   "flex-1 w-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none overflow-y-auto",
                   fontClasses[fontFamily],
@@ -1444,6 +1379,63 @@ function App() {
         onDelete={handleDeleteVersion}
         onClearAll={handleClearAllVersions}
         currentOriginalText={originalText}
+      />
+
+      {/* Context Menu for text selection */}
+      <ContextMenu
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+        isOpen={!!contextMenu}
+        onClose={() => setContextMenu(null)}
+        actions={[
+          {
+            label: 'Read Selected',
+            icon: <Volume2 className="w-4 h-4" />,
+            onClick: handleReadAloud,
+            disabled: !contextMenu?.selection
+          },
+          {
+            label: 'Spelling Only',
+            icon: <Wand2 className="w-4 h-4 text-blue-500" />,
+            onClick: () => contextMenu?.selection && handlePolishSelection('spelling', contextMenu.selection),
+            disabled: !contextMenu?.selection,
+            divider: true
+          },
+          {
+            label: 'Grammar & Spelling',
+            icon: <Wand2 className="w-4 h-4 text-emerald-500" />,
+            onClick: () => contextMenu?.selection && handlePolishSelection('grammar', contextMenu.selection),
+            disabled: !contextMenu?.selection
+          },
+          {
+            label: 'Full Polish',
+            icon: <Wand2 className="w-4 h-4 text-purple-500" />,
+            onClick: () => contextMenu?.selection && handlePolishSelection('polish', contextMenu.selection),
+            disabled: !contextMenu?.selection,
+            subLabel: '$$'
+          },
+          {
+            label: 'Prompt Expansion',
+            icon: <Wand2 className="w-4 h-4 text-amber-500" />,
+            onClick: () => contextMenu?.selection && handlePolishSelection('prompt', contextMenu.selection),
+            disabled: !contextMenu?.selection,
+            divider: true
+          },
+          {
+            label: 'Execute Prompt',
+            icon: <Wand2 className="w-4 h-4 text-rose-500" />,
+            onClick: () => contextMenu?.selection && handlePolishSelection('execute', contextMenu.selection),
+            disabled: !contextMenu?.selection
+          },
+          {
+            label: 'Fact Check',
+            icon: <Shield className="w-4 h-4 text-cyan-500" />,
+            onClick: handleFactCheck,
+            disabled: !contextMenu?.selection,
+            subLabel: '$$$$',
+            divider: true
+          }
+        ]}
       />
     </div>
   );
