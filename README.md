@@ -78,11 +78,20 @@ Verify factual claims in your text using **Perplexity Sonar Pro** with real-time
     4.  Continue editing from the new baseline
 
 ### 🎨 Customization & Accessibility
--   **Dark Mode**: Fully supported high-contrast dark theme.
+-   **Dark Mode**: Fully supported high-contrast dark theme (default).
 -   **Typography Controls**: Switch between Sans, Serif, and Monospace fonts, and adjust font sizes (S, M, L, XL).
 -   **Resizable Split Pane**: Drag the divider to adjust the ratio between the Diff View and the Preview.
 -   **Non-Intrusive Alerts**: Error messages and notifications appear as sleek, dismissible toasts.
 -   **Clean Slate**: "Clear All" button resets everything for a fresh session.
+
+### 🖱️ Context Menu (Right-Click)
+-   **Selection-Aware**: Right-click on selected text in the preview pane to access AI actions.
+-   **Available Actions**:
+    -   🔊 **Read Selected** - Text-to-speech for selected portion
+    -   ✏️ **Spelling / Grammar / Polish** - AI editing on selection only
+    -   📝 **Prompt Expansion / Execute** - Prompt operations on selection
+    -   🛡️ **Fact Check** - Verify claims in selection
+-   **Smart Disable**: Actions are grayed out when no text is selected.
 
 ## Streamlined Workflow
 
