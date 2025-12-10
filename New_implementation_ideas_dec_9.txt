@@ -12,4 +12,3 @@ those diff markings show that a comparison is being made - no need for a compari
 
 But what happens if a user starts by entering two versions of a text in each tab. the diffs should imidiatley be shown in the left tab. No need for a compare button there either. 
 
-Ideally the texts in both left and right tabs should be editable at all times. Currently texts showing diffs in the left tab are not editable. Before we make them so (if we decide to do so) we need to investigate the complications that would cause. 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Diff from 'diff';
-import { DiffSegment, ViewMode, FontFamily, PolishMode } from './types';
+import { DiffSegment, ViewMode, FontFamily, PolishMode, TextVersion } from './types';
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
@@ -10,6 +10,7 @@ import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
 import { LogsModal } from './components/LogsModal';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { AILogEntry } from './types';
 import {
   ArrowRightLeft,
@@ -33,7 +34,10 @@ import {
   BarChart3,
   Trash2,
   Shield,
-  RefreshCw
+  RefreshCw,
+  History,
+  GitBranch,
+  Link2
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -83,6 +87,10 @@ function App() {
   // Rating & Logging
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
 
+  // Version History (Git-style versioning)
+  const [versions, setVersions] = useState<TextVersion[]>([]);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+
   const logAIUsage = async (taskType: 'summary' | 'polish', usage: { inputTokens: number; outputTokens: number }) => {
     if (!selectedModel || !usage) return;
 
@@ -115,12 +123,120 @@ function App() {
     }
   };
 
+  // Version History: Load from Electron store or localStorage
+  useEffect(() => {
+    const loadVersions = async () => {
+      if (window.electron && window.electron.getVersions) {
+        const storedVersions = await window.electron.getVersions();
+        if (storedVersions && Array.isArray(storedVersions)) {
+          setVersions(storedVersions);
+        }
+      } else {
+        // Fallback to localStorage for web/localhost testing
+        const stored = localStorage.getItem('diff-commit-versions');
+        if (stored) {
+          try {
+            setVersions(JSON.parse(stored));
+          } catch (e) {
+            console.warn('Failed to parse stored versions:', e);
+          }
+        }
+      }
+    };
+    loadVersions();
+  }, []);
+
+  // Version History: Save to Electron store or localStorage
+  useEffect(() => {
+    const saveVersions = async () => {
+      if (window.electron && window.electron.saveVersions) {
+        await window.electron.saveVersions(versions);
+      } else {
+        // Fallback to localStorage for web/localhost testing
+        localStorage.setItem('diff-commit-versions', JSON.stringify(versions));
+      }
+    };
+    if (versions.length > 0) {
+      saveVersions();
+    }
+  }, [versions]);
+
+  // Version History Handlers
+  const handleCommit = () => {
+    // In DIFF mode, commit the preview text (the finalized result)
+    // In INPUT mode, commit the original text
+    const textToCommit = mode === ViewMode.DIFF ? previewText : originalText;
+    if (!textToCommit.trim()) return;
+
+    const newVersion: TextVersion = {
+      id: crypto.randomUUID(),
+      versionNumber: versions.length + 1,
+      content: textToCommit,
+      timestamp: Date.now(),
+    };
+
+    setVersions(prev => [...prev, newVersion]);
+  };
+
+  const handleRestoreVersion = (version: TextVersion) => {
+    setOriginalText(version.content);
+    setModifiedText('');
+    setSegments([]);
+    setMode(ViewMode.INPUT);
+  };
+
+  const handleCompareVersion = (version: TextVersion) => {
+    setOriginalText(version.content);
+    setModifiedText(originalText);
+    performDiff(version.content, originalText);
+    setMode(ViewMode.DIFF);
+  };
+
+  const handleDeleteVersion = (versionId: string) => {
+    setVersions(prev => prev.filter(v => v.id !== versionId));
+  };
+
+  const handleClearAllVersions = async () => {
+    setVersions([]);
+    if (window.electron && window.electron.clearVersions) {
+      await window.electron.clearVersions();
+    } else {
+      localStorage.removeItem('diff-commit-versions');
+    }
+  };
+
   // Appearance & Layout
   const [fontFamily, setFontFamily] = useState<FontFamily>('sans');
   const [fontSize, setFontSize] = useState<FontSize>('base');
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50); // Percentage
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const isResizing = useRef(false);
+
+  // Scroll Sync for DIFF mode
+  const [isScrollSyncEnabled, setIsScrollSyncEnabled] = useState(true);
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  const isSyncing = useRef(false);
+
+  const handleScrollSync = useCallback((source: 'left' | 'right') => {
+    if (!isScrollSyncEnabled || isSyncing.current) return;
+    isSyncing.current = true;
+
+    const sourceEl = source === 'left' ? leftPaneRef.current : previewTextareaRef.current;
+    const targetEl = source === 'left' ? previewTextareaRef.current : leftPaneRef.current;
+
+    if (sourceEl && targetEl) {
+      const maxScroll = sourceEl.scrollHeight - sourceEl.clientHeight;
+      if (maxScroll > 0) {
+        const scrollPercentage = sourceEl.scrollTop / maxScroll;
+        const targetMaxScroll = targetEl.scrollHeight - targetEl.clientHeight;
+        targetEl.scrollTop = scrollPercentage * targetMaxScroll;
+      }
+    }
+
+    requestAnimationFrame(() => {
+      isSyncing.current = false;
+    });
+  }, [isScrollSyncEnabled]);
 
   // Dark Mode Effect
   useEffect(() => {
@@ -151,6 +267,100 @@ function App() {
       window.speechSynthesis.cancel();
     };
   }, []);
+
+  // Electron Menu Event Listeners
+  useEffect(() => {
+    if (!window.electron) return;
+
+    // File menu handlers
+    window.electron.onFileOpened((content, _path) => {
+      setOriginalText(content);
+      setModifiedText('');
+      setSegments([]);
+      setMode(ViewMode.INPUT);
+    });
+
+    window.electron.onRequestSave(async () => {
+      const textToSave = mode === ViewMode.DIFF ? previewText : originalText;
+      if (textToSave.trim()) {
+        await window.electron.saveFile(textToSave, 'document.txt');
+      }
+    });
+
+    window.electron.onRequestExportVersions(async () => {
+      if (versions.length > 0) {
+        await window.electron.exportVersions(versions);
+      }
+    });
+
+    window.electron.onVersionsImported((importedVersions) => {
+      if (Array.isArray(importedVersions)) {
+        setVersions(prev => [...prev, ...importedVersions]);
+      }
+    });
+
+    // Edit menu handlers - inline logic to avoid hoisting issues
+    window.electron.onMenuUndo(() => {
+      if (historyIndex > 0) {
+        setHistoryIndex(historyIndex - 1);
+        setSegments(history[historyIndex - 1]);
+      }
+    });
+    window.electron.onMenuRedo(() => {
+      if (historyIndex < history.length - 1) {
+        setHistoryIndex(historyIndex + 1);
+        setSegments(history[historyIndex + 1]);
+      }
+    });
+    window.electron.onMenuClearAll(() => {
+      setOriginalText('');
+      setModifiedText('');
+      setPreviewText('');
+      setSegments([]);
+      setHistory([]);
+      setHistoryIndex(-1);
+      setSummary('');
+      setMode(ViewMode.INPUT);
+    });
+
+    // View menu handlers
+    window.electron.onMenuToggleDark(() => setIsDarkMode(prev => !prev));
+    window.electron.onMenuFontSize((size) => {
+      if (['sm', 'base', 'lg', 'xl'].includes(size)) {
+        setFontSize(size as FontSize);
+      }
+    });
+    window.electron.onMenuFontFamily((family) => {
+      if (['sans', 'serif', 'mono'].includes(family)) {
+        setFontFamily(family as FontFamily);
+      }
+    });
+
+    // Help menu handlers
+    window.electron.onMenuShowHelp(() => setShowHelp(true));
+    window.electron.onMenuShowLogs(() => setShowLogs(true));
+    window.electron.onMenuShowVersions(() => setShowVersionHistory(true));
+
+    // Cleanup listeners on unmount
+    return () => {
+      if (window.electron?.removeAllListeners) {
+        window.electron.removeAllListeners('file-opened');
+        window.electron.removeAllListeners('request-save');
+        window.electron.removeAllListeners('request-export-versions');
+        window.electron.removeAllListeners('versions-imported');
+        window.electron.removeAllListeners('menu-undo');
+        window.electron.removeAllListeners('menu-redo');
+        window.electron.removeAllListeners('menu-clear-all');
+        window.electron.removeAllListeners('menu-toggle-dark');
+        window.electron.removeAllListeners('menu-font-size');
+        window.electron.removeAllListeners('menu-font-family');
+        window.electron.removeAllListeners('menu-show-help');
+        window.electron.removeAllListeners('menu-show-logs');
+        window.electron.removeAllListeners('menu-show-versions');
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, previewText, originalText, versions, history, historyIndex]);
 
   // Resizing Logic
   const startResizing = useCallback(() => {
@@ -704,6 +914,19 @@ function App() {
           </button>
 
           <button
+            onClick={() => setShowVersionHistory(true)}
+            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 relative"
+            title="Version History"
+          >
+            <History className="w-5 h-5" />
+            {versions.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-indigo-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {versions.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setShowHelp(true)}
             className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
             title="Help & Instructions"
@@ -732,6 +955,19 @@ function App() {
                   <Redo className="w-5 h-5" />
                 </button>
               </div>
+
+              <button
+                onClick={() => setIsScrollSyncEnabled(!isScrollSyncEnabled)}
+                className={clsx(
+                  "p-2 rounded transition-colors",
+                  isScrollSyncEnabled
+                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30"
+                    : "text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400"
+                )}
+                title={isScrollSyncEnabled ? "Scroll Sync: ON" : "Scroll Sync: OFF"}
+              >
+                <Link2 className="w-5 h-5" />
+              </button>
 
               <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
 
@@ -765,7 +1001,7 @@ function App() {
                 icon={<RefreshCw className="w-4 h-4" />}
                 title="Re-compare after editing the preview"
               >
-                Refresh Diff
+                Compare
               </Button>
 
               <div className="flex items-center gap-1">
@@ -823,7 +1059,7 @@ function App() {
             />
           </div>
 
-          <div className="flex-none flex flex-col items-center justify-center py-4 md:py-0 gap-3">
+          <div className="flex-none flex flex-col items-center justify-center py-4 md:py-0 gap-6">
             <button
               onClick={() => setModifiedText(originalText)}
               className="p-2 bg-gray-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-gray-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full md:rotate-0 rotate-90 transition-all shadow-sm active:scale-95 active:shadow-inner group"
@@ -942,7 +1178,7 @@ function App() {
               </div>
             )}
 
-            {/* Manual Compare Button - Only when both tabs have content */}
+            {/* Compare Button - Only when both tabs have content */}
             {originalText.trim() && modifiedText.trim() && (
               <Button
                 variant="outline"
@@ -951,7 +1187,7 @@ function App() {
                 className="shadow-lg rounded-full px-6"
                 icon={<ArrowRightLeft className="w-4 h-4" />}
               >
-                Compare Now
+                Compare
               </Button>
             )}
           </div>
@@ -978,6 +1214,8 @@ function App() {
             </div>
 
             <div
+              ref={leftPaneRef}
+              onScroll={() => handleScrollSync('left')}
               className={clsx(
                 "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200 whitespace-pre-wrap",
                 fontClasses[fontFamily],
@@ -1015,7 +1253,7 @@ function App() {
 
           {/* Preview/Output Panel (Resizable) */}
           <div
-            className="flex flex-col h-full bg-white dark:bg-slate-900 relative z-0 transition-colors duration-200"
+            className="flex flex-col h-full bg-white dark:bg-slate-900 relative z-0 transition-colors duration-200 overflow-hidden"
             style={{ width: `${100 - leftPanelWidth}%` }}
           >
             <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 relative transition-colors duration-200">
@@ -1104,14 +1342,31 @@ function App() {
                 <Button variant="primary" size="sm" onClick={copyFinal} icon={<Copy className="w-3 h-3" />}>
                   Copy
                 </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleCommit}
+                  disabled={!previewText.trim()}
+                  className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 relative"
+                  icon={<GitBranch className="w-3 h-3" />}
+                >
+                  Commit
+                  {versions.length > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold">
+                      {versions.length}
+                    </span>
+                  )}
+                </Button>
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col bg-gray-50/30 dark:bg-slate-950/30">
+            <div className="flex-1 flex flex-col bg-gray-50/30 dark:bg-slate-950/30 min-h-0 overflow-hidden">
               <textarea
                 ref={previewTextareaRef}
+                onScroll={() => handleScrollSync('right')}
                 className={clsx(
-                  "flex-1 w-full h-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none",
+                  "flex-1 w-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none overflow-y-auto",
                   fontClasses[fontFamily],
                   sizeClasses[fontSize]
                 )}
@@ -1179,6 +1434,17 @@ function App() {
           </div>
         </div>
       )}
+      {/* Version History Modal */}
+      <VersionHistoryModal
+        isOpen={showVersionHistory}
+        onClose={() => setShowVersionHistory(false)}
+        versions={versions}
+        onRestore={handleRestoreVersion}
+        onCompare={handleCompareVersion}
+        onDelete={handleDeleteVersion}
+        onClearAll={handleClearAllVersions}
+        currentOriginalText={originalText}
+      />
     </div>
   );
 }
