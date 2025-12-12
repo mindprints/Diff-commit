@@ -5,7 +5,7 @@ import { DiffSegment, ViewMode, FontFamily, PolishMode, TextVersion } from './ty
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
-import { generateDiffSummary, polishMergedText } from './services/ai';
+import { generateDiffSummary, polishMergedText, polishMultipleRanges } from './services/ai';
 import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
@@ -16,6 +16,8 @@ import { useVersionHistory } from './hooks/useVersionHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useElectronMenu } from './hooks/useElectronMenu';
+import { useMultiSelection } from './hooks/useMultiSelection';
+import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
 import { AILogEntry } from './types';
 import {
   ArrowRightLeft,
@@ -91,7 +93,16 @@ function App() {
 
   // Text to Speech
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const previewTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewTextareaRef = useRef<MultiSelectTextAreaRef>(null);
+
+  // Multi-Selection for AI operations on selected ranges
+  const {
+    ranges: selectionRanges,
+    addRange: addSelectionRange,
+    clearRanges: clearSelectionRanges,
+    applyResults: applySelectionResults,
+    hasSelection,
+  } = useMultiSelection({ text: previewText });
 
   // AI Request Cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -211,9 +222,27 @@ function App() {
     setPreviewText(computedText);
   }, [segments]);
 
-  // NOTE: Auto-diff was removed because it interfered with manual editing.
-  // AI operations (handlePolish, handleFactCheck, etc.) call performDiff() directly.
-  // For manual comparison, users click the "Compare Now" button.
+  // Auto-compare when both panes have content
+  // Using a ref to track if we've already triggered to prevent re-triggering on every keystroke
+  const hasAutoCompared = useRef(false);
+
+  useEffect(() => {
+    const hasLeft = originalText.trim().length > 0;
+    const hasRight = modifiedText.trim().length > 0;
+
+    // Reset the flag when either pane becomes empty
+    if (!hasLeft || !hasRight) {
+      hasAutoCompared.current = false;
+      return;
+    }
+
+    // Auto-compare when both panes have content and we're still in INPUT mode
+    if (hasLeft && hasRight && mode === ViewMode.INPUT && !hasAutoCompared.current) {
+      hasAutoCompared.current = true;
+      performDiff(originalText, modifiedText);
+      setMode(ViewMode.DIFF);
+    }
+  }, [originalText, modifiedText, mode]);
 
   // Clean up speech on unmount
   useEffect(() => {
@@ -604,9 +633,27 @@ function App() {
     abortControllerRef.current = null;
   };
 
-  // Handle AI polish on selected text only
-  const handlePolishSelection = async (polishMode: PolishMode, selection: string) => {
-    if (!selection.trim()) return;
+  // Handle AI polish on selected text ranges (supports multi-selection)
+  const handlePolishSelection = async (polishMode: PolishMode) => {
+    // Check if there are any selections
+    if (selectionRanges.length === 0) {
+      // Fallback: check for native textarea selection
+      const textarea = previewTextareaRef.current?.getTextarea();
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        if (start !== end) {
+          // Add this native selection to our ranges system then process
+          addSelectionRange(start, end, false, previewText);
+        }
+      }
+    }
+
+    // Re-check after potential native selection capture
+    if (selectionRanges.length === 0) {
+      setErrorMessage('Please select some text first.');
+      return;
+    }
 
     // Cancel any existing request
     cancelAIOperation();
@@ -617,8 +664,14 @@ function App() {
     setIsPolishing(true);
     setErrorMessage(null);
 
-    const { text: polished, usage, isError, isCancelled } = await polishMergedText(
-      selection,
+    // Build range inputs for the AI
+    const rangeInputs = selectionRanges.map(r => ({
+      id: r.id,
+      text: r.text,
+    }));
+
+    const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRanges(
+      rangeInputs,
       polishMode,
       selectedModel,
       abortControllerRef.current.signal
@@ -628,7 +681,7 @@ function App() {
     if (isCancelled) return;
 
     if (isError) {
-      setErrorMessage(polished);
+      setErrorMessage(aiError || 'AI polish failed.');
       setIsPolishing(false);
       return;
     }
@@ -636,23 +689,45 @@ function App() {
     updateCost(usage);
     if (usage) logAIUsage('polish', usage);
 
-    // Replace selection in preview text
-    const textarea = previewTextareaRef.current;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newText = previewText.substring(0, start) + polished + previewText.substring(end);
-      setPreviewText(newText);
+    // Apply results back to the text (processes in reverse order to maintain positions)
+    const newText = applySelectionResults(results, previewText);
+    setPreviewText(newText);
 
-      // Trigger a re-diff with the updated preview
-      setModifiedText(newText);
-      performDiff(originalText, newText);
-    }
+    // Clear selections after applying (already done in applySelectionResults)
+    // Trigger a re-diff with the updated preview
+    setModifiedText(newText);
+    performDiff(originalText, newText);
 
     setIsPolishing(false);
     abortControllerRef.current = null;
 
-    setSummary(`Selection updated with ${polishMode} polish.`);
+    const rangeCount = selectionRanges.length;
+    setSummary(`${rangeCount} selection${rangeCount > 1 ? 's' : ''} updated with ${polishMode} polish.`);
+  };
+
+  // Smart AI Edit handler - routes to selection-based or full-text editing
+  const handleAIEdit = async (polishMode: PolishMode) => {
+    // Check if there are any stored selection ranges
+    if (selectionRanges.length > 0) {
+      return handlePolishSelection(polishMode);
+    }
+
+    // Check for native textarea selection
+    const textarea = previewTextareaRef.current?.getTextarea();
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      if (start !== end) {
+        // Capture native selection into our system and then process
+        addSelectionRange(start, end, false, previewText);
+        // Need to wait a tick for state to update, then process
+        // Actually, handlePolishSelection already handles this case
+        return handlePolishSelection(polishMode);
+      }
+    }
+
+    // No selections - fall back to full-text polish
+    return handlePolish(polishMode);
   };
 
   // Open context menu on right-click
@@ -662,6 +737,11 @@ function App() {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selection = start !== end ? previewText.substring(start, end) : '';
+
+    // If there's a native selection, capture it into our multi-selection system
+    if (start !== end && selectionRanges.length === 0) {
+      addSelectionRange(start, end, false, previewText);
+    }
 
     setContextMenu({
       x: e.clientX,
@@ -677,16 +757,21 @@ function App() {
       return;
     }
 
-    const textarea = previewTextareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-
     let textToSpeak = previewText;
-    // If there's a selection, speak only that
-    if (start !== end) {
-      textToSpeak = previewText.substring(start, end);
+
+    // If there are multi-selections, speak those
+    if (selectionRanges.length > 0) {
+      textToSpeak = selectionRanges.map(r => r.text).join(' ');
+    } else {
+      // Check for native textarea selection
+      const textarea = previewTextareaRef.current?.getTextarea();
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        if (start !== end) {
+          textToSpeak = previewText.substring(start, end);
+        }
+      }
     }
 
     if (!textToSpeak.trim()) return;
@@ -1042,89 +1127,6 @@ function App() {
             />
           </div>
 
-          {/* Bottom Action Bar - AI Edit and Compare */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3">
-            {/* AI Edit Dropdown - Available when any text exists */}
-            {(originalText.trim() || modifiedText.trim()) && (
-              <div className="relative">
-                {isPolishMenuOpen && (
-                  <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
-                )}
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
-                  isLoading={isPolishing || isFactChecking}
-                  disabled={isPolishing || isSummarizing || isFactChecking}
-                  icon={<Wand2 className="w-4 h-4" />}
-                  className={clsx("shadow-xl rounded-full px-6", isPolishMenuOpen && "ring-2 ring-indigo-300 dark:ring-indigo-600")}
-                >
-                  {isFactChecking ? 'Checking...' : isPolishing ? 'Processing...' : 'AI Edit...'}
-                </Button>
-                {(isPolishing || isFactChecking) && (
-                  <button
-                    onClick={cancelAIOperation}
-                    className="absolute -right-10 top-1/2 -translate-y-1/2 p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
-                    title="Cancel AI Operation"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                )}
-                {isFactChecking && factCheckProgress && (
-                  <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">
-                    {factCheckProgress}
-                  </span>
-                )}
-
-                {isPolishMenuOpen && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">Correction Level</div>
-                    <button onClick={() => handlePolish('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-                      Spelling Only
-                    </button>
-                    <button onClick={() => handlePolish('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                      Grammar Fix
-                    </button>
-                    <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 font-medium transition-colors flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                      Full Polish
-                    </button>
-                    <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
-                    <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                      Prompt Expansion
-                    </button>
-                    <button onClick={() => handlePolish('execute')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                      Execute Prompt
-                    </button>
-                    <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
-                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">Verification</div>
-                    <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-cyan-500" />
-                      Fact Check
-                      <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Compare Button - Only when both tabs have content */}
-            {originalText.trim() && modifiedText.trim() && (
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={handleCompare}
-                className="shadow-lg rounded-full px-6"
-                icon={<ArrowRightLeft className="w-4 h-4" />}
-              >
-                Compare
-              </Button>
-            )}
-          </div>
         </div>
       )}
 
@@ -1241,24 +1243,24 @@ function App() {
                   {isPolishMenuOpen && (
                     <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
                       <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">Correction Level</div>
-                      <button onClick={() => handlePolish('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <button onClick={() => handleAIEdit('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
                         Spelling Only
                       </button>
-                      <button onClick={() => handlePolish('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <button onClick={() => handleAIEdit('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
                         Grammar Fix
                       </button>
-                      <button onClick={() => handlePolish('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 font-medium transition-colors flex items-center gap-2">
+                      <button onClick={() => handleAIEdit('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 font-medium transition-colors flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
                         Full Polish
                       </button>
                       <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
-                      <button onClick={() => handlePolish('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <button onClick={() => handleAIEdit('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                         Prompt Expansion
                       </button>
-                      <button onClick={() => handlePolish('execute')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
+                      <button onClick={() => handleAIEdit('execute')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
                         Execute Prompt
                       </button>
@@ -1296,25 +1298,29 @@ function App() {
             </div>
 
             <div className="flex-1 flex flex-col bg-gray-50/30 dark:bg-slate-950/30 min-h-0 overflow-hidden">
-              <textarea
+              <MultiSelectTextArea
                 ref={previewTextareaRef}
-                onScroll={() => handleScrollSync('right')}
-                onContextMenu={handleOpenContextMenu}
-                className={clsx(
-                  "flex-1 w-full p-8 resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none overflow-y-auto",
-                  fontClasses[fontFamily],
-                  sizeClasses[fontSize]
-                )}
                 value={previewText}
-                onChange={(e) => {
+                onChange={(newValue) => {
                   if (isSpeaking) {
                     window.speechSynthesis.cancel();
                     setIsSpeaking(false);
                   }
-                  setPreviewText(e.target.value);
+                  setPreviewText(newValue);
                 }}
+                ranges={selectionRanges}
+                onAddRange={(start, end, isAdditive) => addSelectionRange(start, end, isAdditive, previewText)}
+                onClearRanges={clearSelectionRanges}
+                className={clsx(
+                  "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none overflow-y-auto",
+                  fontClasses[fontFamily],
+                  sizeClasses[fontSize]
+                )}
+                fontClassName={fontClasses[fontFamily]}
+                sizeClassName={sizeClasses[fontSize]}
                 spellCheck={false}
                 placeholder="Result will appear here. You can also edit this text directly."
+                onContextMenu={handleOpenContextMenu}
               />
             </div>
 
@@ -1397,34 +1403,34 @@ function App() {
           {
             label: 'Spelling Only',
             icon: <Wand2 className="w-4 h-4 text-blue-500" />,
-            onClick: () => contextMenu?.selection && handlePolishSelection('spelling', contextMenu.selection),
+            onClick: () => handlePolishSelection('spelling'),
             disabled: !contextMenu?.selection,
             divider: true
           },
           {
             label: 'Grammar & Spelling',
             icon: <Wand2 className="w-4 h-4 text-emerald-500" />,
-            onClick: () => contextMenu?.selection && handlePolishSelection('grammar', contextMenu.selection),
+            onClick: () => handlePolishSelection('grammar'),
             disabled: !contextMenu?.selection
           },
           {
             label: 'Full Polish',
             icon: <Wand2 className="w-4 h-4 text-purple-500" />,
-            onClick: () => contextMenu?.selection && handlePolishSelection('polish', contextMenu.selection),
+            onClick: () => handlePolishSelection('polish'),
             disabled: !contextMenu?.selection,
             subLabel: '$$'
           },
           {
             label: 'Prompt Expansion',
             icon: <Wand2 className="w-4 h-4 text-amber-500" />,
-            onClick: () => contextMenu?.selection && handlePolishSelection('prompt', contextMenu.selection),
+            onClick: () => handlePolishSelection('prompt'),
             disabled: !contextMenu?.selection,
             divider: true
           },
           {
             label: 'Execute Prompt',
             icon: <Wand2 className="w-4 h-4 text-rose-500" />,
-            onClick: () => contextMenu?.selection && handlePolishSelection('execute', contextMenu.selection),
+            onClick: () => handlePolishSelection('execute'),
             disabled: !contextMenu?.selection
           },
           {
