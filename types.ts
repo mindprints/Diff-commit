@@ -70,3 +70,14 @@ export interface TextVersion {
   timestamp: number;
   summary?: string; // Optional: AI-generated summary of what was in this version
 }
+
+// AI Prompt CRUD system
+export interface AIPrompt {
+  id: string;               // Unique identifier (e.g., "spelling", "custom_abc123")
+  name: string;             // Display name (e.g., "Spelling Fix")
+  systemInstruction: string; // System message sent to AI
+  promptTask: string;       // Task description prepended to user's text
+  isBuiltIn: boolean;       // true = default preset (cannot delete)
+  order: number;            // Display order in dropdown (lower = higher)
+  color?: string;           // Tailwind color class for dot indicator
+}

@@ -302,6 +302,16 @@ app.whenReady().then(() => {
         return true;
     });
 
+    // AI Prompts Handlers
+    ipcMain.handle('get-prompts', () => {
+        return store.get('aiPrompts') || [];
+    });
+
+    ipcMain.handle('save-prompts', (event, prompts) => {
+        store.set('aiPrompts', prompts);
+        return true;
+    });
+
     // File save handler
     ipcMain.handle('save-file', async (event, content, defaultName) => {
         const result = await dialog.showSaveDialog(mainWindow, {

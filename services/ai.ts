@@ -1,6 +1,7 @@
 
-import { PolishMode } from "../types";
+import { AIPrompt, PolishMode } from "../types";
 import { Model } from "../constants/models";
+import { DEFAULT_PROMPTS, getPromptById } from "../constants/prompts";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const SITE_URL = 'http://localhost:5173';
@@ -100,39 +101,18 @@ export const generateDiffSummary = async (original: string, modified: string, mo
     ], 0.3, undefined, signal);
 };
 
-export const polishMergedText = async (text: string, mode: PolishMode, model: Model, signal?: AbortSignal): Promise<AIResponse> => {
-    let systemInstruction = "";
-    let promptTask = "";
-
-    switch (mode) {
-        case 'spelling':
-            systemInstruction = "You are a precise proofreader. Correct ONLY spelling errors. Do not change grammar, punctuation, sentence structure, or vocabulary choice.";
-            promptTask = "Identify and correct only spelling errors in the following text. Return the text exactly as is, but with corrected spelling.";
-            break;
-        case 'grammar':
-            systemInstruction = "You are a strict grammarian. Correct spelling, punctuation, and grammatical errors (subject-verb agreement, tense consistency, etc.). Do not rephrase sentences for style or tone unless they are grammatically incorrect.";
-            promptTask = "Correct spelling and grammatical errors in the following text. Maintain the original style and flow.";
-            break;
-        case 'prompt':
-            systemInstruction = "You are an expert prompt engineer and technical writer. Your goal is to expand brief user intents into highly detailed, optimized instructions for AI models.";
-            promptTask = "Analyze the following text. If it describes a coding/software task (e.g. 'use tailwind'), expand it into a detailed technical instruction including libraries, best practices, and implementation details. If it describes media generation (e.g. 'image of man in office'), expand it into a rich, descriptive prompt optimized for image generators (specifying lighting, composition, style, mood, camera settings). If it is general text, expand the instructions to be comprehensive and unambiguous. Return only the expanded prompt.";
-            break;
-        case 'execute':
-            systemInstruction = "You are a highly capable AI assistant. The user will provide you with instructions or a prompt. Your job is to execute those instructions completely and return the result. Be thorough, creative, and precise.";
-            promptTask = "The following text contains instructions or a prompt. Execute these instructions fully and return the complete result. If it's a writing task, write the content. If it's a code task, write the code. If it's a creative task, create the content. Do not explain what you're doing - just produce the requested output.";
-            break;
-        case 'polish':
-        default:
-            systemInstruction = "You are an expert editor focused ONLY on writing quality. Polish the text to be smooth, coherent, and professional. CRITICAL RULES: 1) Do NOT alter, dispute, correct, or add disclaimers to any factual claims, opinions, or viewpoints in the text - even if they appear incorrect or controversial. 2) Do NOT add qualifiers, caveats, or corrections to statements. 3) Do NOT editorialize or inject your own perspective. 4) ONLY improve: grammar, spelling, punctuation, sentence flow, word choice, and clarity. 5) Preserve the author's voice, intent, and all original claims exactly as stated.";
-            promptTask = "Polish this text to improve flow, clarity, and tone. Fix spelling and grammar. Do NOT change or dispute any claims, facts, or opinions in the text - preserve them exactly as the author wrote them.";
-            break;
-    }
-
-    // Note: Not all OpenRouter models support JSON mode perfectly, but most top tier ones do.
-    // We will ask for JSON in the prompt to be safe.
-
+/**
+ * Polish text using a specific AIPrompt object.
+ * This is the new preferred method for AI editing.
+ */
+export const polishWithPrompt = async (
+    text: string,
+    prompt: AIPrompt,
+    model: Model,
+    signal?: AbortSignal
+): Promise<AIResponse> => {
     const userContent = `
-            ${promptTask}
+            ${prompt.promptTask}
             
             Text:
             "${text.substring(0, 5000)}"
@@ -141,7 +121,7 @@ export const polishMergedText = async (text: string, mode: PolishMode, model: Mo
     `;
 
     const response = await callOpenRouter(model, [
-        { role: "system", content: systemInstruction },
+        { role: "system", content: prompt.systemInstruction },
         { role: "user", content: userContent }
     ], 0.3, { type: "json_object" }, signal);
 
@@ -172,6 +152,21 @@ export const polishMergedText = async (text: string, mode: PolishMode, model: Mo
         // Fallback: assume the model just returned the text if parsing failed
         return { text: response.text, usage: response.usage };
     }
+}
+
+/**
+ * Polish text using a PolishMode string (backwards compatibility).
+ * Looks up the prompt by ID and delegates to polishWithPrompt.
+ */
+export const polishMergedText = async (
+    text: string,
+    mode: PolishMode,
+    model: Model,
+    signal?: AbortSignal
+): Promise<AIResponse> => {
+    // Look up the prompt from defaults (for backwards compatibility)
+    const prompt = getPromptById(DEFAULT_PROMPTS, mode);
+    return polishWithPrompt(text, prompt, model, signal);
 }
 
 // Types for multi-range polish

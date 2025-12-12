@@ -1,22 +1,24 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Diff from 'diff';
-import { DiffSegment, ViewMode, FontFamily, PolishMode, TextVersion } from './types';
+import { DiffSegment, ViewMode, FontFamily, PolishMode, TextVersion, AIPrompt } from './types';
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
-import { generateDiffSummary, polishMergedText, polishMultipleRanges } from './services/ai';
+import { generateDiffSummary, polishMergedText, polishMultipleRanges, polishWithPrompt } from './services/ai';
 import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
 import { LogsModal } from './components/LogsModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { ContextMenu } from './components/ContextMenu';
+import { PromptsModal } from './components/PromptsModal';
 import { useVersionHistory } from './hooks/useVersionHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useElectronMenu } from './hooks/useElectronMenu';
 import { useMultiSelection } from './hooks/useMultiSelection';
+import { usePrompts } from './hooks/usePrompts';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
 import { AILogEntry } from './types';
 import {
@@ -44,7 +46,8 @@ import {
   RefreshCw,
   History,
   GitBranch,
-  Link2
+  Link2,
+  Settings
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -103,6 +106,20 @@ function App() {
     applyResults: applySelectionResults,
     hasSelection,
   } = useMultiSelection({ text: previewText });
+
+  // AI Prompts CRUD
+  const {
+    prompts: aiPrompts,
+    builtInPrompts,
+    customPrompts,
+    getPrompt,
+    createPrompt,
+    updatePrompt,
+    deletePrompt,
+    resetBuiltIn,
+    isLoading: promptsLoading,
+  } = usePrompts();
+  const [showPromptsModal, setShowPromptsModal] = useState(false);
 
   // AI Request Cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -706,10 +723,19 @@ function App() {
   };
 
   // Smart AI Edit handler - routes to selection-based or full-text editing
-  const handleAIEdit = async (polishMode: PolishMode) => {
+  // Now accepts prompt ID (string) and looks up full prompt object
+  const handleAIEdit = async (promptId: string) => {
+    // Look up the full prompt object
+    const prompt = getPrompt(promptId);
+
+    // Close menu
+    setIsPolishMenuOpen(false);
+
     // Check if there are any stored selection ranges
     if (selectionRanges.length > 0) {
-      return handlePolishSelection(polishMode);
+      // For selections, we still use handlePolishSelection with mode ID
+      // TODO: Refactor to pass full prompt object to polishMultipleRanges
+      return handlePolishSelection(promptId as PolishMode);
     }
 
     // Check for native textarea selection
@@ -718,16 +744,59 @@ function App() {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       if (start !== end) {
-        // Capture native selection into our system and then process
         addSelectionRange(start, end, false, previewText);
-        // Need to wait a tick for state to update, then process
-        // Actually, handlePolishSelection already handles this case
-        return handlePolishSelection(polishMode);
+        return handlePolishSelection(promptId as PolishMode);
       }
     }
 
-    // No selections - fall back to full-text polish
-    return handlePolish(polishMode);
+    // No selections - run full-text polish with the prompt object
+    cancelAIOperation();
+
+    const { sourceText, fromRightTab } = getSourceTextForAI();
+
+    if (!sourceText.trim()) {
+      setErrorMessage('Please enter some text first.');
+      return;
+    }
+
+    abortControllerRef.current = new AbortController();
+    setIsPolishing(true);
+    setErrorMessage(null);
+
+    // Use polishWithPrompt with the full prompt object
+    const { text: polished, usage, isError, isCancelled } = await polishWithPrompt(
+      sourceText,
+      prompt,
+      selectedModel,
+      abortControllerRef.current.signal
+    );
+
+    if (isCancelled) return;
+
+    if (isError) {
+      setErrorMessage(polished);
+      setIsPolishing(false);
+      return;
+    }
+
+    updateCost(usage);
+    if (usage) logAIUsage('polish', usage);
+
+    if (fromRightTab) {
+      setOriginalText(sourceText);
+    } else {
+      setOriginalText(sourceText);
+    }
+    setModifiedText(polished);
+
+    performDiff(sourceText, polished);
+    setMode(ViewMode.DIFF);
+
+    setIsPolishing(false);
+    abortControllerRef.current = null;
+
+    // Use the prompt name in the summary
+    setSummary(`Comparison updated: Applied "${prompt.name}" to your text.`);
   };
 
   // Open context menu on right-click
@@ -1241,35 +1310,61 @@ function App() {
                   )}
 
                   {isPolishMenuOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">Correction Level</div>
-                      <button onClick={() => handleAIEdit('spelling')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-                        Spelling Only
-                      </button>
-                      <button onClick={() => handleAIEdit('grammar')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                        Grammar Fix
-                      </button>
-                      <button onClick={() => handleAIEdit('polish')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 font-medium transition-colors flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                        Full Polish
-                      </button>
-                      <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
-                      <button onClick={() => handleAIEdit('prompt')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                        Prompt Expansion
-                      </button>
-                      <button onClick={() => handleAIEdit('execute')} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                        Execute Prompt
-                      </button>
-                      <div className="border-t border-gray-100 dark:border-slate-700 my-1"></div>
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">Verification</div>
+                    <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
+                      {/* Built-in Prompts */}
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">
+                        Correction Level
+                      </div>
+                      {builtInPrompts.map(prompt => (
+                        <button
+                          key={prompt.id}
+                          onClick={() => handleAIEdit(prompt.id)}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
+                        >
+                          <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
+                          {prompt.name}
+                        </button>
+                      ))}
+
+                      {/* Custom Prompts */}
+                      {customPrompts.length > 0 && (
+                        <>
+                          <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                          <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
+                            Custom Prompts
+                          </div>
+                          {customPrompts.map(prompt => (
+                            <button
+                              key={prompt.id}
+                              onClick={() => handleAIEdit(prompt.id)}
+                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
+                            >
+                              <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
+                              {prompt.name}
+                            </button>
+                          ))}
+                        </>
+                      )}
+
+                      {/* Verification Section */}
+                      <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
+                        Verification
+                      </div>
                       <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
                         <Shield className="w-4 h-4 text-cyan-500" />
                         Fact Check
                         <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
+                      </button>
+
+                      {/* Manage Prompts */}
+                      <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                      <button
+                        onClick={() => { setIsPolishMenuOpen(false); setShowPromptsModal(true); }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700/50 hover:text-gray-700 dark:hover:text-slate-300 transition-colors flex items-center gap-2"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Manage Prompts...
                       </button>
                     </div>
                   )}
@@ -1442,6 +1537,17 @@ function App() {
             divider: true
           }
         ]}
+      />
+
+      {/* Prompts Management Modal */}
+      <PromptsModal
+        isOpen={showPromptsModal}
+        onClose={() => setShowPromptsModal(false)}
+        prompts={aiPrompts}
+        onCreatePrompt={async (data) => { await createPrompt(data); }}
+        onUpdatePrompt={async (id, updates) => { await updatePrompt(id, updates); }}
+        onDeletePrompt={async (id) => { await deletePrompt(id); }}
+        onResetBuiltIn={async (id) => { await resetBuiltIn(id); }}
       />
     </div>
   );

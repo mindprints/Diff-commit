@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('electron', {
     saveFile: (content, defaultName) => ipcRenderer.invoke('save-file', content, defaultName),
     exportVersions: (versions) => ipcRenderer.invoke('export-versions', versions),
 
+    // AI Prompts CRUD
+    getPrompts: () => ipcRenderer.invoke('get-prompts'),
+    savePrompts: (prompts) => ipcRenderer.invoke('save-prompts', prompts),
+
     // Menu event listeners (from main process)
     onFileOpened: (callback) => ipcRenderer.on('file-opened', (event, content, path) => callback(content, path)),
     onRequestSave: (callback) => ipcRenderer.on('request-save', () => callback()),

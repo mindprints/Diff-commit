@@ -1,5 +1,5 @@
 
-import { AILogEntry, TextVersion } from './types';
+import { AILogEntry, AIPrompt, TextVersion } from './types';
 
 export interface IElectronAPI {
     platform: string;
@@ -18,6 +18,10 @@ export interface IElectronAPI {
     getVersions: () => Promise<TextVersion[]>;
     saveVersions: (versions: TextVersion[]) => Promise<boolean>;
     clearVersions: () => Promise<boolean>;
+
+    // AI Prompts CRUD
+    getPrompts?: () => Promise<AIPrompt[]>;
+    savePrompts?: (prompts: AIPrompt[]) => Promise<boolean>;
 
     // File Operations
     saveFile: (content: string, defaultName?: string) => Promise<string | null>;
