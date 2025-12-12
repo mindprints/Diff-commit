@@ -327,3 +327,122 @@ Important:
     }
 }
 
+/**
+ * Polish multiple text ranges using a specific AIPrompt object.
+ * This is the preferred method for custom prompts.
+ */
+export const polishMultipleRangesWithPrompt = async (
+    ranges: RangeInput[],
+    prompt: AIPrompt,
+    model: Model,
+    signal?: AbortSignal
+): Promise<MultiRangeResponse> => {
+    if (ranges.length === 0) {
+        return { results: [], isError: true, errorMessage: 'No ranges provided' };
+    }
+
+    // For single range, delegate to polishWithPrompt for efficiency
+    if (ranges.length === 1) {
+        const singleResult = await polishWithPrompt(ranges[0].text, prompt, model, signal);
+        if (singleResult.isError || singleResult.isCancelled) {
+            return {
+                results: [],
+                isError: singleResult.isError,
+                isCancelled: singleResult.isCancelled,
+                errorMessage: singleResult.text,
+            };
+        }
+        return {
+            results: [{ id: ranges[0].id, result: singleResult.text }],
+            usage: singleResult.usage,
+        };
+    }
+
+    // Build system instruction that combines the prompt's instruction with multi-segment handling
+    const systemInstruction = `${prompt.systemInstruction}
+
+You are processing multiple text segments. Each segment has a unique ID. 
+You must return results for ALL segments in the exact JSON format specified.
+Do not skip any segments. Do not merge segments. Process each independently.`;
+
+    // Format ranges as JSON for the prompt
+    const rangesJson = JSON.stringify(ranges.map(r => ({ id: r.id, text: r.text.substring(0, 2000) })), null, 2);
+
+    const userContent = `${prompt.promptTask}
+
+Process the following text segments according to the above instructions:
+
+Input segments (JSON):
+${rangesJson}
+
+Return your response as a valid JSON object with this exact structure:
+{
+  "results": [
+    {"id": "sel_0", "result": "processed text for first segment"},
+    {"id": "sel_1", "result": "processed text for second segment"}
+  ]
+}
+
+Important: 
+- Return results for ALL input segments
+- Use the exact same IDs from the input
+- Each result should be the fully processed text for that segment`;
+
+    const response = await callOpenRouter(model, [
+        { role: "system", content: systemInstruction },
+        { role: "user", content: userContent }
+    ], 0.3, { type: "json_object" }, signal);
+
+    if (response.isError) {
+        return {
+            results: [],
+            isError: true,
+            isCancelled: response.isCancelled,
+            errorMessage: response.text,
+        };
+    }
+
+    try {
+        // Clean potential markdown code blocks
+        let cleanText = response.text.trim();
+        if (cleanText.startsWith('```json')) {
+            cleanText = cleanText.substring(7);
+        }
+        if (cleanText.startsWith('```')) {
+            cleanText = cleanText.substring(3);
+        }
+        if (cleanText.endsWith('```')) {
+            cleanText = cleanText.substring(0, cleanText.length - 3);
+        }
+
+        const json = JSON.parse(cleanText);
+
+        // Validate response structure
+        if (!json.results || !Array.isArray(json.results)) {
+            console.warn('Invalid multi-range response structure:', json);
+            return {
+                results: [],
+                isError: true,
+                errorMessage: 'Invalid response format from AI',
+            };
+        }
+
+        // Ensure all results have required fields
+        const validResults: RangeOutput[] = json.results
+            .filter((r: any) => r && typeof r.id === 'string' && typeof r.result === 'string')
+            .map((r: any) => ({ id: r.id, result: r.result }));
+
+        return {
+            results: validResults,
+            usage: response.usage,
+        };
+    } catch (e) {
+        console.warn('Failed to parse multi-range JSON response:', response.text);
+        return {
+            results: [],
+            isError: true,
+            errorMessage: 'Failed to parse AI response',
+        };
+    }
+}
+

@@ -5,7 +5,7 @@ import { DiffSegment, ViewMode, FontFamily, PolishMode, TextVersion, AIPrompt } 
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
-import { generateDiffSummary, polishMergedText, polishMultipleRanges, polishWithPrompt } from './services/ai';
+import { generateDiffSummary, polishMergedText, polishMultipleRanges, polishWithPrompt, polishMultipleRangesWithPrompt } from './services/ai';
 import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
@@ -731,22 +731,61 @@ function App() {
     // Close menu
     setIsPolishMenuOpen(false);
 
-    // Check if there are any stored selection ranges
-    if (selectionRanges.length > 0) {
-      // For selections, we still use handlePolishSelection with mode ID
-      // TODO: Refactor to pass full prompt object to polishMultipleRanges
-      return handlePolishSelection(promptId as PolishMode);
-    }
-
-    // Check for native textarea selection
+    // Check for native textarea selection (capture it first)
     const textarea = previewTextareaRef.current?.getTextarea();
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      if (start !== end) {
+      if (start !== end && selectionRanges.length === 0) {
         addSelectionRange(start, end, false, previewText);
-        return handlePolishSelection(promptId as PolishMode);
       }
+    }
+
+    // Check if there are any stored selection ranges
+    if (selectionRanges.length > 0) {
+      // Handle selection-based AI editing with the full prompt object
+      cancelAIOperation();
+      abortControllerRef.current = new AbortController();
+      setIsPolishing(true);
+      setErrorMessage(null);
+
+      // Build range inputs from selection ranges
+      const rangeInputs = selectionRanges.map(range => ({
+        id: range.id,
+        text: range.text,
+      }));
+
+      // Use the new prompt-based multi-range function
+      const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRangesWithPrompt(
+        rangeInputs,
+        prompt,
+        selectedModel,
+        abortControllerRef.current.signal
+      );
+
+      if (isCancelled) return;
+
+      if (isError) {
+        setErrorMessage(aiError || 'AI polish failed.');
+        setIsPolishing(false);
+        return;
+      }
+
+      updateCost(usage);
+      if (usage) logAIUsage('polish', usage);
+
+      // Apply results back to the text
+      const newText = applySelectionResults(results, previewText);
+      setPreviewText(newText);
+      setModifiedText(newText);
+      performDiff(originalText, newText);
+
+      setIsPolishing(false);
+      abortControllerRef.current = null;
+
+      const rangeCount = selectionRanges.length;
+      setSummary(`${rangeCount} selection${rangeCount > 1 ? 's' : ''} updated with "${prompt.name}".`);
+      return;
     }
 
     // No selections - run full-text polish with the prompt object
