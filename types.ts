@@ -26,7 +26,7 @@ export interface AILogEntry {
   timestamp: number;
   modelId: string;
   modelName: string;
-  taskType: 'summary' | 'polish' | 'fact-check-extraction' | 'fact-check-verification';
+  taskType: string; // e.g., 'summary', 'Spelling', 'Grammar', 'Full Polish', custom prompt names, etc.
   inputTokens: number;
   outputTokens: number;
   cost: number;
@@ -62,13 +62,13 @@ export interface FactCheckSession {
   report: string;
 }
 
-// Git-style versioning
-export interface TextVersion {
+// Git-style commits
+export interface TextCommit {
   id: string;
-  versionNumber: number;
+  commitNumber: number;
   content: string;
   timestamp: number;
-  summary?: string; // Optional: AI-generated summary of what was in this version
+  summary?: string; // Optional: AI-generated summary of what was in this commit
 }
 
 // AI Prompt CRUD system

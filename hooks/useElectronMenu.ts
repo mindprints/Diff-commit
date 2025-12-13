@@ -9,15 +9,15 @@ interface UseElectronMenuOptions {
     mode: ViewMode;
     previewText: string;
     originalText: string;
-    versions: any[];
+    commits: any[];
 
     // File handlers
     onFileOpened: (content: string) => void;
     getSaveText: () => string;
     onClearAll: () => void;
 
-    // Version handlers
-    onVersionsImported: (versions: any[]) => void;
+    // Commit handlers
+    onCommitsImported: (commits: any[]) => void;
 
     // Edit handlers
     onUndo: () => void;
@@ -31,7 +31,7 @@ interface UseElectronMenuOptions {
     // Modal handlers
     onShowHelp: () => void;
     onShowLogs: () => void;
-    onShowVersionHistory: () => void;
+    onShowCommitHistory: () => void;
 }
 
 export function useElectronMenu(options: UseElectronMenuOptions) {
@@ -39,11 +39,11 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         mode,
         previewText,
         originalText,
-        versions,
+        commits,
         onFileOpened,
         getSaveText,
         onClearAll,
-        onVersionsImported,
+        onCommitsImported,
         onUndo,
         onRedo,
         onToggleDark,
@@ -51,7 +51,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         onFontFamily,
         onShowHelp,
         onShowLogs,
-        onShowVersionHistory,
+        onShowCommitHistory,
     } = options;
 
     useEffect(() => {
@@ -70,14 +70,14 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         });
 
         window.electron.onRequestExportVersions(async () => {
-            if (versions.length > 0) {
-                await window.electron.exportVersions(versions);
+            if (commits.length > 0) {
+                await window.electron.exportVersions(commits);
             }
         });
 
-        window.electron.onVersionsImported((importedVersions) => {
-            if (Array.isArray(importedVersions)) {
-                onVersionsImported(importedVersions);
+        window.electron.onVersionsImported((importedCommits) => {
+            if (Array.isArray(importedCommits)) {
+                onCommitsImported(importedCommits);
             }
         });
 
@@ -102,7 +102,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         // Help menu handlers
         window.electron.onMenuShowHelp(() => onShowHelp());
         window.electron.onMenuShowLogs(() => onShowLogs());
-        window.electron.onMenuShowVersions(() => onShowVersionHistory());
+        window.electron.onMenuShowVersions(() => onShowCommitHistory());
 
         // Cleanup listeners on unmount
         return () => {
@@ -123,5 +123,5 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, previewText, originalText, versions]);
+    }, [mode, previewText, originalText, commits]);
 }

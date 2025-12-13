@@ -14,14 +14,14 @@ contextBridge.exposeInMainWorld('electron', {
     getLogs: () => ipcRenderer.invoke('get-logs'),
     clearLogs: () => ipcRenderer.invoke('clear-logs'),
 
-    // Version History
+    // Commit History
     getVersions: () => ipcRenderer.invoke('get-versions'),
-    saveVersions: (versions) => ipcRenderer.invoke('save-versions', versions),
+    saveVersions: (commits) => ipcRenderer.invoke('save-versions', commits),
     clearVersions: () => ipcRenderer.invoke('clear-versions'),
 
     // File Operations
     saveFile: (content, defaultName) => ipcRenderer.invoke('save-file', content, defaultName),
-    exportVersions: (versions) => ipcRenderer.invoke('export-versions', versions),
+    exportVersions: (commits) => ipcRenderer.invoke('export-versions', commits),
 
     // AI Prompts CRUD
     getPrompts: () => ipcRenderer.invoke('get-prompts'),

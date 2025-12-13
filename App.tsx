@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Diff from 'diff';
-import { DiffSegment, ViewMode, FontFamily, PolishMode, TextVersion, AIPrompt } from './types';
+import { DiffSegment, ViewMode, FontFamily, PolishMode, TextCommit, AIPrompt } from './types';
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
@@ -10,10 +10,10 @@ import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
 import { LogsModal } from './components/LogsModal';
-import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { CommitHistoryModal } from './components/CommitHistoryModal';
 import { ContextMenu } from './components/ContextMenu';
 import { PromptsModal } from './components/PromptsModal';
-import { useVersionHistory } from './hooks/useVersionHistory';
+import { useCommitHistory } from './hooks/useCommitHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useElectronMenu } from './hooks/useElectronMenu';
@@ -81,6 +81,7 @@ function App() {
   const [factCheckProgress, setFactCheckProgress] = useState<string>('');
   const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
 
   // Model & Cost Management
@@ -130,7 +131,7 @@ function App() {
   // Rating & Logging
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
 
-  // Version History (extracted to custom hook)
+  // Commit History (extracted to custom hook)
   const getCommitText = useCallback(() => {
     return mode === ViewMode.DIFF ? previewText : originalText;
   }, [mode, previewText, originalText]);
@@ -141,24 +142,24 @@ function App() {
     setPreviewText(committedText);
     setModifiedText('');
     resetDiffState();
-    setSummary('Committed! Both panes now contain your saved version.');
+    setSummary('Committed! Both panes now contain your saved commit.');
     setMode(ViewMode.INPUT);
   }, [resetDiffState]);
 
   const {
-    versions,
-    setVersions,
-    showVersionHistory,
-    setShowVersionHistory,
+    commits,
+    setCommits,
+    showCommitHistory,
+    setShowCommitHistory,
     handleCommit,
-    handleDeleteVersion,
-    handleClearAllVersions,
-  } = useVersionHistory({ getCommitText, onAfterCommit });
+    handleDeleteCommit,
+    handleClearAllCommits,
+  } = useCommitHistory({ getCommitText, onAfterCommit });
 
   // Context Menu for text selection
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
 
-  const logAIUsage = async (taskType: 'summary' | 'polish', usage: { inputTokens: number; outputTokens: number }) => {
+  const logAIUsage = async (taskType: string, usage: { inputTokens: number; outputTokens: number }) => {
     if (!selectedModel || !usage) return;
 
     const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
@@ -175,9 +176,21 @@ function App() {
       cost
     };
 
-    // Persist to electron-store if available
+    // Persist to electron-store if available, otherwise use localStorage
     if (window.electron && window.electron.logUsage) {
       await window.electron.logUsage(logEntry);
+    } else {
+      // Fallback to localStorage for web/localhost testing
+      try {
+        const stored = localStorage.getItem('diff-commit-logs');
+        const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
+        logs.push(logEntry);
+        // Keep max 1000 logs
+        if (logs.length > 1000) logs.shift();
+        localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+      } catch (e) {
+        console.warn('Failed to save log to localStorage:', e);
+      }
     }
 
     // Always show rating prompt after AI call
@@ -190,18 +203,18 @@ function App() {
     }
   };
 
-  // Version handlers that need access to other state (kept in App)
-  const handleRestoreVersion = (version: TextVersion) => {
-    setOriginalText(version.content);
+  // Commit handlers that need access to other state (kept in App)
+  const handleRestoreCommit = (commit: TextCommit) => {
+    setOriginalText(commit.content);
     setModifiedText('');
     setSegments([]);
     setMode(ViewMode.INPUT);
   };
 
-  const handleCompareVersion = (version: TextVersion) => {
-    setOriginalText(version.content);
+  const handleCompareCommit = (commit: TextCommit) => {
+    setOriginalText(commit.content);
     setModifiedText(originalText);
-    performDiff(version.content, originalText);
+    performDiff(commit.content, originalText);
     setMode(ViewMode.DIFF);
   };
 
@@ -273,7 +286,7 @@ function App() {
     mode,
     previewText,
     originalText,
-    versions,
+    commits,
     onFileOpened: (content) => {
       setOriginalText(content);
       setModifiedText('');
@@ -289,8 +302,8 @@ function App() {
       setSummary('');
       setMode(ViewMode.INPUT);
     },
-    onVersionsImported: (importedVersions) => {
-      setVersions(prev => [...prev, ...importedVersions]);
+    onCommitsImported: (importedCommits) => {
+      setCommits(prev => [...prev, ...importedCommits]);
     },
     onUndo: undo,
     onRedo: redo,
@@ -299,7 +312,7 @@ function App() {
     onFontFamily: (family) => setFontFamily(family as FontFamily),
     onShowHelp: () => setShowHelp(true),
     onShowLogs: () => setShowLogs(true),
-    onShowVersionHistory: () => setShowVersionHistory(true),
+    onShowCommitHistory: () => setShowCommitHistory(true),
   });
 
   // Resizing Logic
@@ -532,7 +545,12 @@ function App() {
     }
 
     updateCost(usage);
-    if (usage) logAIUsage('polish', usage);
+    // Map polishMode to human-readable task name
+    const taskName = polishMode === 'spelling' ? 'Spelling'
+      : polishMode === 'grammar' ? 'Grammar'
+        : polishMode === 'prompt' ? 'Prompt Expansion'
+          : 'Full Polish';
+    if (usage) logAIUsage(taskName, usage);
 
     // If text was in right tab only, move it to left first
     if (fromRightTab) {
@@ -704,7 +722,12 @@ function App() {
     }
 
     updateCost(usage);
-    if (usage) logAIUsage('polish', usage);
+    // Map polishMode to human-readable task name for selection-based polish
+    const taskName = polishMode === 'spelling' ? 'Spelling (Selection)'
+      : polishMode === 'grammar' ? 'Grammar (Selection)'
+        : polishMode === 'prompt' ? 'Prompt Expansion (Selection)'
+          : 'Full Polish (Selection)';
+    if (usage) logAIUsage(taskName, usage);
 
     // Apply results back to the text (processes in reverse order to maintain positions)
     const newText = applySelectionResults(results, previewText);
@@ -772,7 +795,7 @@ function App() {
       }
 
       updateCost(usage);
-      if (usage) logAIUsage('polish', usage);
+      if (usage) logAIUsage(`${prompt.name} (Selection)`, usage);
 
       // Apply results back to the text
       const newText = applySelectionResults(results, previewText);
@@ -819,7 +842,7 @@ function App() {
     }
 
     updateCost(usage);
-    if (usage) logAIUsage('polish', usage);
+    if (usage) logAIUsage(prompt.name, usage);
 
     if (fromRightTab) {
       setOriginalText(sourceText);
@@ -967,72 +990,100 @@ function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mr-2">
-            {/* Font Family */}
-            <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1 border border-gray-200 dark:border-slate-700">
-              <button
-                onClick={() => setFontFamily('sans')}
-                className={clsx("p-1.5 rounded text-xs font-semibold transition-all w-10", fontFamily === 'sans' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Sans Serif"
-              >
-                Sans
-              </button>
-              <button
-                onClick={() => setFontFamily('serif')}
-                className={clsx("p-1.5 rounded text-xs font-serif font-semibold transition-all w-10", fontFamily === 'serif' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Serif"
-              >
-                Serif
-              </button>
-              <button
-                onClick={() => setFontFamily('mono')}
-                className={clsx("p-1.5 rounded text-xs font-mono font-semibold transition-all w-10", fontFamily === 'mono' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Monospace"
-              >
-                Mono
-              </button>
-            </div>
+          {/* Settings Dropdown - Font, Size, Dark Mode */}
+          <div className="relative">
+            <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className={clsx(
+                "text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2",
+                isSettingsOpen && "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded"
+              )}
+              title="Appearance Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            {isSettingsOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setIsSettingsOpen(false)}></div>
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 py-2 z-20 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Dark Mode Toggle */}
+                  <div className="px-4 py-2 flex items-center justify-between">
+                    <span className="text-sm text-gray-700 dark:text-slate-300">Dark Mode</span>
+                    <button
+                      onClick={() => setIsDarkMode(!isDarkMode)}
+                      className={clsx(
+                        "w-10 h-6 rounded-full transition-colors relative",
+                        isDarkMode ? "bg-indigo-600" : "bg-gray-300 dark:bg-slate-600"
+                      )}
+                    >
+                      <span className={clsx(
+                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow",
+                        isDarkMode ? "translate-x-5" : "translate-x-1"
+                      )} />
+                    </button>
+                  </div>
 
-            {/* Font Size */}
-            <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1 border border-gray-200 dark:border-slate-700">
-              <button
-                onClick={() => setFontSize('sm')}
-                className={clsx("w-8 p-1.5 rounded text-xs font-semibold transition-all", fontSize === 'sm' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Small Text"
-              >
-                S
-              </button>
-              <button
-                onClick={() => setFontSize('base')}
-                className={clsx("w-8 p-1.5 rounded text-sm font-semibold transition-all", fontSize === 'base' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Medium Text"
-              >
-                M
-              </button>
-              <button
-                onClick={() => setFontSize('lg')}
-                className={clsx("w-8 p-1.5 rounded text-base font-semibold transition-all", fontSize === 'lg' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Large Text"
-              >
-                L
-              </button>
-              <button
-                onClick={() => setFontSize('xl')}
-                className={clsx("w-8 p-1.5 rounded text-lg font-semibold transition-all", fontSize === 'xl' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300")}
-                title="Extra Large Text"
-              >
-                XL
-              </button>
-            </div>
+                  <div className="border-t border-gray-100 dark:border-slate-700 my-2" />
+
+                  {/* Font Family */}
+                  <div className="px-4 py-2">
+                    <div className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Font Family</div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setFontFamily('sans')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-semibold transition-all", fontFamily === 'sans' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        Sans
+                      </button>
+                      <button
+                        onClick={() => setFontFamily('serif')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-serif font-semibold transition-all", fontFamily === 'serif' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        Serif
+                      </button>
+                      <button
+                        onClick={() => setFontFamily('mono')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-mono font-semibold transition-all", fontFamily === 'mono' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        Mono
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Font Size */}
+                  <div className="px-4 py-2">
+                    <div className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Font Size</div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setFontSize('sm')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-semibold transition-all", fontSize === 'sm' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        S
+                      </button>
+                      <button
+                        onClick={() => setFontSize('base')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-sm font-semibold transition-all", fontSize === 'base' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        M
+                      </button>
+                      <button
+                        onClick={() => setFontSize('lg')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-base font-semibold transition-all", fontSize === 'lg' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        L
+                      </button>
+                      <button
+                        onClick={() => setFontSize('xl')}
+                        className={clsx("flex-1 px-2 py-1.5 rounded text-lg font-semibold transition-all", fontSize === 'xl' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
+                      >
+                        XL
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
-            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
 
           <button
             onClick={() => setShowLogs(true)}
@@ -1043,14 +1094,14 @@ function App() {
           </button>
 
           <button
-            onClick={() => setShowVersionHistory(true)}
+            onClick={() => setShowCommitHistory(true)}
             className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 relative"
-            title="Version History"
+            title="Commit History"
           >
             <History className="w-5 h-5" />
-            {versions.length > 0 && (
+            {commits.length > 0 && (
               <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-indigo-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {versions.length}
+                {commits.length}
               </span>
             )}
           </button>
@@ -1116,19 +1167,8 @@ function App() {
                 Clear All
               </Button>
 
-              <Button
-                variant="outline"
-                onClick={() => {
-                  // Re-compare: use current previewText as the new modified text
-                  setModifiedText(previewText);
-                  performDiff(originalText, previewText);
-                  setSummary('');
-                }}
-                size="sm"
-                icon={<RefreshCw className="w-4 h-4" />}
-                title="Re-compare after editing the preview"
-              >
-                Compare
+              <Button variant="primary" size="sm" onClick={copyFinal} icon={<Copy className="w-4 h-4" />}>
+                Copy
               </Button>
 
               <div className="flex items-center gap-1">
@@ -1409,8 +1449,19 @@ function App() {
                   )}
                 </div>
 
-                <Button variant="primary" size="sm" onClick={copyFinal} icon={<Copy className="w-3 h-3" />}>
-                  Copy
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    // Re-compare: use current previewText as the new modified text
+                    setModifiedText(previewText);
+                    performDiff(originalText, previewText);
+                    setSummary('');
+                  }}
+                  size="sm"
+                  icon={<RefreshCw className="w-3 h-3" />}
+                  title="Re-compare after editing the preview"
+                >
+                  Compare
                 </Button>
 
                 <Button
@@ -1422,9 +1473,9 @@ function App() {
                   icon={<GitBranch className="w-3 h-3" />}
                 >
                   Commit
-                  {versions.length > 0 && (
+                  {commits.length > 0 && (
                     <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold">
-                      {versions.length}
+                      {commits.length}
                     </span>
                   )}
                 </Button>
@@ -1509,15 +1560,15 @@ function App() {
           </div>
         </div>
       )}
-      {/* Version History Modal */}
-      <VersionHistoryModal
-        isOpen={showVersionHistory}
-        onClose={() => setShowVersionHistory(false)}
-        versions={versions}
-        onRestore={handleRestoreVersion}
-        onCompare={handleCompareVersion}
-        onDelete={handleDeleteVersion}
-        onClearAll={handleClearAllVersions}
+      {/* Commit History Modal */}
+      <CommitHistoryModal
+        isOpen={showCommitHistory}
+        onClose={() => setShowCommitHistory(false)}
+        commits={commits}
+        onRestore={handleRestoreCommit}
+        onCompare={handleCompareCommit}
+        onDelete={handleDeleteCommit}
+        onClearAll={handleClearAllCommits}
         currentOriginalText={originalText}
       />
 

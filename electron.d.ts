@@ -1,5 +1,5 @@
 
-import { AILogEntry, AIPrompt, TextVersion } from './types';
+import { AILogEntry, AIPrompt, TextCommit } from './types';
 
 export interface IElectronAPI {
     platform: string;
@@ -14,9 +14,9 @@ export interface IElectronAPI {
     getLogs: () => Promise<AILogEntry[]>;
     clearLogs: () => Promise<boolean>;
 
-    // Version History
-    getVersions: () => Promise<TextVersion[]>;
-    saveVersions: (versions: TextVersion[]) => Promise<boolean>;
+    // Commit History
+    getVersions: () => Promise<TextCommit[]>;
+    saveVersions: (versions: TextCommit[]) => Promise<boolean>;
     clearVersions: () => Promise<boolean>;
 
     // AI Prompts CRUD
@@ -25,13 +25,13 @@ export interface IElectronAPI {
 
     // File Operations
     saveFile: (content: string, defaultName?: string) => Promise<string | null>;
-    exportVersions: (versions: TextVersion[]) => Promise<string | null>;
+    exportVersions: (versions: TextCommit[]) => Promise<string | null>;
 
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => void;
     onRequestSave: (callback: () => void) => void;
     onRequestExportVersions: (callback: () => void) => void;
-    onVersionsImported: (callback: (versions: TextVersion[]) => void) => void;
+    onVersionsImported: (callback: (versions: TextCommit[]) => void) => void;
     onMenuUndo: (callback: () => void) => void;
     onMenuRedo: (callback: () => void) => void;
     onMenuClearAll: (callback: () => void) => void;

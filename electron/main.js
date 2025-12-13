@@ -94,13 +94,13 @@ function createMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Export Versions...',
+                    label: 'Export Commits...',
                     click: async () => {
                         sendToRenderer('request-export-versions');
                     }
                 },
                 {
-                    label: 'Import Versions...',
+                    label: 'Import Commits...',
                     click: async () => {
                         const result = await dialog.showOpenDialog(mainWindow, {
                             properties: ['openFile'],
@@ -111,8 +111,8 @@ function createMenu() {
                         if (!result.canceled && result.filePaths.length > 0) {
                             const content = fs.readFileSync(result.filePaths[0], 'utf-8');
                             try {
-                                const versions = JSON.parse(content);
-                                sendToRenderer('versions-imported', versions);
+                                const commits = JSON.parse(content);
+                                sendToRenderer('versions-imported', commits);
                             } catch (e) {
                                 dialog.showErrorBox('Import Error', 'Invalid JSON file format.');
                             }
@@ -216,7 +216,7 @@ function createMenu() {
                     click: () => sendToRenderer('menu-show-logs')
                 },
                 {
-                    label: 'Version History',
+                    label: 'Commit History',
                     click: () => sendToRenderer('menu-show-versions')
                 },
                 { type: 'separator' },
@@ -287,7 +287,7 @@ app.whenReady().then(() => {
         return true;
     });
 
-    // Version History Handlers
+    // Commit History Handlers
     ipcMain.handle('get-versions', () => {
         return store.get('textVersions') || [];
     });
@@ -329,14 +329,14 @@ app.whenReady().then(() => {
         return null;
     });
 
-    // Export versions handler
-    ipcMain.handle('export-versions', async (event, versions) => {
+    // Export commits handler
+    ipcMain.handle('export-versions', async (event, commits) => {
         const result = await dialog.showSaveDialog(mainWindow, {
-            defaultPath: 'versions-backup.json',
+            defaultPath: 'commits-backup.json',
             filters: [{ name: 'JSON Files', extensions: ['json'] }]
         });
         if (!result.canceled && result.filePath) {
-            fs.writeFileSync(result.filePath, JSON.stringify(versions, null, 2), 'utf-8');
+            fs.writeFileSync(result.filePath, JSON.stringify(commits, null, 2), 'utf-8');
             return result.filePath;
         }
         return null;
