@@ -54,7 +54,7 @@ import clsx from 'clsx';
 type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
 function App() {
-  const [mode, setMode] = useState<ViewMode>(ViewMode.INPUT);
+  const [mode, setMode] = useState<ViewMode>(ViewMode.DIFF);
   const [originalText, setOriginalText] = useState<string>('');
   const [modifiedText, setModifiedText] = useState<string>('');
 
@@ -487,12 +487,12 @@ function App() {
   // Helper to get the source text for AI operations
   // Handles both diff mode (uses previewText) and input mode (uses available tab text)
   const getSourceTextForAI = (): { sourceText: string; fromRightTab: boolean } => {
-    // If we're in DIFF mode, use the committed/preview text
-    if (mode === ViewMode.DIFF && previewText.trim()) {
-      return { sourceText: previewText, fromRightTab: false };
+    // In DIFF mode with previewText, use it
+    if (previewText.trim()) {
+      return { sourceText: previewText, fromRightTab: true };
     }
 
-    // In INPUT mode, determine which tab has content
+    // Check originalText (left panel) and modifiedText (right panel in input)
     const hasLeft = originalText.trim().length > 0;
     const hasRight = modifiedText.trim().length > 0;
 
@@ -1159,7 +1159,7 @@ function App() {
                   setPreviewText('');
                   resetDiffState();
                   setSummary('');
-                  setMode(ViewMode.INPUT);
+                  // Stay in DIFF mode, just clear the text
                 }}
                 size="sm"
                 icon={<Trash2 className="w-4 h-4" />}
