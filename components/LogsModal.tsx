@@ -183,8 +183,9 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
                         Date/Time
                         {sortOrder === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
                     </button>
-                    <div className="col-span-3">Model</div>
+                    <div className="col-span-2">Model</div>
                     <div className="col-span-1">Task</div>
+                    <div className="col-span-1 text-right">Time</div>
                     <div className="col-span-2 text-right">Tokens</div>
                     <div className="col-span-2 text-right">Cost</div>
                     <div className="col-span-2 text-center">Rating</div>
@@ -214,7 +215,7 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
                                             {new Date(log.timestamp).toLocaleTimeString()}
                                         </div>
                                     </div>
-                                    <div className="col-span-3 text-gray-900 dark:text-slate-200 font-medium truncate" title={log.modelName}>
+                                    <div className="col-span-2 text-gray-900 dark:text-slate-200 font-medium truncate" title={log.modelName}>
                                         {log.modelName}
                                     </div>
                                     <div className="col-span-1">
@@ -232,6 +233,15 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
                                         )} title={log.taskType}>
                                             {log.taskType}
                                         </span>
+                                    </div>
+                                    <div className="col-span-1 text-right text-gray-600 dark:text-slate-400 font-mono text-xs">
+                                        {log.durationMs != null ? (
+                                            log.durationMs >= 1000
+                                                ? `${(log.durationMs / 1000).toFixed(1)}s`
+                                                : `${log.durationMs}ms`
+                                        ) : (
+                                            <span className="text-gray-400 dark:text-slate-600">—</span>
+                                        )}
                                     </div>
                                     <div className="col-span-2 text-right text-gray-600 dark:text-slate-400">
                                         <span className="text-green-600 dark:text-green-400">{log.inputTokens.toLocaleString()}</span>

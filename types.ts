@@ -30,6 +30,7 @@ export interface AILogEntry {
   inputTokens: number;
   outputTokens: number;
   cost: number;
+  durationMs?: number; // Time taken for the AI operation in milliseconds
   rating?: number; // 1-5
   feedback?: string;
   sessionId?: string; // Group related logs (e.g., fact-check session)

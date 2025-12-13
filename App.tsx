@@ -47,7 +47,8 @@ import {
   History,
   GitBranch,
   Link2,
-  Settings
+  Settings,
+  ArrowLeft
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -83,6 +84,8 @@ function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Model & Cost Management
   const [selectedModel, setSelectedModel] = useState<Model>(MODELS[0]);
@@ -137,13 +140,13 @@ function App() {
   }, [mode, previewText, originalText]);
 
   const onAfterCommit = useCallback((committedText: string) => {
-    // After commit: both panes should have matching content
+    // After commit: both panes should have matching content, stay in DIFF mode
     setOriginalText(committedText);
     setPreviewText(committedText);
     setModifiedText('');
     resetDiffState();
-    setSummary('Committed! Both panes now contain your saved commit.');
-    setMode(ViewMode.INPUT);
+    setSummary('Saved! Both panes now contain your saved commit.');
+    // Stay in DIFF mode - do NOT switch to INPUT mode
   }, [resetDiffState]);
 
   const {
@@ -159,7 +162,7 @@ function App() {
   // Context Menu for text selection
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
 
-  const logAIUsage = async (taskType: string, usage: { inputTokens: number; outputTokens: number }) => {
+  const logAIUsage = async (taskType: string, usage: { inputTokens: number; outputTokens: number }, durationMs?: number) => {
     if (!selectedModel || !usage) return;
 
     const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
@@ -173,7 +176,8 @@ function App() {
       taskType,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
-      cost
+      cost,
+      durationMs
     };
 
     // Persist to electron-store if available, otherwise use localStorage
@@ -205,10 +209,13 @@ function App() {
 
   // Commit handlers that need access to other state (kept in App)
   const handleRestoreCommit = (commit: TextCommit) => {
+    // Restore to both panels with identical content, stay in DIFF mode
     setOriginalText(commit.content);
+    setPreviewText(commit.content);
     setModifiedText('');
-    setSegments([]);
-    setMode(ViewMode.INPUT);
+    resetDiffState();
+    setSummary(`Restored commit #${commit.commitNumber}. Both panes now contain the restored content.`);
+    // Stay in DIFF mode - do NOT switch to INPUT mode
   };
 
   const handleCompareCommit = (commit: TextCommit) => {
@@ -242,8 +249,11 @@ function App() {
     }
   }, [isDarkMode]);
 
-  // When segments change, update preview text
+  // When segments change, update preview text (but only if we have segments)
+  // If segments is empty, don't overwrite previewText - it may have been set directly
   useEffect(() => {
+    if (segments.length === 0) return; // Don't clear previewText when segments are empty
+
     const computedText = segments
       .filter(s => s.isIncluded)
       .map(s => s.value)
@@ -288,10 +298,13 @@ function App() {
     originalText,
     commits,
     onFileOpened: (content) => {
+      // Set content in both panels, stay in DIFF mode
       setOriginalText(content);
+      setPreviewText(content);
       setModifiedText('');
-      setSegments([]);
-      setMode(ViewMode.INPUT);
+      resetDiffState();
+      setSummary('File loaded. Content is now in both panels.');
+      // Stay in DIFF mode - do NOT switch to INPUT mode
     },
     getSaveText: () => mode === ViewMode.DIFF ? previewText : originalText,
     onClearAll: () => {
@@ -300,7 +313,7 @@ function App() {
       setPreviewText('');
       resetDiffState();
       setSummary('');
-      setMode(ViewMode.INPUT);
+      // Stay in DIFF mode - just clear the text
     },
     onCommitsImported: (importedCommits) => {
       setCommits(prev => [...prev, ...importedCommits]);
@@ -463,12 +476,14 @@ function App() {
 
     setIsSummarizing(true);
     setErrorMessage(null);
+    const startTime = Date.now();
     const { text, usage, isError, isCancelled } = await generateDiffSummary(
       originalText,
       modifiedText,
       selectedModel,
       abortControllerRef.current.signal
     );
+    const durationMs = Date.now() - startTime;
 
     // Don't update state if cancelled
     if (isCancelled) return;
@@ -478,7 +493,7 @@ function App() {
     } else {
       setSummary(text);
       updateCost(usage);
-      if (usage) logAIUsage('summary', usage);
+      if (usage) logAIUsage('summary', usage, durationMs);
     }
     setIsSummarizing(false);
     abortControllerRef.current = null;
@@ -528,12 +543,14 @@ function App() {
     setIsPolishing(true);
     setErrorMessage(null);
 
+    const startTime = Date.now();
     const { text: polished, usage, isError, isCancelled } = await polishMergedText(
       sourceText,
       polishMode,
       selectedModel,
       abortControllerRef.current.signal
     );
+    const durationMs = Date.now() - startTime;
 
     // Don't update state if cancelled
     if (isCancelled) return;
@@ -550,7 +567,7 @@ function App() {
       : polishMode === 'grammar' ? 'Grammar'
         : polishMode === 'prompt' ? 'Prompt Expansion'
           : 'Full Polish';
-    if (usage) logAIUsage(taskName, usage);
+    if (usage) logAIUsage(taskName, usage, durationMs);
 
     // If text was in right tab only, move it to left first
     if (fromRightTab) {
@@ -705,12 +722,14 @@ function App() {
       text: r.text,
     }));
 
+    const startTime = Date.now();
     const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRanges(
       rangeInputs,
       polishMode,
       selectedModel,
       abortControllerRef.current.signal
     );
+    const durationMs = Date.now() - startTime;
 
     // Don't update state if cancelled
     if (isCancelled) return;
@@ -727,7 +746,7 @@ function App() {
       : polishMode === 'grammar' ? 'Grammar (Selection)'
         : polishMode === 'prompt' ? 'Prompt Expansion (Selection)'
           : 'Full Polish (Selection)';
-    if (usage) logAIUsage(taskName, usage);
+    if (usage) logAIUsage(taskName, usage, durationMs);
 
     // Apply results back to the text (processes in reverse order to maintain positions)
     const newText = applySelectionResults(results, previewText);
@@ -779,12 +798,14 @@ function App() {
       }));
 
       // Use the new prompt-based multi-range function
+      const startTime = Date.now();
       const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRangesWithPrompt(
         rangeInputs,
         prompt,
         selectedModel,
         abortControllerRef.current.signal
       );
+      const durationMs = Date.now() - startTime;
 
       if (isCancelled) return;
 
@@ -795,7 +816,7 @@ function App() {
       }
 
       updateCost(usage);
-      if (usage) logAIUsage(`${prompt.name} (Selection)`, usage);
+      if (usage) logAIUsage(`${prompt.name} (Selection)`, usage, durationMs);
 
       // Apply results back to the text
       const newText = applySelectionResults(results, previewText);
@@ -826,12 +847,14 @@ function App() {
     setErrorMessage(null);
 
     // Use polishWithPrompt with the full prompt object
+    const startTime = Date.now();
     const { text: polished, usage, isError, isCancelled } = await polishWithPrompt(
       sourceText,
       prompt,
       selectedModel,
       abortControllerRef.current.signal
     );
+    const durationMs = Date.now() - startTime;
 
     if (isCancelled) return;
 
@@ -842,7 +865,7 @@ function App() {
     }
 
     updateCost(usage);
-    if (usage) logAIUsage(prompt.name, usage);
+    if (usage) logAIUsage(prompt.name, usage, durationMs);
 
     if (fromRightTab) {
       setOriginalText(sourceText);
@@ -923,6 +946,16 @@ function App() {
     navigator.clipboard.writeText(previewText);
   };
 
+  // Copy right panel content to left panel (same as accept)
+  const copyRightToLeft = () => {
+    if (previewText.trim()) {
+      setOriginalText(previewText);
+      setModifiedText('');
+      resetDiffState();
+      setSummary('Copied right panel content to left panel.');
+    }
+  };
+
   const fontClasses = {
     sans: 'font-sans',
     serif: 'font-serif',
@@ -950,6 +983,46 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [historyIndex, history]);
+
+  // Track Shift key for Commit button behavior
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Accept without saving - copies right to left, clears diffs
+  const handleAccept = useCallback(() => {
+    if (!previewText.trim()) return;
+
+    // Copy right panel content to left panel
+    setOriginalText(previewText);
+    setModifiedText('');
+    resetDiffState();
+    setSummary('Accepted! Both panes now contain your current draft.');
+    setHasUnsavedChanges(true); // Mark that there are unsaved changes
+  }, [previewText, resetDiffState]);
+
+  // Combined handler for Commit button - Accept or Save based on Shift
+  const handleCommitClick = useCallback(() => {
+    if (isShiftHeld) {
+      // Shift+Click: Actually save to commit history
+      handleCommit();
+      setHasUnsavedChanges(false); // Mark as saved
+    } else {
+      // Regular click: Just accept (copy right to left, no save)
+      handleAccept();
+    }
+  }, [isShiftHeld, handleCommit, handleAccept]);
 
   return (
     <div className={clsx("flex flex-col h-full bg-white dark:bg-slate-900 transition-colors duration-200")}>
@@ -1197,88 +1270,7 @@ function App() {
         </div>
       </header>
 
-      {/* INPUT MODE */}
-      {mode === ViewMode.INPUT && (
-        <div className="w-full h-full flex flex-col md:flex-row p-6 gap-6 overflow-y-auto">
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Original Version</label>
-              {originalText && (
-                <button
-                  onClick={() => setOriginalText('')}
-                  className="text-xs text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors flex items-center gap-1"
-                  title="Clear Original"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Clear
-                </button>
-              )}
-            </div>
-            <textarea
-              className={clsx(
-                "flex-1 p-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
-                fontClasses[fontFamily],
-                sizeClasses[fontSize]
-              )}
-              placeholder="Paste original text here..."
-              value={originalText}
-              onChange={(e) => setOriginalText(e.target.value)}
-            />
-          </div>
-
-          <div className="flex-none flex flex-col items-center justify-center py-4 md:py-0 gap-6">
-            <button
-              onClick={() => setModifiedText(originalText)}
-              className="p-2 bg-gray-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-gray-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full md:rotate-0 rotate-90 transition-all shadow-sm active:scale-95 active:shadow-inner group"
-              title="Copy Original to Revised"
-            >
-              <ChevronRight className="w-6 h-6 group-hover:scale-110 transition-transform" />
-            </button>
-            {(originalText || modifiedText) && (
-              <button
-                onClick={() => {
-                  setOriginalText('');
-                  setModifiedText('');
-                }}
-                className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
-                title="Clear Both Panels"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Clear All
-              </button>
-            )}
-          </div>
-
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Revised Version</label>
-              {modifiedText && (
-                <button
-                  onClick={() => setModifiedText('')}
-                  className="text-xs text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors flex items-center gap-1"
-                  title="Clear Revised"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Clear
-                </button>
-              )}
-            </div>
-            <textarea
-              className={clsx(
-                "flex-1 p-4 rounded-xl border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none leading-relaxed shadow-sm",
-                fontClasses[fontFamily],
-                sizeClasses[fontSize]
-              )}
-              placeholder="Paste revised text here..."
-              value={modifiedText}
-              onChange={(e) => setModifiedText(e.target.value)}
-            />
-          </div>
-
-        </div>
-      )}
-
-      {/* DIFF MODE */}
+      {/* DIFF MODE - Now the only mode */}
       {mode === ViewMode.DIFF && (
         <div className="w-full h-full flex flex-row">
           {/* Editor Panel (Resizable) */}
@@ -1306,9 +1298,14 @@ function App() {
                 sizeClasses[fontSize]
               )}
             >
-              {segments.map((seg) => (
-                <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
-              ))}
+              {segments.length > 0 ? (
+                segments.map((seg) => (
+                  <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
+                ))
+              ) : (
+                // No segments - show originalText as plain text (after accept/commit)
+                <span className="text-gray-600 dark:text-slate-400">{originalText || 'Enter or paste text in the right panel, then use AI Edit or Compare to see differences here.'}</span>
+              )}
             </div>
 
             <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
@@ -1346,6 +1343,14 @@ function App() {
                 Committed Preview
               </h2>
               <div className="flex gap-2">
+                <button
+                  onClick={copyRightToLeft}
+                  disabled={!previewText.trim()}
+                  className="px-2 py-1 text-sm bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800/50 transition disabled:opacity-30 flex items-center gap-1"
+                  title="Copy right panel content to left panel"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                </button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1467,13 +1472,24 @@ function App() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={handleCommit}
+                  onClick={handleCommitClick}
                   disabled={!previewText.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 relative"
+                  className={clsx(
+                    "relative transition-all min-w-[6rem]",
+                    isShiftHeld
+                      ? "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                      : hasUnsavedChanges
+                        ? "bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
+                        : "bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                  )}
                   icon={<GitBranch className="w-3 h-3" />}
+                  title={isShiftHeld
+                    ? "Save to commit history"
+                    : "Accept changes (Shift+Click to save to history)"
+                  }
                 >
-                  Commit
-                  {commits.length > 0 && (
+                  {isShiftHeld ? 'Save Commit' : 'Commit'}
+                  {commits.length > 0 && !isShiftHeld && (
                     <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold">
                       {commits.length}
                     </span>
