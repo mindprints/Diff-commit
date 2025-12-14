@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PolishMode } from "../types";
 
-const apiKey = process.env.API_KEY || '';
+const apiKey = import.meta.env.VITE_API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
 export const polishMergedText = async (text: string, mode: PolishMode = 'polish'): Promise<string> => {
