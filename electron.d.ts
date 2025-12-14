@@ -1,5 +1,5 @@
 
-import { AILogEntry, AIPrompt, TextCommit } from './types';
+import { AILogEntry, AIPrompt, Project, TextCommit } from './types';
 
 export interface IElectronAPI {
     platform: string;
@@ -22,6 +22,11 @@ export interface IElectronAPI {
     // AI Prompts CRUD
     getPrompts?: () => Promise<AIPrompt[]>;
     savePrompts?: (prompts: AIPrompt[]) => Promise<boolean>;
+
+    // Projects (future Electron filesystem support)
+    getProjects?: () => Promise<Project[]>;
+    saveProject?: (project: Project) => Promise<boolean>;
+    deleteProject?: (id: string) => Promise<boolean>;
 
     // File Operations
     saveFile: (content: string, defaultName?: string) => Promise<string | null>;

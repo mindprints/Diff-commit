@@ -10,20 +10,19 @@ Diff & Commit AI is a modern, interactive desktop application designed to stream
     -   *Reject* an addition to remove it.
     -   *Restore* a deletion to keep the original text.
 -   **Smart Swapping**: Automatically links replaced text (e.g., changing "cat" to "dog") so clicking one instantly toggles the other, preventing logical errors.
--   **Undo/Redo History**: Full state management allows you to safely roll back changes.
 -   **Refresh Diff**: After editing the preview, click "Refresh Diff" to re-compare against the original.
 
 ### 🤖 AI-Powered Enhancements
 -   **AI Available Immediately**: AI editing functions are available as soon as you enter text—no need to compare first.
 -   **Multi-Model Support**: Switch instantly between top-tier models like **DeepSeek v3.2**, **Claude Haiku 4.5**, **GPT-OSS 120B**, **Google Gemini 3 Pro**, and more via OpenRouter.
 -   **Cost Tier Indicators**: Models display dollar sign indicators ($-$$$$) in the dropdown to help anticipate costs before selection.
--   **AI Summary**: Generates a concise changelog of differences between versions.
 -   **AI Polish**: Smooths out your final text with distinct modes:
     -   **Spelling Only**: Fixes typos without altering style.
     -   **Grammar Fix**: Corrects syntax and punctuation while preserving tone.
     -   **Full Polish**: Improves flow, clarity, and vocabulary (never alters opinions or factual claims).
     -   **Prompt Expansion**: Expands brief ideas into detailed AI instructions.
     -   **Execute Prompt**: Runs the current text as a prompt—the AI carries out the instructions and returns the result.
+-   **Custom Prompts**: Create, edit, and delete your own AI prompts via the Prompts Manager (⚙️ icon). Built-in prompts can be customized and reset to defaults.
 -   **Cancellable Operations**: Cancel any in-progress AI operation with a single click to avoid getting stuck.
 
 ### 🛡️ AI Fact Checker
@@ -67,6 +66,13 @@ Verify factual claims in your text using **Perplexity Sonar Pro** with real-time
 -   **Refresh Diff**: After editing the preview, click "Refresh Diff" to see changes compared to the original.
 -   **Text-to-Speech**: Built-in "Read Aloud" functionality to audit the rhythm and flow of your text. Select a section to hear just that part.
 
+### ✨ Multi-Selection (Ctrl+Drag)
+-   **Discontinuous Selection**: Hold **Ctrl** while dragging to add multiple, non-contiguous text selections.
+-   **Auto Word Expansion**: Selections automatically snap to word boundaries—no need to precisely highlight every character.
+-   **Automatic Merge**: Overlapping or adjacent selections are intelligently merged.
+-   **AI on Selection**: All AI operations (Polish, Grammar, Spell Check, etc.) work on multi-selections, processing each range individually with indexed results.
+-   **Visual Feedback**: Selected ranges are highlighted with overlays for clear visibility.
+
 ### 🔄 Git-Style Version Control
 -   **Commit Changes**: When satisfied with your edits, click the green "Commit" button to save the current version.
 -   **Version History**: Each commit saves the previous text with a version number and timestamp.
@@ -86,11 +92,13 @@ Verify factual claims in your text using **Perplexity Sonar Pro** with real-time
 
 ### 🖱️ Context Menu (Right-Click)
 -   **Selection-Aware**: Right-click on selected text in the preview pane to access AI actions.
+-   **Multi-Selection Support**: Works with single or multi-selected text ranges.
 -   **Available Actions**:
     -   🔊 **Read Selected** - Text-to-speech for selected portion
     -   ✏️ **Spelling / Grammar / Polish** - AI editing on selection only
     -   📝 **Prompt Expansion / Execute** - Prompt operations on selection
     -   🛡️ **Fact Check** - Verify claims in selection
+    -   📋 **Custom Prompts** - Any user-created prompts appear in the menu
 -   **Smart Disable**: Actions are grayed out when no text is selected.
 
 ## Streamlined Workflow
@@ -159,6 +167,7 @@ We support a curated list of high-performance models to give users flexibility b
 -   **Diff Engine**: `diff` library (Words mode)
 -   **AI Integration**: OpenRouter API (Centralized hub for all models)
 -   **Build Tool**: Vite
+-   **Architecture**: Custom React hooks (`useDiffState`, `useScrollSync`, `useElectronMenu`, `useCommitHistory`, `usePrompts`, `useMultiSelection`) for clean separation of concerns
 
 ## Getting Started
 

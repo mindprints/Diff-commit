@@ -15,6 +15,7 @@ interface MultiSelectTextAreaProps {
     sizeClassName?: string;
     readOnly?: boolean;
     onContextMenu?: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
+    onScroll?: () => void;
 }
 
 export interface MultiSelectTextAreaRef {
@@ -47,6 +48,7 @@ const MultiSelectTextArea = forwardRef<MultiSelectTextAreaRef, MultiSelectTextAr
             sizeClassName,
             readOnly = false,
             onContextMenu,
+            onScroll: externalOnScroll,
         },
         ref
     ) => {
@@ -85,13 +87,15 @@ const MultiSelectTextArea = forwardRef<MultiSelectTextAreaRef, MultiSelectTextAr
             getSelectedRanges: () => ranges,
         }));
 
-        // Sync scroll between overlay and textarea
+        // Sync scroll between overlay and textarea, plus call external handler
         const handleScroll = useCallback(() => {
             if (textareaRef.current && highlightRef.current) {
                 highlightRef.current.scrollTop = textareaRef.current.scrollTop;
                 highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
             }
-        }, []);
+            // Also call external scroll handler for cross-panel sync
+            externalOnScroll?.();
+        }, [externalOnScroll]);
 
         // Handle mouse down - start potential selection
         const handleMouseDown = useCallback((e: React.MouseEvent) => {

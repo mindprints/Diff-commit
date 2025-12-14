@@ -19,10 +19,6 @@ interface UseElectronMenuOptions {
     // Commit handlers
     onCommitsImported: (commits: any[]) => void;
 
-    // Edit handlers
-    onUndo: () => void;
-    onRedo: () => void;
-
     // Appearance handlers
     onToggleDark: () => void;
     onFontSize: (size: FontSize) => void;
@@ -44,8 +40,6 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         getSaveText,
         onClearAll,
         onCommitsImported,
-        onUndo,
-        onRedo,
         onToggleDark,
         onFontSize,
         onFontFamily,
@@ -82,8 +76,6 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         });
 
         // Edit menu handlers
-        window.electron.onMenuUndo(() => onUndo());
-        window.electron.onMenuRedo(() => onRedo());
         window.electron.onMenuClearAll(() => onClearAll());
 
         // View menu handlers
@@ -111,8 +103,6 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
                 window.electron.removeAllListeners('request-save');
                 window.electron.removeAllListeners('request-export-versions');
                 window.electron.removeAllListeners('versions-imported');
-                window.electron.removeAllListeners('menu-undo');
-                window.electron.removeAllListeners('menu-redo');
                 window.electron.removeAllListeners('menu-clear-all');
                 window.electron.removeAllListeners('menu-toggle-dark');
                 window.electron.removeAllListeners('menu-font-size');

@@ -83,24 +83,6 @@ async function callOpenRouter(
     }
 }
 
-export const generateDiffSummary = async (original: string, modified: string, model: Model, signal?: AbortSignal): Promise<AIResponse> => {
-    const prompt = `
-      Compare the following two texts and provide a concise summary of the key changes.
-      Focus on meaning, tone, and significant structural edits.
-      
-      Original Text:
-      "${original.substring(0, 5000)}"
-
-      Modified Text:
-      "${modified.substring(0, 5000)}"
-    `;
-
-    return callOpenRouter(model, [
-        { role: "system", content: "You are an expert editor. Provide a bulleted list of changes." },
-        { role: "user", content: prompt }
-    ], 0.3, undefined, signal);
-};
-
 /**
  * Polish text using a specific AIPrompt object.
  * This is the new preferred method for AI editing.

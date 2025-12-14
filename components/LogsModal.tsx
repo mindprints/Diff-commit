@@ -197,7 +197,7 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
                         <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400 dark:text-slate-500">
                             <div className="text-5xl mb-4">📊</div>
                             <p className="text-lg font-medium">No logs yet</p>
-                            <p className="text-sm">AI usage will appear here after you use AI Summary or AI Edit</p>
+                            <p className="text-sm">AI usage will appear here after you use AI Edit or Fact Check</p>
                         </div>
                     ) : (
                         sortedLogs.map((log) => (
@@ -221,15 +221,13 @@ export function LogsModal({ isOpen, onClose }: LogsModalProps) {
                                     <div className="col-span-1">
                                         <span className={clsx(
                                             "px-2 py-0.5 rounded text-xs font-medium truncate block",
-                                            log.taskType === 'summary'
-                                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                                : log.taskType.toLowerCase().includes('spelling')
-                                                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                                    : log.taskType.toLowerCase().includes('grammar')
-                                                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                                        : log.taskType.toLowerCase().includes('fact')
-                                                            ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400"
-                                                            : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                                            log.taskType.toLowerCase().includes('spelling')
+                                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                                : log.taskType.toLowerCase().includes('grammar')
+                                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                                    : log.taskType.toLowerCase().includes('fact')
+                                                        ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400"
+                                                        : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                                         )} title={log.taskType}>
                                             {log.taskType}
                                         </span>

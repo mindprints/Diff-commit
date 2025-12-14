@@ -5,7 +5,7 @@ import { DiffSegment, ViewMode, FontFamily, PolishMode, TextCommit, AIPrompt } f
 import { Button } from './components/Button';
 import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
-import { generateDiffSummary, polishMergedText, polishMultipleRanges, polishWithPrompt, polishMultipleRangesWithPrompt } from './services/ai';
+import { polishMergedText, polishMultipleRanges, polishWithPrompt, polishMultipleRangesWithPrompt } from './services/ai';
 import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
@@ -13,12 +13,14 @@ import { LogsModal } from './components/LogsModal';
 import { CommitHistoryModal } from './components/CommitHistoryModal';
 import { ContextMenu } from './components/ContextMenu';
 import { PromptsModal } from './components/PromptsModal';
+import { ProjectsPanel } from './components/ProjectsPanel';
 import { useCommitHistory } from './hooks/useCommitHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useElectronMenu } from './hooks/useElectronMenu';
 import { useMultiSelection } from './hooks/useMultiSelection';
 import { usePrompts } from './hooks/usePrompts';
+import { useProjects } from './hooks/useProjects';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
 import { AILogEntry } from './types';
 import {
@@ -29,8 +31,6 @@ import {
   Wand2,
   ChevronRight,
   HelpCircle,
-  Undo,
-  Redo,
   Edit3,
   Type as TypeIcon,
   GripVertical,
@@ -48,7 +48,8 @@ import {
   GitBranch,
   Link2,
   Settings,
-  ArrowLeft
+  ArrowLeft,
+  FolderOpen
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -63,20 +64,12 @@ function App() {
   const {
     segments,
     setSegments,
-    history,
-    historyIndex,
     addToHistory,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
     resetDiffState,
     initializeHistory,
   } = useDiffState();
 
   const [previewText, setPreviewText] = useState<string>('');
-  const [summary, setSummary] = useState<string>('');
-  const [isSummarizing, setIsSummarizing] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
   const [isFactChecking, setIsFactChecking] = useState(false);
   const [factCheckProgress, setFactCheckProgress] = useState<string>('');
@@ -125,6 +118,18 @@ function App() {
   } = usePrompts();
   const [showPromptsModal, setShowPromptsModal] = useState(false);
 
+  // Projects System
+  const {
+    projects,
+    currentProject,
+    loadProject,
+    saveCurrentProject,
+    createNewProject,
+    deleteProject: deleteProjectById,
+    renameProject: renameProjectById,
+  } = useProjects();
+  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
+
   // AI Request Cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -145,7 +150,6 @@ function App() {
     setPreviewText(committedText);
     setModifiedText('');
     resetDiffState();
-    setSummary('Saved! Both panes now contain your saved commit.');
     // Stay in DIFF mode - do NOT switch to INPUT mode
   }, [resetDiffState]);
 
@@ -214,7 +218,6 @@ function App() {
     setPreviewText(commit.content);
     setModifiedText('');
     resetDiffState();
-    setSummary(`Restored commit #${commit.commitNumber}. Both panes now contain the restored content.`);
     // Stay in DIFF mode - do NOT switch to INPUT mode
   };
 
@@ -303,7 +306,6 @@ function App() {
       setPreviewText(content);
       setModifiedText('');
       resetDiffState();
-      setSummary('File loaded. Content is now in both panels.');
       // Stay in DIFF mode - do NOT switch to INPUT mode
     },
     getSaveText: () => mode === ViewMode.DIFF ? previewText : originalText,
@@ -312,14 +314,11 @@ function App() {
       setModifiedText('');
       setPreviewText('');
       resetDiffState();
-      setSummary('');
       // Stay in DIFF mode - just clear the text
     },
     onCommitsImported: (importedCommits) => {
       setCommits(prev => [...prev, ...importedCommits]);
     },
-    onUndo: undo,
-    onRedo: redo,
     onToggleDark: () => setIsDarkMode(prev => !prev),
     onFontSize: (size) => setFontSize(size as FontSize),
     onFontFamily: (family) => setFontFamily(family as FontFamily),
@@ -409,7 +408,6 @@ function App() {
     if (!originalText || !modifiedText) return;
     performDiff(originalText, modifiedText);
     setMode(ViewMode.DIFF);
-    setSummary('');
   };
 
   const toggleSegment = (id: string) => {
@@ -461,43 +459,12 @@ function App() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    setIsSummarizing(false);
     setIsPolishing(false);
     setIsFactChecking(false);
     setFactCheckProgress('');
   };
 
-  const handleGenerateSummary = async () => {
-    // Cancel any existing request
-    cancelAIOperation();
 
-    // Create new AbortController
-    abortControllerRef.current = new AbortController();
-
-    setIsSummarizing(true);
-    setErrorMessage(null);
-    const startTime = Date.now();
-    const { text, usage, isError, isCancelled } = await generateDiffSummary(
-      originalText,
-      modifiedText,
-      selectedModel,
-      abortControllerRef.current.signal
-    );
-    const durationMs = Date.now() - startTime;
-
-    // Don't update state if cancelled
-    if (isCancelled) return;
-
-    if (isError) {
-      setErrorMessage(text);
-    } else {
-      setSummary(text);
-      updateCost(usage);
-      if (usage) logAIUsage('summary', usage, durationMs);
-    }
-    setIsSummarizing(false);
-    abortControllerRef.current = null;
-  };
 
   // Helper to get the source text for AI operations
   // Handles both diff mode (uses previewText) and input mode (uses available tab text)
@@ -583,13 +550,6 @@ function App() {
 
     setIsPolishing(false);
     abortControllerRef.current = null;
-
-    let summaryText = "Comparison updated: Showing changes between your previous draft and the AI polished version.";
-    if (polishMode === 'spelling') summaryText = "Comparison updated: Showing spelling corrections.";
-    if (polishMode === 'grammar') summaryText = "Comparison updated: Showing grammar and spelling corrections.";
-    if (polishMode === 'prompt') summaryText = "Comparison updated: Showing expanded detailed prompt instructions.";
-
-    setSummary(summaryText);
   };
 
   const handleFactCheck = async () => {
@@ -628,8 +588,8 @@ function App() {
       return;
     }
 
-    // Display the report in the summary field
-    setSummary(session.report);
+    // Display the report in the error message field for now (since summary was removed)
+    setErrorMessage(null); // Clear any previous errors
 
     // Calculate and update cost
     if (usage) {
@@ -759,9 +719,6 @@ function App() {
 
     setIsPolishing(false);
     abortControllerRef.current = null;
-
-    const rangeCount = selectionRanges.length;
-    setSummary(`${rangeCount} selection${rangeCount > 1 ? 's' : ''} updated with ${polishMode} polish.`);
   };
 
   // Smart AI Edit handler - routes to selection-based or full-text editing
@@ -827,8 +784,6 @@ function App() {
       setIsPolishing(false);
       abortControllerRef.current = null;
 
-      const rangeCount = selectionRanges.length;
-      setSummary(`${rangeCount} selection${rangeCount > 1 ? 's' : ''} updated with "${prompt.name}".`);
       return;
     }
 
@@ -879,9 +834,6 @@ function App() {
 
     setIsPolishing(false);
     abortControllerRef.current = null;
-
-    // Use the prompt name in the summary
-    setSummary(`Comparison updated: Applied "${prompt.name}" to your text.`);
   };
 
   // Open context menu on right-click
@@ -952,7 +904,6 @@ function App() {
       setOriginalText(previewText);
       setModifiedText('');
       resetDiffState();
-      setSummary('Copied right panel content to left panel.');
     }
   };
 
@@ -969,20 +920,7 @@ function App() {
     xl: 'text-xl leading-relaxed'
   };
 
-  // Keyboard shortcut for Undo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        if (e.shiftKey) {
-          redo();
-        } else {
-          undo();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyIndex, history]);
+
 
   // Track Shift key for Commit button behavior
   useEffect(() => {
@@ -1008,7 +946,6 @@ function App() {
     setOriginalText(previewText);
     setModifiedText('');
     resetDiffState();
-    setSummary('Accepted! Both panes now contain your current draft.');
     setHasUnsavedChanges(true); // Mark that there are unsaved changes
   }, [previewText, resetDiffState]);
 
@@ -1036,6 +973,14 @@ function App() {
             <ArrowRightLeft className="w-5 h-5 text-white" />
           </div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">Diff & Commit AI</h1>
+          {currentProject && (
+            <>
+              <span className="text-gray-300 dark:text-slate-600">/</span>
+              <span className="text-lg font-medium text-indigo-600 dark:text-indigo-400 truncate max-w-[200px]" title={currentProject.name}>
+                {currentProject.name}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -1159,6 +1104,22 @@ function App() {
           </div>
 
           <button
+            onClick={() => setShowProjectsPanel(true)}
+            className={clsx(
+              "text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 relative",
+              currentProject && "text-indigo-600 dark:text-indigo-400"
+            )}
+            title={currentProject ? `Project: ${currentProject.name}` : "Projects"}
+          >
+            <FolderOpen className="w-5 h-5" />
+            {projects.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {projects.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setShowLogs(true)}
             className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
             title="View AI Usage Logs"
@@ -1189,25 +1150,7 @@ function App() {
 
           {mode === ViewMode.DIFF && (
             <>
-              <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={undo}
-                  disabled={historyIndex <= 0}
-                  className="p-2 text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-600 dark:disabled:hover:text-slate-400 transition-colors"
-                  title="Undo (Ctrl+Z)"
-                >
-                  <Undo className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={redo}
-                  disabled={historyIndex >= history.length - 1}
-                  className="p-2 text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-600 dark:disabled:hover:text-slate-400 transition-colors"
-                  title="Redo (Ctrl+Shift+Z)"
-                >
-                  <Redo className="w-5 h-5" />
-                </button>
-              </div>
+
 
               <button
                 onClick={() => setIsScrollSyncEnabled(!isScrollSyncEnabled)}
@@ -1231,7 +1174,6 @@ function App() {
                   setModifiedText('');
                   setPreviewText('');
                   resetDiffState();
-                  setSummary('');
                   // Stay in DIFF mode, just clear the text
                 }}
                 size="sm"
@@ -1244,27 +1186,7 @@ function App() {
                 Copy
               </Button>
 
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleGenerateSummary}
-                  isLoading={isSummarizing}
-                  disabled={isSummarizing || isPolishing}
-                  icon={<Sparkles className="w-4 h-4 text-amber-500" />}
-                >
-                  AI Summary
-                </Button>
-                {isSummarizing && (
-                  <button
-                    onClick={cancelAIOperation}
-                    className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                    title="Cancel AI Operation"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+
             </>
           )}
         </div>
@@ -1372,7 +1294,7 @@ function App() {
                     size="sm"
                     onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
                     isLoading={isPolishing || isFactChecking}
-                    disabled={isPolishing || isSummarizing || isFactChecking}
+                    disabled={isPolishing || isFactChecking}
                     icon={<Wand2 className="w-3 h-3" />}
                     className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
                   >
@@ -1460,7 +1382,6 @@ function App() {
                     // Re-compare: use current previewText as the new modified text
                     setModifiedText(previewText);
                     performDiff(originalText, previewText);
-                    setSummary('');
                   }}
                   size="sm"
                   icon={<RefreshCw className="w-3 h-3" />}
@@ -1522,23 +1443,11 @@ function App() {
                 spellCheck={false}
                 placeholder="Result will appear here. You can also edit this text directly."
                 onContextMenu={handleOpenContextMenu}
+                onScroll={() => handleScrollSync('right')}
               />
             </div>
 
-            {/* Summary Drawer / Overlay */}
-            {summary && (
-              <div className="absolute bottom-0 left-0 right-0 bg-indigo-50 dark:bg-indigo-950 border-t border-indigo-100 dark:border-indigo-900 p-6 shadow-lg transform transition-transform duration-300 max-h-[50%] overflow-y-auto z-10">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-indigo-900 dark:text-indigo-100 font-semibold flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" /> AI Summary
-                  </h3>
-                  <button onClick={() => setSummary('')} className="text-indigo-400 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-100">&times;</button>
-                </div>
-                <div className="prose prose-sm prose-indigo dark:prose-invert text-indigo-800 dark:text-indigo-200">
-                  <p className="whitespace-pre-wrap">{summary}</p>
-                </div>
-              </div>
-            )}
+
           </div>
         </div>
       )}
@@ -1654,6 +1563,31 @@ function App() {
         onUpdatePrompt={async (id, updates) => { await updatePrompt(id, updates); }}
         onDeletePrompt={async (id) => { await deletePrompt(id); }}
         onResetBuiltIn={async (id) => { await resetBuiltIn(id); }}
+      />
+
+      {/* Projects Panel */}
+      <ProjectsPanel
+        isOpen={showProjectsPanel}
+        onClose={() => setShowProjectsPanel(false)}
+        projects={projects}
+        currentProject={currentProject}
+        onLoadProject={async (id) => {
+          const project = await loadProject(id);
+          if (project) {
+            // Load project content into the editor
+            setOriginalText(project.content);
+            setPreviewText(project.content);
+            setModifiedText('');
+            resetDiffState();
+          }
+          return project;
+        }}
+        onCreateProject={async (name, content) => {
+          return createNewProject(name, content || previewText || originalText);
+        }}
+        onDeleteProject={deleteProjectById}
+        onRenameProject={renameProjectById}
+        currentContent={previewText || originalText}
       />
     </div>
   );

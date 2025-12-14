@@ -12,11 +12,6 @@ export enum ViewMode {
   DIFF = 'DIFF',
 }
 
-export interface SummaryResponse {
-  summary: string;
-  toneShift?: string;
-}
-
 export type FontFamily = 'sans' | 'serif' | 'mono';
 
 export type PolishMode = 'spelling' | 'grammar' | 'polish' | 'prompt' | 'execute' | 'fact-check';
@@ -26,7 +21,7 @@ export interface AILogEntry {
   timestamp: number;
   modelId: string;
   modelName: string;
-  taskType: string; // e.g., 'summary', 'Spelling', 'Grammar', 'Full Polish', custom prompt names, etc.
+  taskType: string; // e.g., 'Spelling', 'Grammar', 'Full Polish', 'fact-check', custom prompt names, etc.
   inputTokens: number;
   outputTokens: number;
   cost: number;
@@ -81,4 +76,14 @@ export interface AIPrompt {
   isBuiltIn: boolean;       // true = default preset (cannot delete)
   order: number;            // Display order in dropdown (lower = higher)
   color?: string;           // Tailwind color class for dot indicator
+}
+
+// Project system for organizing text documents
+export interface Project {
+  id: string;               // UUID
+  name: string;             // User-visible name (e.g., "My Essay")
+  content: string;          // Current text content
+  createdAt: number;        // Timestamp
+  updatedAt: number;        // Timestamp
+  filePath?: string;        // Electron: real file path, Browser: undefined
 }
