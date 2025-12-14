@@ -6,13 +6,23 @@ import { AIPrompt } from '../types';
  */
 export const DEFAULT_PROMPTS: AIPrompt[] = [
     {
-        id: 'spelling',
-        name: 'Spelling Only',
+        id: 'spelling_local',
+        name: 'Spelling (Local)',
         systemInstruction: 'You are a precise proofreader. Correct ONLY spelling errors. Do not change grammar, punctuation, sentence structure, or vocabulary choice.',
         promptTask: 'Identify and correct only spelling errors in the following text. Return the text exactly as is, but with corrected spelling.',
         isBuiltIn: true,
         order: 1,
         color: 'bg-green-400',
+        isLocal: true,
+    },
+    {
+        id: 'spelling_ai',
+        name: 'Spelling (AI)',
+        systemInstruction: 'You are a precise proofreader. Correct ONLY spelling errors. Do not change grammar, punctuation, sentence structure, or vocabulary choice.',
+        promptTask: 'Identify and correct only spelling errors in the following text. Return the text exactly as is, but with corrected spelling.',
+        isBuiltIn: true,
+        order: 2,
+        color: 'bg-green-500',
     },
     {
         id: 'grammar',

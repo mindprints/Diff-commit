@@ -1,121 +1,64 @@
 # Project Syntax Reference
 
-## Files (Short → Full)
-| Short | Full Path |
-|-------|-----------|
-| `App` | App.tsx |
-| `Rating` | components/RatingPrompt.tsx |
-| `VerModal` | components/VersionHistoryModal.tsx |
-| `Logs` | components/LogsModal.tsx |
-| `Help` | components/HelpModal.tsx |
-| `Btn` | components/Button.tsx |
-| `DiffSeg` | components/DiffSegment.tsx |
-| `Select` | components/SelectableTextArea.tsx |
-| `ai` | services/ai.ts |
-| `fact` | services/factChecker.ts |
-| `gemini` | services/gemini.ts |
-| `types` | types.ts |
-| `elec.d` | electron.d.ts |
-| `main.js` | electron/main.js |
-| `preload` | electron/preload.js |
-| `models` | constants/models.ts |
+## Core Files & Modules
+| Short Name | Full Path | Description |
+|------------|-----------|-------------|
+| `App` | `App.tsx` | Main application component and state orchestrator |
+| `types` | `types.ts` | Shared TypeScript interfaces and types |
+| `main` | `electron/main.js` | Electron main process (IPC handling) |
+| `preload` | `electron/preload.js` | Electron preload script (Context Bridge) |
+| `styles` | `index.css` | Global styles and Tailwind directives |
 
-## Modes
-| Short | Meaning |
-|-------|---------|
-| `INPUT` | ViewMode.INPUT (two textareas side by side) |
-| `DIFF` | ViewMode.DIFF (diff view + preview pane) |
+## Components (`components/`)
+| Component | File | Purpose |
+|-----------|------|---------|
+| `MultiTextArea` | `MultiSelectTextArea.tsx` | Enhanced textarea with multi-selection & highlight overlays |
+| `DiffSeg` | `DiffSegment.tsx` | Individual diff block (added/removed/unchanged) |
+| `Projects` | `ProjectsPanel.tsx` | Side panel for managing text projects |
+| `Prompts` | `PromptsModal.tsx` | CRUD modal for AI prompts |
+| `History` | `CommitHistoryModal.tsx` | Git-style commit history viewer |
+| `Logs` | `LogsModal.tsx` | AI usage logging and cost tracking |
+| `Rating` | `RatingPrompt.tsx` | User feedback toast for AI tasks |
+| `Context` | `ContextMenu.tsx` | Custom right-click menu for editor |
 
-## UI Panels & Sections
-| Short | Description |
-|-------|-------------|
-| `leftPane` | Original Version textarea (INPUT) / Interactive Diff (DIFF) |
-| `rightPane` | Revised Version textarea (INPUT) / Committed Preview (DIFF) |
-| `header` | Top bar with model selector, font controls, icons |
-| `summary` | AI Summary drawer/overlay (bottom of preview) |
-| `arrowBtn` | Copy left→right button (chevron) |
-| `clearAll` | Clear Both Panels button |
+## Services (`services/`)
+| Service | File | Functionality |
+|---------|------|---------------|
+| `Spell` | `spellChecker.ts` | **Local** spell checker (Typo.js/Hunspell) |
+| `AI` | `ai.ts` | OpenRouter API wrapper & prompt handling |
+| `Fact` | `factChecker.ts` | Perplexity API for claim verification |
+| `PromptStore` | `promptStorage.ts` | Persistence (Electron Store / LocalStorage) for prompts |
+| `ProjStore` | `projectStorage.ts` | Persistence for projects |
 
-## Buttons & Controls
-| Short | Description |
-|-------|-------------|
-| `aiEdit` | "AI Edit..." dropdown button |
-| `commit` | Green Commit button (DIFF mode) |
-| `copy` | Copy button (DIFF mode) |
-| `read` | Read Aloud button |
-| `histBtn` | History icon button (header) |
-| `logsBtn` | Logs icon button (header) |
-| `darkBtn` | Dark/Light mode toggle |
-| `undo/redo` | Undo/Redo buttons (DIFF mode header) |
-| `accept` | Accept All button |
-| `reject` | Reject All button |
-| `refresh` | Refresh Diff button |
-| `scrollSync` | Scroll sync toggle (Link2 icon) |
-| `contextMenu` | Right-click context menu on preview |
+## Custom Hooks (`hooks/`)
+| Hook | File | Responsibility |
+|------|------|----------------|
+| `useDiff` | `useDiffState.ts` | Manages diff segments, history, and merging logic |
+| `useScroll` | `useScrollSync.ts` | Synchronizes scrolling between left/right panels |
+| `useMenu` | `useElectronMenu.ts` | Handles native Electron menu IPC events |
+| `useCommits`| `useCommitHistory.ts` | Manages commit stack and versioning |
+| `usePrompts`| `usePrompts.ts` | Manages prompt CRUD and loading |
+| `useSelect` | `useMultiSelection.ts` | Handles discontinuous text selection logic |
 
-## AI Operations
-| Short | PolishMode Value |
-|-------|------------------|
-| `spell` | 'spelling' |
-| `gram` | 'grammar' |
-| `polish` | 'polish' (full) |
-| `prompt` | 'prompt' (expansion) |
-| `exec` | 'execute' |
-| `factck` | 'fact-check' |
+## State Terminology
+| Term | Variable | Definition |
+|------|----------|------------|
+| `Source` | `sourceText` | Text being acted upon (usually from Left or Right panel) |
+| `Preview` | `previewText` | The editable text in the Right (Diff) panel |
+| `Original` | `originalText` | The baseline text in the Left panel |
+| `Selection`| `selectionRanges` | Array of discontinuous selected text ranges |
+| `Segments` | `segments` | Array of `DiffSegment` objects (the diff model) |
 
-## State Variables
-| Short | Full Name |
-|-------|-----------|
-| `orig` | originalText |
-| `mod` | modifiedText |
-| `prev` | previewText |
-| `segs` | segments |
-| `vers` | versions |
-| `mode` | mode (INPUT/DIFF) |
-| `model` | selectedModel |
-| `cost` | sessionCost |
+## Prompt IDs (`constants/prompts.ts`)
+| ID | Display Name | Type |
+|----|--------------|------|
+| `spelling_local` | Spelling (Local) | Offline, Typo.js |
+| `spelling_ai` | Spelling (AI) | LLM-based |
+| `grammar` | Grammar Fix | LLM-based |
+| `polish` | Full Polish | LLM-based |
+| `fact-check` | Fact Check | Perplexity API |
 
-## Modals
-| Short | State Variable |
-|-------|----------------|
-| `helpOpen` | showHelp |
-| `logsOpen` | showLogs |
-| `verOpen` | showVersionHistory |
-| `polishMenu` | isPolishMenuOpen |
-
-## Handlers
-| Short | Function |
-|-------|----------|
-| `doCompare` | handleCompare |
-| `doPolish` | handlePolish |
-| `doFact` | handleFactCheck |
-| `doCommit` | handleCommit |
-| `doRate` | handleRate |
-| `doRestore` | handleRestoreVersion |
-| `doClear` | handleClearAll |
-
-## CSS/Spacing
-| Short | Tailwind |
-|-------|----------|
-| `gap-3` | 12px gap |
-| `gap-6` | 24px gap |
-| `p-4` | 16px padding |
-| `p-8` | 32px padding |
-
-## Electron Menu
-| Menu | Key Items |
-|------|-----------|
-| **File** | Open, Save As, Export/Import Versions, Quit |
-| **Edit** | Undo, Redo, Clear All |
-| **View** | Toggle Dark, Font Size/Family, Zoom |
-| **Help** | Instructions, Logs, Versions, About |
-
-## IPC Channels (main↔renderer)
-| Channel | Direction | Description |
-|---------|-----------|-------------|
-| `file-opened` | main→render | File content from Open dialog |
-| `request-save` | main→render | Trigger save from menu |
-| `menu-undo/redo` | main→render | Edit commands |
-| `menu-toggle-dark` | main→render | View toggle |
-| `menu-show-help` | main→render | Open help modal |
-
+## Key Functionality Terms
+- **"Commit"**: Saving the current state of the Right panel as a new version node.
+- **"Refresh Diff"**: Re-calculating the diff between the Left (Original) and Right (Preview) panels.
+- **"Local Spelling"**: In-browser spell check using `.dic` files, 0 cost, instant.

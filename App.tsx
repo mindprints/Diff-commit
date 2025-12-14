@@ -7,6 +7,7 @@ import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
 import { HelpModal } from './components/HelpModal';
 import { polishMergedText, polishMultipleRanges, polishWithPrompt, polishMultipleRangesWithPrompt } from './services/ai';
 import { runFactCheck, getFactCheckModels } from './services/factChecker';
+import { initSpellChecker, checkSpelling } from './services/spellChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
 import { RatingPrompt } from './components/RatingPrompt';
 import { LogsModal } from './components/LogsModal';
@@ -59,6 +60,11 @@ function App() {
   const [mode, setMode] = useState<ViewMode>(ViewMode.DIFF);
   const [originalText, setOriginalText] = useState<string>('');
   const [modifiedText, setModifiedText] = useState<string>('');
+
+  // Initialize spell checker
+  useEffect(() => {
+    initSpellChecker().catch(console.error);
+  }, []);
 
   // Diff State Management (extracted to custom hook)
   const {
@@ -721,9 +727,50 @@ function App() {
     abortControllerRef.current = null;
   };
 
+  const handleLocalSpellCheck = async () => {
+    setIsPolishMenuOpen(false);
+
+    // Get source text
+    const { sourceText, fromRightTab } = getSourceTextForAI();
+
+    if (!sourceText.trim()) {
+      setErrorMessage('Please enter some text first.');
+      return;
+    }
+
+    try {
+      await initSpellChecker();
+      const result = checkSpelling(sourceText);
+
+      if (result.isError) {
+        setErrorMessage(result.errorMessage || 'Spell check failed');
+        return;
+      }
+
+      if (fromRightTab) {
+        setOriginalText(sourceText);
+      } else {
+        setOriginalText(sourceText);
+      }
+      setModifiedText(result.text);
+
+      performDiff(sourceText, result.text);
+      setMode(ViewMode.DIFF);
+
+    } catch (e) {
+      console.error(e);
+      setErrorMessage('Failed to run spell check');
+    }
+  };
+
   // Smart AI Edit handler - routes to selection-based or full-text editing
   // Now accepts prompt ID (string) and looks up full prompt object
   const handleAIEdit = async (promptId: string) => {
+    // Special case: use local spell checker for spelling
+    if (promptId === 'spelling_local') {
+      return handleLocalSpellCheck();
+    }
+
     // Look up the full prompt object
     const prompt = getPrompt(promptId);
 
@@ -1419,32 +1466,41 @@ function App() {
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col bg-gray-50/30 dark:bg-slate-950/30 min-h-0 overflow-hidden">
-              <MultiSelectTextArea
-                ref={previewTextareaRef}
-                value={previewText}
-                onChange={(newValue) => {
-                  if (isSpeaking) {
-                    window.speechSynthesis.cancel();
-                    setIsSpeaking(false);
-                  }
-                  setPreviewText(newValue);
-                }}
-                ranges={selectionRanges}
-                onAddRange={(start, end, isAdditive) => addSelectionRange(start, end, isAdditive, previewText)}
-                onClearRanges={clearSelectionRanges}
-                className={clsx(
-                  "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-900 transition-colors outline-none overflow-y-auto",
-                  fontClasses[fontFamily],
-                  sizeClasses[fontSize]
-                )}
-                fontClassName={fontClasses[fontFamily]}
-                sizeClassName={sizeClasses[fontSize]}
-                spellCheck={false}
-                placeholder="Result will appear here. You can also edit this text directly."
-                onContextMenu={handleOpenContextMenu}
-                onScroll={() => handleScrollSync('right')}
-              />
+            <div className="flex-1 flex flex-col bg-gray-50/50 dark:bg-slate-900/50 min-h-0 overflow-hidden">
+              <div className="flex-1 m-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden relative transition-colors duration-200">
+                <MultiSelectTextArea
+                  ref={previewTextareaRef}
+                  value={previewText}
+                  onChange={(newValue) => {
+                    if (isSpeaking) {
+                      window.speechSynthesis.cancel();
+                      setIsSpeaking(false);
+                    }
+                    setPreviewText(newValue);
+                  }}
+                  ranges={selectionRanges}
+                  onAddRange={(start, end, isAdditive) => addSelectionRange(start, end, isAdditive, previewText)}
+                  onClearRanges={clearSelectionRanges}
+                  className={clsx(
+                    "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 transition-colors outline-none overflow-y-auto",
+                    fontClasses[fontFamily],
+                    sizeClasses[fontSize]
+                  )}
+                  fontClassName={fontClasses[fontFamily]}
+                  sizeClassName={sizeClasses[fontSize]}
+                  spellCheck={false}
+                  placeholder="Result will appear here. You can also edit this text directly."
+                  onContextMenu={handleOpenContextMenu}
+                  onScroll={() => handleScrollSync('right')}
+                />
+              </div>
+            </div>
+
+            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
+              <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count (Dummy)">
+                <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
+                <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
+              </button>
             </div>
 
 

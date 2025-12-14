@@ -1,211 +1,124 @@
 # Diff & Commit AI
 
-Diff & Commit AI is a modern, interactive desktop application designed to streamline the process of comparing, reviewing, and refining text versions. Unlike traditional diff tools which are often static or developer-focused, this tool provides a rich, user-friendly interface for content creators, editors, and prompt engineers to intelligently merge text.
+**Diff & Commit AI** is a specialized, local-first desktop editor for refining text. It combines a professional **git-style diff engine** with multi-model **AI polishing tools** to help you iteratively improve content.
 
-## Key Features
+Unlike generic chat interfaces, this tool is built for *merging*: it visualizes exactly what changed, lets you accept/reject specific edits, and maintains a commit history of your revisions.
 
-### 🔍 Interactive Difference Engine
--   **Smart Diffing**: Highlights additions (Green), removals (Red), and modifications with proper line break preservation.
--   **Interactive Merging**: Click any highlighted segment to toggle its state.
-    -   *Reject* an addition to remove it.
-    -   *Restore* a deletion to keep the original text.
--   **Smart Swapping**: Automatically links replaced text (e.g., changing "cat" to "dog") so clicking one instantly toggles the other, preventing logical errors.
--   **Refresh Diff**: After editing the preview, click "Refresh Diff" to re-compare against the original.
+## 🌟 Key Features
 
-### 🤖 AI-Powered Enhancements
--   **AI Available Immediately**: AI editing functions are available as soon as you enter text—no need to compare first.
--   **Multi-Model Support**: Switch instantly between top-tier models like **DeepSeek v3.2**, **Claude Haiku 4.5**, **GPT-OSS 120B**, **Google Gemini 3 Pro**, and more via OpenRouter.
--   **Cost Tier Indicators**: Models display dollar sign indicators ($-$$$$) in the dropdown to help anticipate costs before selection.
--   **AI Polish**: Smooths out your final text with distinct modes:
-    -   **Spelling Only**: Fixes typos without altering style.
-    -   **Grammar Fix**: Corrects syntax and punctuation while preserving tone.
-    -   **Full Polish**: Improves flow, clarity, and vocabulary (never alters opinions or factual claims).
-    -   **Prompt Expansion**: Expands brief ideas into detailed AI instructions.
-    -   **Execute Prompt**: Runs the current text as a prompt—the AI carries out the instructions and returns the result.
--   **Custom Prompts**: Create, edit, and delete your own AI prompts via the Prompts Manager (⚙️ icon). Built-in prompts can be customized and reset to defaults.
--   **Cancellable Operations**: Cancel any in-progress AI operation with a single click to avoid getting stuck.
+### ⚡ Local & AI Hybrid Editing
+*   **Local Spell Checker**: Instant, offline spell checking using Hunspell dictionaries (`en_US`). Zero latency, zero cost.
+*   **AI Polish**: Access top-tier models (DeepSeek, Claude, GPT-4, Gemini) via OpenRouter for complex tasks:
+    *   **Grammar Fix**: Strict syntax correction.
+    *   **Full Polish**: Flow, tone, and clarity improvements.
+    *   **Spelling (AI)**: Context-aware spelling for technical terms.
+    *   **Prompt Expansion**: Turn rough notes into detailed LLM prompts.
 
-### 🛡️ AI Fact Checker
-Verify factual claims in your text using **Perplexity Sonar Pro** with real-time web search capabilities.
+### 🛡️ Fact Checker (Perplexity)
+Verify claims with real-time web search.
+*   **Deep Extraction**: Identifies causal, statistical, and historical claims.
+*   **Verification**: Checks each claim against live web sources using Perplexity Sonar Pro.
+*   **Categorization**: Tags claims (e.g., 'Medical', 'Political', 'Statistical').
 
--   **Two-Stage Verification**:
-    1.  **Claim Extraction**: Uses a fast, cost-effective model (DeepSeek v3.2) to identify all factual claims in your text.
-    2.  **Web Verification**: Each claim is verified using Perplexity's search-enabled AI, which cites real sources.
+### 🔍 Interactive Diff & Merge
+*   **Visual Diff**: Green (Added) / Red (Removed) highlighting.
+*   **Smart Toggles**: Click any change to Accept or Reject it instantly.
+*   **Linked Segments**: Intelligent handling of replacements (swapping words toggles both the removal and addition).
+*   **Committed Preview**: The right-hand panel is always editable. Make manual tweaks, then hit **"Compare"** to see how they differ from the original.
 
--   **Claim Categories Detected**:
-    -   📊 **Statistical** - Numbers, percentages, data points
-    -   📅 **Historical** - Dates, events, historical facts
-    -   🔬 **Scientific** - Research findings, scientific consensus
-    -   🔗 **Causal** - "X causes Y" claims
-    -   📈 **Frequency** - "always", "never", "most" claims
-    -   💊 **Medical** - Health and treatment claims
-    -   🕵️ **Conspiracy** - Claims about hidden agendas/coverups
-    -   📝 **General** - Other factual assertions
+### 💾 Git-Style Commit System
+*   **Commit History**: Save "snapshots" of your text as you work.
+*   **Restore**: Instantly revert to any previous committed version.
+*   **Diff Against History**: Compare your current draft against any past version.
+*   **Offline Storage**: All history and settings are saved locally on your machine.
 
--   **Verification Statuses**:
-    -   ✅ **Verified** - Claim is accurate and well-sourced
-    -   ❌ **False** - Claim is demonstrably incorrect
-    -   ⚠️ **Misleading** - Technically true but lacks important context
-    -   ❓ **Unverifiable** - Cannot be confirmed or denied
+### 🖱️ Advanced Selection (Ctrl+Drag)
+*   **Multi-Selection**: Hold `Ctrl` to select multiple, non-contiguous pieces of text.
+*   **Batch Processing**: Run AI operations (like "Fix Grammar") on *only* the selected headers or paragraphs at once.
 
--   **Access**: Available in the "AI Edit..." dropdown menu.
+---
 
-### 📊 Cost Tracking & Quality Control
--   **Real-time Cost Estimation**: Tracks token usage per session and calculates exact costs based on the selected model's pricing.
--   **Performance Logging**: Automatically logs every AI request (Task, Model, Tokens, Cost) to local storage.
--   **User Rating System**: Built-in 5-star rating prompt appears after each AI operation, allowing you to score model performance and save feedback.
--   **Logs Viewer**: Access your complete AI usage history through the logs modal (📊 icon in header):
-    -   View all requests with date, model, task type, tokens, cost, and rating.
-    -   See aggregate statistics: total cost, token counts, and average rating.
-    -   Export logs to CSV for analysis.
-    -   Clear all logs to start fresh.
+## 📂 Project Structure
 
-### 📝 Committed Preview & Editing
--   **Real-time Preview**: See exactly what the final text looks like as you toggle differences.
--   **Manual Editing**: The preview pane is fully editable, allowing for final manual tweaks before copying.
--   **Refresh Diff**: After editing the preview, click "Refresh Diff" to see changes compared to the original.
--   **Text-to-Speech**: Built-in "Read Aloud" functionality to audit the rhythm and flow of your text. Select a section to hear just that part.
+```text
+Diff-commit/
+├── .agent/                 # Agent workflows & syntax reference
+├── components/             # React UI Components
+│   ├── CommitHistoryModal  # Version control UI
+│   ├── DiffSegment         # The visual diff blocks
+│   ├── LogsModal           # AI usage & cost tracking
+│   ├── MultiSelectTextArea # Core editor with selection overlay
+│   ├── ProjectsPanel       # File/Project management
+│   ├── PromptsModal        # Prompt CRUD manager
+│   └── ...
+├── constants/
+│   ├── models.ts           # AI Model definitions & pricing
+│   └── prompts.ts          # Built-in prompt definitions
+├── electron/               # Electron Main Process
+│   ├── main.js             # Window management & IPC
+│   └── preload.js          # Secure bridge
+├── hooks/                  # Custom React Hooks
+│   ├── useDiffState.ts     # Core diffing logic
+│   ├── useElectronMenu.ts  # Native menu integration
+│   ├── useMultiSelection.ts# Discontinuous selection logic
+│   ├── usePrompts.ts       # Prompt management logic
+│   └── ...
+├── public/
+│   └── dictionaries/       # Hunspell (.aff/.dic) files for local checking
+├── services/               # Logic & External APIs
+│   ├── ai.ts               # OpenRouter API Service
+│   ├── factChecker.ts      # Perplexity Fact-Check Service
+│   ├── spellChecker.ts     # Local Typo.js Service
+│   └── promptStorage.ts    # JSON-based persistence
+├── App.tsx                 # Main Application Layout
+├── types.ts                # TypeScript Interfaces
+└── README.md               # This file
+```
 
-### ✨ Multi-Selection (Ctrl+Drag)
--   **Discontinuous Selection**: Hold **Ctrl** while dragging to add multiple, non-contiguous text selections.
--   **Auto Word Expansion**: Selections automatically snap to word boundaries—no need to precisely highlight every character.
--   **Automatic Merge**: Overlapping or adjacent selections are intelligently merged.
--   **AI on Selection**: All AI operations (Polish, Grammar, Spell Check, etc.) work on multi-selections, processing each range individually with indexed results.
--   **Visual Feedback**: Selected ranges are highlighted with overlays for clear visibility.
+---
 
-### 🔄 Git-Style Version Control
--   **Commit Changes**: When satisfied with your edits, click the green "Commit" button to save the current version.
--   **Version History**: Each commit saves the previous text with a version number and timestamp.
--   **Version Badge**: The Commit button displays a badge showing how many versions have been saved.
--   **Workflow**:
-    1.  Edit or apply AI polish to your text
-    2.  Click "Commit" to save and promote the current text
-    3.  Previous version is archived, current becomes the new baseline
-    4.  Continue editing from the new baseline
-
-### 🎨 Customization & Accessibility
--   **Dark Mode**: Fully supported high-contrast dark theme (default).
--   **Typography Controls**: Switch between Sans, Serif, and Monospace fonts, and adjust font sizes (S, M, L, XL).
--   **Resizable Split Pane**: Drag the divider to adjust the ratio between the Diff View and the Preview.
--   **Non-Intrusive Alerts**: Error messages and notifications appear as sleek, dismissible toasts.
--   **Clean Slate**: "Clear All" button resets everything for a fresh session.
-
-### 🖱️ Context Menu (Right-Click)
--   **Selection-Aware**: Right-click on selected text in the preview pane to access AI actions.
--   **Multi-Selection Support**: Works with single or multi-selected text ranges.
--   **Available Actions**:
-    -   🔊 **Read Selected** - Text-to-speech for selected portion
-    -   ✏️ **Spelling / Grammar / Polish** - AI editing on selection only
-    -   📝 **Prompt Expansion / Execute** - Prompt operations on selection
-    -   🛡️ **Fact Check** - Verify claims in selection
-    -   📋 **Custom Prompts** - Any user-created prompts appear in the menu
--   **Smart Disable**: Actions are grayed out when no text is selected.
-
-## Streamlined Workflow
-
-### Quick Start
-1.  **Paste or type** text in either the left (Original) or right (Revised) panel
-2.  **AI Edit** button appears immediately—apply spelling, grammar, or full polish
-3.  **Compare Now** (when both panels have text) to see differences
-4.  **Toggle segments** to accept/reject individual changes
-5.  **Commit** when satisfied to save and start fresh
-
-### Comparison Flow
-| Action | Result |
-|--------|--------|
-| Text in one panel → AI Edit | AI processes text, shows diff |
-| Text in both panels → Compare Now | Shows side-by-side differences |
-| Edit preview → Refresh Diff | Updates comparison with edits |
-| Commit | Archives current, starts new cycle |
-| Clear All | Complete reset for new session |
-
-## Architecture & Implementation
-
-### 🚀 Desktop Application (Electron)
-Built as a robust desktop application using **Electron** to ensure better system integration, offline capability, and secure local storage.
-
-#### **Build Pipeline**
--   **Bundler**: Vite (configured with `base: './'` for relative path resolution).
--   **Electron Builder**: Packages the application as a standalone `.exe` for Windows.
--   **Scripts**:
-    -   `npm run dev`: Runs the Vite development server (browser mode).
-    -   `npm run electron:dev`: Runs React (Vite) and Electron concurrently for desktop development.
-    -   `npm run electron:build:win`: Builds the production executable for Windows.
-
-### 🔑 API Key Management & Security
-To ensure security and user privacy, we implement a dual-storage strategy for API keys:
-
-1.  **Development (.env)**:
-    -   Use `OPENROUTER_API_KEY` in your `.env` file for development.
-2.  **Production (Local Storage)**:
-    -   We use `electron-store` to save user API keys and usage logs locally on their machine.
-    -   **IPC Bridge**: Keys and logs are securely handled via `window.electron` methods, isolating the renderer from the file system.
-
-### 🧠 Model Selection & Configuration
-We support a curated list of high-performance models to give users flexibility between cost, speed, and intelligence.
-
--   **Model Registry**: Managed in `constants/models.ts`.
--   **Cost Tiers**: Each model displays a cost indicator:
-    -   **$** = Budget (< $0.50/M tokens avg)
-    -   **$$** = Standard ($0.50 - $2.00/M tokens avg)
-    -   **$$$** = Premium ($2.00 - $5.00/M tokens avg)
-    -   **$$$$** = Expensive (> $5.00/M tokens avg)
--   **Supported Providers** (via OpenRouter):
-    -   **DeepSeek**: `deepseek-v3.2` - Excellent price/performance ratio.
-    -   **Google**: `gemini-3-pro-preview` - Large context window (1M tokens).
-    -   **Anthropic**: `claude-haiku-4.5` - Fast and accurate.
-    -   **OpenAI**: `gpt-oss-120b` - Budget-friendly option.
-    -   **Perplexity**: `sonar-pro` - Search-enabled AI for fact-checking with web citations.
-    -   **Others**: Moonshot AI (Kimi K2), xAI (Grok 4.1), MiniMax M2, Z-AI (GLM 4.6), Amazon Nova 2.
-
-## Tech Stack
-
--   **Frontend**: React 19, TypeScript
--   **Styling**: Tailwind CSS (with `clsx` for dynamic classes)
--   **Icons**: Lucide React
--   **Desktop Framework**: Electron, Electron Builder, Electron Store
--   **Diff Engine**: `diff` library (Words mode)
--   **AI Integration**: OpenRouter API (Centralized hub for all models)
--   **Build Tool**: Vite
--   **Architecture**: Custom React hooks (`useDiffState`, `useScrollSync`, `useElectronMenu`, `useCommitHistory`, `usePrompts`, `useMultiSelection`) for clean separation of concerns
-
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
--   Node.js installed.
--   An **OpenRouter API Key** (get one at [openrouter.ai](https://openrouter.ai)).
+*   Node.js (v18+)
+*   OpenRouter API Key (for AI features)
+*   (Optional) Perplexity API Key (for Fact Checking)
 
 ### Installation
-
-1.  Clone the repository.
+1.  Clone the repo.
 2.  Install dependencies:
     ```bash
     npm install
     ```
-3.  Set up your environment variables. Copy the example file:
+3.  Set up environment:
     ```bash
     cp .env.example .env
+    # Add your OPENROUTER_API_KEY to .env
     ```
-    Add your `OPENROUTER_API_KEY`.
 
-4.  **Run Development Mode (Browser)**:
+### Running Locally
+*   **Web Mode** (Fastest for UI dev):
     ```bash
     npm run dev
     ```
-    Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-5.  **Run Development Mode (Electron)**:
+*   **Desktop Mode** (Full feature set):
     ```bash
     npm run electron:dev
     ```
-    This launches the standalone Electron window with hot reload.
 
-6.  **Build for Windows**:
-    ```bash
-    npm run electron:build:win
-    ```
-    Output will be in the `release/` directory.
+### Building for Production
+Create a Windows installer (`.exe`):
+```bash
+npm run electron:build:win
+```
+*Builds are output to the `release/` directory.*
 
-## License
+---
 
-MIT
+## 🛠️ Terminology
+To avoid confusion during development:
+*   **Original (Left)**: The immutable baseline text you are comparing against.
+*   **Preview (Right)**: The live, editable "Working Copy".
+*   **Commit**: Moving the state of "Preview" into history and making it the new "Original".
+*   **Diff Mode**: The primary view showing the comparison between Original and Preview.
+*   **Prompt**: A saved instruction set for the AI (e.g., "Grammar Fix"). can be **Local** (Typescript logic) or **AI** (LLM prompt).

@@ -23,7 +23,23 @@ export function usePrompts() {
         setError(null);
         try {
             const loaded = await storage.getPrompts();
-            setPrompts(loaded);
+
+            // SYNC LOGIC: 
+            // 1. Keep all custom prompts
+            const customPrompts = loaded.filter(p => !p.isBuiltIn);
+
+            // 2. Use fresh DEFAULT_PROMPTS for built-ins (ensures new IDs like spelling_local existence)
+            // This replaces old built-ins (like 'spelling') with new definitions
+            const merged = [...DEFAULT_PROMPTS, ...customPrompts];
+
+            // 3. Sort by order
+            merged.sort((a, b) => a.order - b.order);
+
+            // 4. Save merged state if it differs from loaded (e.g. first migration)
+            // We just save always to be safe and ensure consistency
+            await storage.savePrompts(merged);
+
+            setPrompts(merged);
         } catch (err) {
             console.error('Failed to load prompts:', err);
             setError('Failed to load prompts');
