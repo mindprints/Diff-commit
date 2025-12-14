@@ -1717,9 +1717,24 @@ function App() {
         onLoadProject={async (id) => {
           const project = await loadProject(id);
           if (project) {
+            let contentToLoad = project.content;
+
+            // If draft content is empty, try to load the latest commit
+            if ((!contentToLoad || !contentToLoad.trim()) && window.electron?.loadProjectCommits) {
+              try {
+                const commits = await window.electron.loadProjectCommits(project.path);
+                if (commits && commits.length > 0) {
+                  // Use the latest commit
+                  contentToLoad = commits[commits.length - 1].content;
+                }
+              } catch (e) {
+                console.warn('Failed to load commits for initial content:', e);
+              }
+            }
+
             // Load project content into the editor
-            setOriginalText(project.content);
-            setPreviewText(project.content);
+            setOriginalText(contentToLoad);
+            setPreviewText(contentToLoad);
             setModifiedText('');
             resetDiffState();
           }
