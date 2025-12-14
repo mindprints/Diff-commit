@@ -4,22 +4,34 @@ import { TextCommit } from '../types';
 interface UseCommitHistoryOptions {
     getCommitText: () => string;
     onAfterCommit?: (committedText: string) => void;
+    currentProjectPath?: string;
 }
 
-export function useCommitHistory({ getCommitText, onAfterCommit }: UseCommitHistoryOptions) {
+export function useCommitHistory({ getCommitText, onAfterCommit, currentProjectPath }: UseCommitHistoryOptions) {
     const [commits, setCommits] = useState<TextCommit[]>([]);
     const [showCommitHistory, setShowCommitHistory] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load from Electron store or localStorage
+    // Load from Electron store, FS, or localStorage
     useEffect(() => {
+        setIsLoaded(false); // Reset loaded state on path change
         const loadCommits = async () => {
+            // Priority 1: Project-specific file storage
+            if (currentProjectPath && window.electron?.loadProjectCommits) {
+                const projectCommits = await window.electron.loadProjectCommits(currentProjectPath);
+                setCommits(projectCommits || []);
+                setIsLoaded(true);
+                return;
+            }
+
+            // Priority 2: Global Electron Store (Legacy / Non-Project)
             if (window.electron && window.electron.getVersions) {
                 const storedCommits = await window.electron.getVersions();
                 if (storedCommits && Array.isArray(storedCommits)) {
                     setCommits(storedCommits);
                 }
             } else {
-                // Fallback to localStorage for web/localhost testing
+                // Priority 3: localStorage (Web)
                 const stored = localStorage.getItem('diff-commit-commits');
                 if (stored) {
                     try {
@@ -29,24 +41,42 @@ export function useCommitHistory({ getCommitText, onAfterCommit }: UseCommitHist
                     }
                 }
             }
+            setIsLoaded(true);
         };
         loadCommits();
-    }, []);
+    }, [currentProjectPath]);
 
-    // Save to Electron store or localStorage
+    // Save to Electron store, FS, or localStorage
     useEffect(() => {
+        if (!isLoaded) return; // Don't save if we haven't finished loading for the current context yet
+
         const saveCommits = async () => {
+            // Priority 1: Project-specific file storage
+            if (currentProjectPath && window.electron?.saveProjectCommits) {
+                await window.electron.saveProjectCommits(currentProjectPath, commits);
+                return;
+            }
+
+            // Priority 2: Global Electron Store
             if (window.electron && window.electron.saveVersions) {
                 await window.electron.saveVersions(commits);
             } else {
-                // Fallback to localStorage for web/localhost testing
+                // Priority 3: localStorage
                 localStorage.setItem('diff-commit-commits', JSON.stringify(commits));
             }
         };
+
+        // Only save if we have commits (or if we want to clear empty state, but usually we just append)
+        // However, if we just switched projects, commits might be empty array. We shouldn't overwrite the new project's file with empty array immediately unless we mean to.
+        // But the load effect runs first.
+        // Let's add a precaution: only save if commits is not empty OR if we know we loaded successfully. 
+        // For simplicity, just saving whenever `commits` changes is standard, assuming load happened first.
+        // BUT: if we switch projects, `currentProjectPath` changes. `loadCommits` runs. `setCommits` updates. 
+        // Then this effect runs because `commits` changed. It saves new commits to new path. Correct.
         if (commits.length > 0) {
             saveCommits();
         }
-    }, [commits]);
+    }, [commits, currentProjectPath, isLoaded]);
 
     const handleCommit = useCallback(() => {
         const textToCommit = getCommitText();

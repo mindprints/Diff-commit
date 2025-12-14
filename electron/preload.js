@@ -23,6 +23,13 @@ contextBridge.exposeInMainWorld('electron', {
     saveFile: (content, defaultName) => ipcRenderer.invoke('save-file', content, defaultName),
     exportVersions: (commits) => ipcRenderer.invoke('export-versions', commits),
 
+    // Repository & Project System
+    openRepository: () => ipcRenderer.invoke('open-repository'),
+    createProject: (repoPath, name, content) => ipcRenderer.invoke('create-project', repoPath, name, content),
+    saveProjectContent: (path, content) => ipcRenderer.invoke('save-project-content', path, content),
+    loadProjectCommits: (path) => ipcRenderer.invoke('load-project-commits', path),
+    saveProjectCommits: (path, commits) => ipcRenderer.invoke('save-project-commits', path, commits),
+
     // AI Prompts CRUD
     getPrompts: () => ipcRenderer.invoke('get-prompts'),
     savePrompts: (prompts) => ipcRenderer.invoke('save-prompts', prompts),
@@ -41,6 +48,18 @@ contextBridge.exposeInMainWorld('electron', {
     onMenuShowHelp: (callback) => ipcRenderer.on('menu-show-help', () => callback()),
     onMenuShowLogs: (callback) => ipcRenderer.on('menu-show-logs', () => callback()),
     onMenuShowVersions: (callback) => ipcRenderer.on('menu-show-versions', () => callback()),
+    onMenuNewProject: (callback) => ipcRenderer.on('menu-new-project', () => callback()),
+    onMenuSwitchProject: (callback) => ipcRenderer.on('menu-switch-project', () => callback()),
+    onMenuOpenRepository: (callback) => ipcRenderer.on('menu-open-repository', () => callback()),
+
+    // Tools Menu Listeners
+    onMenuToolsSpellingLocal: (callback) => ipcRenderer.on('menu-tools-spelling-local', () => callback()),
+    onMenuToolsSpellingAI: (callback) => ipcRenderer.on('menu-tools-spelling-ai', () => callback()),
+    onMenuToolsGrammar: (callback) => ipcRenderer.on('menu-tools-grammar', () => callback()),
+    onMenuToolsPolish: (callback) => ipcRenderer.on('menu-tools-polish', () => callback()),
+    onMenuToolsFactCheck: (callback) => ipcRenderer.on('menu-tools-factcheck', () => callback()),
+    onMenuToolsPrompts: (callback) => ipcRenderer.on('menu-tools-prompts', () => callback()),
+    onMenuToolsProjects: (callback) => ipcRenderer.on('menu-tools-projects', () => callback()),
 
     // Cleanup listeners (optional, for component unmount)
     removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)

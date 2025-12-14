@@ -32,6 +32,13 @@ export interface IElectronAPI {
     saveFile: (content: string, defaultName?: string) => Promise<string | null>;
     exportVersions: (versions: TextCommit[]) => Promise<string | null>;
 
+    // Repository & Project System
+    openRepository: () => Promise<{ path: string; projects: Project[] } | null>;
+    createProject: (repoPath: string, name: string, content?: string) => Promise<Project | null>;
+    saveProjectContent: (path: string, content: string) => Promise<boolean>;
+    loadProjectCommits: (path: string) => Promise<TextCommit[]>;
+    saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
+
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => void;
     onRequestSave: (callback: () => void) => void;
@@ -46,6 +53,18 @@ export interface IElectronAPI {
     onMenuShowHelp: (callback: () => void) => void;
     onMenuShowLogs: (callback: () => void) => void;
     onMenuShowVersions: (callback: () => void) => void;
+    onMenuNewProject: (callback: () => void) => void;
+    onMenuSwitchProject: (callback: () => void) => void;
+    onMenuOpenRepository: (callback: () => void) => void;
+
+    // Tools Menu Listeners
+    onMenuToolsSpellingLocal: (callback: () => void) => void;
+    onMenuToolsSpellingAI: (callback: () => void) => void;
+    onMenuToolsGrammar: (callback: () => void) => void;
+    onMenuToolsPolish: (callback: () => void) => void;
+    onMenuToolsFactCheck: (callback: () => void) => void;
+    onMenuToolsPrompts: (callback: () => void) => void;
+    onMenuToolsProjects: (callback: () => void) => void;
     removeAllListeners: (channel: string) => void;
 }
 

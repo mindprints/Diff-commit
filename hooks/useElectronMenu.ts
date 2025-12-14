@@ -28,6 +28,15 @@ interface UseElectronMenuOptions {
     onShowHelp: () => void;
     onShowLogs: () => void;
     onShowCommitHistory: () => void;
+
+    // Tool handlers
+    onPolish: (mode: any) => void;
+    onFactCheck: () => void;
+    onManagePrompts: () => void;
+    onManageProjects: () => void;
+    onNewProject: () => void;
+    onSwitchProject: () => void;
+    onOpenRepository: () => void;
 }
 
 export function useElectronMenu(options: UseElectronMenuOptions) {
@@ -46,6 +55,9 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         onShowHelp,
         onShowLogs,
         onShowCommitHistory,
+        onNewProject,
+        onSwitchProject,
+        onOpenRepository,
     } = options;
 
     useEffect(() => {
@@ -75,6 +87,10 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
             }
         });
 
+        window.electron.onMenuNewProject(() => onNewProject());
+        window.electron.onMenuSwitchProject(() => onSwitchProject());
+        window.electron.onMenuOpenRepository(() => onOpenRepository());
+
         // Edit menu handlers
         window.electron.onMenuClearAll(() => onClearAll());
 
@@ -96,6 +112,15 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         window.electron.onMenuShowLogs(() => onShowLogs());
         window.electron.onMenuShowVersions(() => onShowCommitHistory());
 
+        // Tools menu handlers (Web features triggered from native menu)
+        window.electron.onMenuToolsSpellingLocal(() => options.onPolish('spelling_local'));
+        window.electron.onMenuToolsSpellingAI(() => options.onPolish('spelling_ai'));
+        window.electron.onMenuToolsGrammar(() => options.onPolish('grammar'));
+        window.electron.onMenuToolsPolish(() => options.onPolish('polish'));
+        window.electron.onMenuToolsFactCheck(() => options.onFactCheck());
+        window.electron.onMenuToolsPrompts(() => options.onManagePrompts());
+        window.electron.onMenuToolsProjects(() => options.onManageProjects());
+
         // Cleanup listeners on unmount
         return () => {
             if (window.electron?.removeAllListeners) {
@@ -103,6 +128,9 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
                 window.electron.removeAllListeners('request-save');
                 window.electron.removeAllListeners('request-export-versions');
                 window.electron.removeAllListeners('versions-imported');
+                window.electron.removeAllListeners('menu-new-project');
+                window.electron.removeAllListeners('menu-switch-project');
+                window.electron.removeAllListeners('menu-open-repository');
                 window.electron.removeAllListeners('menu-clear-all');
                 window.electron.removeAllListeners('menu-toggle-dark');
                 window.electron.removeAllListeners('menu-font-size');
@@ -110,6 +138,14 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
                 window.electron.removeAllListeners('menu-show-help');
                 window.electron.removeAllListeners('menu-show-logs');
                 window.electron.removeAllListeners('menu-show-versions');
+
+                window.electron.removeAllListeners('menu-tools-spelling-local');
+                window.electron.removeAllListeners('menu-tools-spelling-ai');
+                window.electron.removeAllListeners('menu-tools-grammar');
+                window.electron.removeAllListeners('menu-tools-polish');
+                window.electron.removeAllListeners('menu-tools-factcheck');
+                window.electron.removeAllListeners('menu-tools-prompts');
+                window.electron.removeAllListeners('menu-tools-projects');
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps

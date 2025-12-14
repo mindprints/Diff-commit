@@ -15,6 +15,11 @@ interface MenuBarProps {
     onShowHelp: () => void;
     onShowLogs: () => void;
     onShowCommitHistory: () => void;
+    // Tools props (optional since we are adding them)
+    onPolish?: (mode: 'spelling' | 'grammar' | 'polish' | 'spelling_local' | 'spelling_ai') => void;
+    onFactCheck?: () => void;
+    onManagePrompts?: () => void;
+    onManageProjects?: () => void;
 }
 
 export function MenuBar({
@@ -29,11 +34,16 @@ export function MenuBar({
     onFontFamily,
     onShowHelp,
     onShowLogs,
-    onShowCommitHistory
+    onShowCommitHistory,
+    onPolish,
+    onFactCheck,
+    onManagePrompts,
+    onManageProjects
 }: MenuBarProps) {
     // Only show in browser (not electron)
     if (window.electron) return null;
 
+    // ... (rest of implementation)
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -178,6 +188,19 @@ export function MenuBar({
                     { label: 'Serif', onClick: () => onFontFamily('serif') },
                     { label: 'Monounce', onClick: () => onFontFamily('mono') },
                 ]} />
+            </MenuButton>
+
+            {/* Tools Menu */}
+            <MenuButton label="Tools" id="tools">
+                <MenuItem label="Check Spelling (Local)" onClick={() => onPolish && onPolish('spelling_local')} />
+                <MenuItem label="Check Spelling (AI)" onClick={() => onPolish && onPolish('spelling_ai')} />
+                <MenuItem label="Fix Grammar" onClick={() => onPolish && onPolish('grammar')} />
+                <MenuItem label="Full Polish" onClick={() => onPolish && onPolish('polish')} />
+                <MenuItem separator />
+                <MenuItem label="Fact Check" onClick={() => onFactCheck && onFactCheck()} />
+                <MenuItem separator />
+                <MenuItem label="Manage Prompts..." onClick={() => onManagePrompts && onManagePrompts()} />
+                <MenuItem label="Project Manager..." onClick={() => onManageProjects && onManageProjects()} />
             </MenuButton>
 
             {/* Window Menu */}

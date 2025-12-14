@@ -13,6 +13,8 @@ interface ProjectsPanelProps {
     onCreateProject: (name: string, content?: string) => Promise<Project>;
     onDeleteProject: (id: string) => Promise<void>;
     onRenameProject: (id: string, newName: string) => Promise<Project | null>;
+    onOpenRepository: () => Promise<void>;
+    repositoryPath: string | null;
     currentContent?: string; // Current text to save to new project
 }
 
@@ -25,6 +27,8 @@ export function ProjectsPanel({
     onCreateProject,
     onDeleteProject,
     onRenameProject,
+    onOpenRepository,
+    repositoryPath,
     currentContent = '',
 }: ProjectsPanelProps) {
     const [isCreating, setIsCreating] = useState(false);
@@ -81,11 +85,31 @@ export function ProjectsPanel({
             <div className="relative w-full max-w-lg max-h-[80vh] m-4 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 {/* Header */}
                 <div className="flex-none px-6 py-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-slate-950">
-                    <div className="flex items-center gap-2">
-                        <FolderOpen className="w-5 h-5 text-indigo-500" />
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">Projects</h2>
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                            <FolderOpen className="w-5 h-5 text-indigo-500" />
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">Projects</h2>
+                        </div>
+                        {repositoryPath && (
+                            <span className="text-xs text-gray-500 dark:text-slate-400 mt-1 truncate max-w-[200px]" title={repositoryPath}>
+                                {repositoryPath}
+                            </span>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
+                        {!repositoryPath && (
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={async () => {
+                                    await onOpenRepository();
+                                    // Don't close, let them see the new projects list
+                                }}
+                                className="mr-2"
+                            >
+                                Open Repo
+                            </Button>
+                        )}
                         <Button
                             variant="primary"
                             size="sm"
@@ -140,7 +164,7 @@ export function ProjectsPanel({
                         <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400 dark:text-slate-500">
                             <FileText className="w-12 h-12 mb-4 opacity-50" />
                             <p className="text-lg font-medium">No projects yet</p>
-                            <p className="text-sm">Create a new project to get started</p>
+                            <p className="text-sm">Create a new project {repositoryPath ? 'in this repo' : ''} to get started</p>
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-100 dark:divide-slate-800">

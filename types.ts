@@ -86,5 +86,6 @@ export interface Project {
   content: string;          // Current text content
   createdAt: number;        // Timestamp
   updatedAt: number;        // Timestamp
-  filePath?: string;        // Electron: real file path, Browser: undefined
+  path?: string;            // Electron: Absolute path to project folder
+  repositoryPath?: string;  // Electron: Absolute path to repository root
 }

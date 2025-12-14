@@ -69,13 +69,29 @@ function createMenu() {
             label: 'File',
             submenu: [
                 {
-                    label: 'Open Text File...',
+                    label: 'Open Repository...',
+                    accelerator: 'CmdOrCtrl+Shift+O',
+                    click: () => sendToRenderer('menu-open-repository')
+                },
+                {
+                    label: 'New Project...',
+                    accelerator: 'CmdOrCtrl+N',
+                    click: () => sendToRenderer('menu-new-project')
+                },
+                {
+                    label: 'Switch Project...',
+                    accelerator: 'CmdOrCtrl+P',
+                    click: () => sendToRenderer('menu-switch-project')
+                },
+                { type: 'separator' },
+                {
+                    label: 'Import File...',
                     accelerator: 'CmdOrCtrl+O',
                     click: async () => {
                         const result = await dialog.showOpenDialog(mainWindow, {
                             properties: ['openFile'],
                             filters: [
-                                { name: 'Text Files', extensions: ['txt', 'md', 'text'] },
+                                { name: 'Supported Files', extensions: ['txt', 'md', 'json'] },
                                 { name: 'All Files', extensions: ['*'] }
                             ]
                         });
@@ -90,33 +106,6 @@ function createMenu() {
                     accelerator: 'CmdOrCtrl+S',
                     click: async () => {
                         sendToRenderer('request-save');
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: 'Export Commits...',
-                    click: async () => {
-                        sendToRenderer('request-export-versions');
-                    }
-                },
-                {
-                    label: 'Import Commits...',
-                    click: async () => {
-                        const result = await dialog.showOpenDialog(mainWindow, {
-                            properties: ['openFile'],
-                            filters: [
-                                { name: 'JSON Files', extensions: ['json'] }
-                            ]
-                        });
-                        if (!result.canceled && result.filePaths.length > 0) {
-                            const content = fs.readFileSync(result.filePaths[0], 'utf-8');
-                            try {
-                                const commits = JSON.parse(content);
-                                sendToRenderer('versions-imported', commits);
-                            } catch (e) {
-                                dialog.showErrorBox('Import Error', 'Invalid JSON file format.');
-                            }
-                        }
                     }
                 },
                 { type: 'separator' },
@@ -199,6 +188,43 @@ function createMenu() {
                 ] : [
                     { role: 'close' }
                 ])
+            ]
+        },
+
+        // Tools menu
+        {
+            label: 'Tools',
+            submenu: [
+                {
+                    label: 'Check Spelling (Local)',
+                    click: () => sendToRenderer('menu-tools-spelling-local')
+                },
+                {
+                    label: 'Check Spelling (AI)',
+                    click: () => sendToRenderer('menu-tools-spelling-ai')
+                },
+                {
+                    label: 'Fix Grammar',
+                    click: () => sendToRenderer('menu-tools-grammar')
+                },
+                {
+                    label: 'Full Polish',
+                    click: () => sendToRenderer('menu-tools-polish')
+                },
+                { type: 'separator' },
+                {
+                    label: 'Fact Check',
+                    click: () => sendToRenderer('menu-tools-factcheck')
+                },
+                { type: 'separator' },
+                {
+                    label: 'Manage Prompts...',
+                    click: () => sendToRenderer('menu-tools-prompts')
+                },
+                {
+                    label: 'Project Manager...',
+                    click: () => sendToRenderer('menu-tools-projects')
+                }
             ]
         },
 
@@ -340,6 +366,135 @@ app.whenReady().then(() => {
             return result.filePath;
         }
         return null;
+    });
+
+    // Repository Management Handlers
+
+    // Open Repository (Select Folder)
+    ipcMain.handle('open-repository', async () => {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory', 'createDirectory']
+        });
+
+        if (result.canceled || result.filePaths.length === 0) return null;
+
+        const repoPath = result.filePaths[0];
+        const projects = [];
+
+        // Scan for subdirectories that look like projects
+        try {
+            const items = fs.readdirSync(repoPath, { withFileTypes: true });
+            for (const item of items) {
+                if (item.isDirectory() && !item.name.startsWith('.')) {
+                    const projectPath = path.join(repoPath, item.name);
+                    const draftPath = path.join(projectPath, 'draft.txt');
+
+                    // A valid project must have a draft.txt (or we can be lenient and just accept folders)
+                    // Let's accept any folder, and check for draft.txt to read content
+                    let content = '';
+                    let stats = fs.statSync(projectPath);
+
+                    if (fs.existsSync(draftPath)) {
+                        content = fs.readFileSync(draftPath, 'utf-8');
+                        const draftStats = fs.statSync(draftPath);
+                        stats = draftStats; // Use file stats for dates if file exists
+                    }
+
+                    projects.push({
+                        id: item.name, // Use folder name as ID for simplicity in FS mode
+                        name: item.name,
+                        content,
+                        createdAt: stats.birthtimeMs,
+                        updatedAt: stats.mtimeMs,
+                        path: projectPath,
+                        repositoryPath: repoPath
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Failed to scan repository:', e);
+            throw e;
+        }
+
+        return { path: repoPath, projects };
+    });
+
+    // Create New Project in Repository
+    ipcMain.handle('create-project', async (event, repoPath, projectName, initialContent = '') => {
+        if (!repoPath || !projectName) return null;
+
+        const projectPath = path.join(repoPath, projectName);
+        const draftPath = path.join(projectPath, 'draft.txt');
+        const commitsPath = path.join(projectPath, '.commits');
+
+        try {
+            // Create directories
+            if (!fs.existsSync(projectPath)) fs.mkdirSync(projectPath);
+            if (!fs.existsSync(commitsPath)) fs.mkdirSync(commitsPath);
+
+            // Create draft file
+            fs.writeFileSync(draftPath, initialContent, 'utf-8');
+
+            return {
+                id: projectName,
+                name: projectName,
+                content: initialContent,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                path: projectPath,
+                repositoryPath: repoPath
+            };
+        } catch (e) {
+            console.error('Failed to create project:', e);
+            throw e;
+        }
+    });
+
+    // Save Project Content
+    ipcMain.handle('save-project-content', async (event, projectPath, content) => {
+        if (!projectPath) return false;
+        try {
+            const draftPath = path.join(projectPath, 'draft.txt');
+            fs.writeFileSync(draftPath, content, 'utf-8');
+            return true;
+        } catch (e) {
+            console.error('Failed to save project content:', e);
+            return false;
+        }
+    });
+
+    // Load Project Commits (from .commits folder)
+    ipcMain.handle('load-project-commits', async (event, projectPath) => {
+        if (!projectPath) return [];
+        const commitsPath = path.join(projectPath, '.commits');
+        const commitsFile = path.join(commitsPath, 'commits.json');
+
+        try {
+            if (fs.existsSync(commitsFile)) {
+                const data = fs.readFileSync(commitsFile, 'utf-8');
+                return JSON.parse(data);
+            }
+            return [];
+        } catch (e) {
+            console.error('Failed to load commits:', e);
+            return [];
+        }
+    });
+
+    // Save Project Commits
+    ipcMain.handle('save-project-commits', async (event, projectPath, commits) => {
+        if (!projectPath) return false;
+        const commitsPath = path.join(projectPath, '.commits');
+        const commitsFile = path.join(commitsPath, 'commits.json');
+
+        try {
+            if (!fs.existsSync(commitsPath)) fs.mkdirSync(commitsPath, { recursive: true });
+            fs.writeFileSync(commitsFile, JSON.stringify(commits, null, 2), 'utf-8');
+            return true;
+        } catch (e) {
+            console.error('Failed to save commits:', e);
+            return false;
+        }
     });
 
     createWindow();

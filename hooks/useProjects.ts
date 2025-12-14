@@ -9,6 +9,7 @@ import * as projectStorage from '../services/projectStorage';
 export function useProjects() {
     const [projects, setProjects] = useState<Project[]>([]);
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
+    const [repositoryPath, setRepositoryPath] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     // Load projects on mount
@@ -26,14 +27,41 @@ export function useProjects() {
         loadProjects();
     }, []);
 
+    // Open a repository
+    const openRepository = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const result = await projectStorage.openRepository();
+            if (result) {
+                setRepositoryPath(result.path);
+                setProjects(result.projects);
+                setCurrentProject(null); // Close any active legacy project
+            }
+        } catch (error) {
+            console.error('Failed to open repository:', error);
+        }
+        setIsLoading(false);
+    }, []);
+
     // Load a specific project
     const loadProject = useCallback(async (id: string) => {
+        // If we are in repo mode, find project in state list first
+        if (repositoryPath) {
+            const project = projects.find(p => p.id === id);
+            if (project) {
+                // If content is empty (lazy loaded scan), we might need to load it (optional, currently scan reads all)
+                setCurrentProject(project);
+                return project;
+            }
+        }
+
+        // Fallback / Legacy
         const project = await projectStorage.getProject(id);
         if (project) {
             setCurrentProject(project);
         }
         return project;
-    }, []);
+    }, [projects, repositoryPath]);
 
     // Save current project with new content
     const saveCurrentProject = useCallback(async (content: string) => {
@@ -53,13 +81,13 @@ export function useProjects() {
 
     // Create a new project and optionally open it
     const createNewProject = useCallback(async (name: string, content: string = '', open: boolean = true) => {
-        const newProject = await projectStorage.createProject(name, content);
+        const newProject = await projectStorage.createProject(name, content, repositoryPath || undefined);
         setProjects(prev => [...prev, newProject]);
         if (open) {
             setCurrentProject(newProject);
         }
         return newProject;
-    }, []);
+    }, [repositoryPath]);
 
     // Delete a project
     const deleteProjectById = useCallback(async (id: string) => {
@@ -91,14 +119,19 @@ export function useProjects() {
 
     // Refresh projects list from storage
     const refreshProjects = useCallback(async () => {
+        if (repositoryPath) {
+            // Re-open/scan repo if needed, but for now just legacy refresh
+        }
         const loaded = await projectStorage.getProjects();
         setProjects(loaded);
-    }, []);
+    }, [repositoryPath]);
 
     return {
         projects,
         currentProject,
         isLoading,
+        repositoryPath,
+        openRepository,
         loadProject,
         saveCurrentProject,
         createNewProject,

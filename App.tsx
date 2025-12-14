@@ -134,6 +134,8 @@ function App() {
     createNewProject,
     deleteProject: deleteProjectById,
     renameProject: renameProjectById,
+    openRepository,
+    repositoryPath
   } = useProjects();
   const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
@@ -168,7 +170,11 @@ function App() {
     handleCommit,
     handleDeleteCommit,
     handleClearAllCommits,
-  } = useCommitHistory({ getCommitText, onAfterCommit });
+  } = useCommitHistory({
+    getCommitText,
+    onAfterCommit,
+    currentProjectPath: currentProject?.path
+  });
 
   // Context Menu for text selection
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
@@ -332,6 +338,14 @@ function App() {
     onShowHelp: () => setShowHelp(true),
     onShowLogs: () => setShowLogs(true),
     onShowCommitHistory: () => setShowCommitHistory(true),
+    // Tool handlers
+    onPolish: (mode) => handleAIEdit(mode), // Accessing handleAIEdit which handles all polish modes now
+    onFactCheck: () => handleFactCheck(),
+    onManagePrompts: () => setShowPromptsModal(true),
+    onManageProjects: () => setShowProjectsPanel(true),
+    onNewProject: () => setShowProjectsPanel(true),
+    onSwitchProject: () => setShowProjectsPanel(true),
+    onOpenRepository: () => { openRepository(); setShowProjectsPanel(true); },
   });
 
   // Resizing Logic
@@ -1070,6 +1084,10 @@ function App() {
         onShowHelp={() => setShowHelp(true)}
         onShowLogs={() => setShowLogs(true)}
         onShowCommitHistory={() => setShowCommitHistory(true)}
+        onPolish={(mode) => handleAIEdit(mode)}
+        onFactCheck={() => handleFactCheck()}
+        onManagePrompts={() => setShowPromptsModal(true)}
+        onManageProjects={() => setShowProjectsPanel(true)}
       />
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
@@ -1081,6 +1099,14 @@ function App() {
             <ArrowRightLeft className="w-5 h-5 text-white" />
           </div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">Diff & Commit AI</h1>
+          {repositoryPath && (
+            <>
+              <span className="text-gray-300 dark:text-slate-600">/</span>
+              <span className="text-lg font-medium text-gray-700 dark:text-slate-300 truncate max-w-[150px]" title={repositoryPath}>
+                {repositoryPath.split(/[\\/]/).pop()}
+              </span>
+            </>
+          )}
           {currentProject && (
             <>
               <span className="text-gray-300 dark:text-slate-600">/</span>
@@ -1211,7 +1237,7 @@ function App() {
             )}
           </div>
 
-          <button
+          {/* <button
             onClick={() => setShowProjectsPanel(true)}
             className={clsx(
               "text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 relative",
@@ -1225,7 +1251,7 @@ function App() {
                 {projects.length}
               </span>
             )}
-          </button>
+          </button> */}
 
           <button
             onClick={() => setShowLogs(true)}
@@ -1704,6 +1730,8 @@ function App() {
         }}
         onDeleteProject={deleteProjectById}
         onRenameProject={renameProjectById}
+        onOpenRepository={openRepository}
+        repositoryPath={repositoryPath}
         currentContent={previewText || originalText}
       />
     </div>

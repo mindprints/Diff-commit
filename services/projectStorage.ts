@@ -3,27 +3,30 @@ import { Project } from '../types';
 const STORAGE_KEY = 'diff-commit-projects';
 
 /**
- * Project storage service with automatic environment detection.
- * Uses Electron Store in desktop app, localStorage in browser.
- */
-
-/**
  * Check if running in Electron with project APIs available.
  */
 function hasElectronProjectAPI(): boolean {
-    return !!(window.electron?.getProjects && window.electron?.saveProject);
+    // Only check for new FS-based APIs
+    return !!(window.electron?.openRepository && window.electron?.createProject);
 }
 
 /**
- * Get all projects from storage.
+ * Open a local repository (Folder).
+ * Returns the path and list of projects found.
+ */
+export async function openRepository(): Promise<{ path: string; projects: Project[] } | null> {
+    if (hasElectronProjectAPI() && window.electron.openRepository) {
+        return await window.electron.openRepository();
+    }
+    return null;
+}
+
+/**
+ * Get all projects from storage (Browser Fallback).
+ * For Electron, this is handled by openRepository() now, but can still return legacy stored projects if needed.
  */
 export async function getProjects(): Promise<Project[]> {
     try {
-        if (hasElectronProjectAPI()) {
-            const projects = await window.electron!.getProjects!();
-            return projects || [];
-        }
-
         // Browser fallback - localStorage
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -32,7 +35,6 @@ export async function getProjects(): Promise<Project[]> {
                 return parsed;
             }
         }
-
         return [];
     } catch (error) {
         console.error('Failed to load projects:', error);
@@ -41,19 +43,10 @@ export async function getProjects(): Promise<Project[]> {
 }
 
 /**
- * Save all projects to storage.
+ * Save all projects to storage (Browser Fallback).
  */
 async function saveAllProjects(projects: Project[]): Promise<void> {
     try {
-        if (hasElectronProjectAPI()) {
-            // For Electron, save each project individually
-            for (const project of projects) {
-                await window.electron!.saveProject!(project);
-            }
-            return;
-        }
-
-        // Browser fallback - localStorage
         localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
     } catch (error) {
         console.error('Failed to save projects:', error);
@@ -63,6 +56,7 @@ async function saveAllProjects(projects: Project[]): Promise<void> {
 
 /**
  * Get a single project by ID.
+ * @deprecated mostly used for browser
  */
 export async function getProject(id: string): Promise<Project | null> {
     const projects = await getProjects();
@@ -71,10 +65,18 @@ export async function getProject(id: string): Promise<Project | null> {
 
 /**
  * Create a new project.
+ * @param repoPath - Required for Electron FS mode
  */
-export async function createProject(name: string, content: string = ''): Promise<Project> {
-    const projects = await getProjects();
+export async function createProject(name: string, content: string = '', repoPath?: string): Promise<Project> {
+    // Electron FS Mode
+    if (hasElectronProjectAPI() && repoPath && window.electron.createProject) {
+        const result = await window.electron.createProject(repoPath, name, content);
+        if (result) return result;
+        throw new Error('Failed to create project on disk');
+    }
 
+    // Browser / Legacy Mode
+    const projects = await getProjects();
     const newProject: Project = {
         id: crypto.randomUUID(),
         name: name.trim() || 'Untitled Project',
@@ -89,19 +91,24 @@ export async function createProject(name: string, content: string = ''): Promise
 }
 
 /**
- * Save/update a project.
+ * Save/update a project. 
+ * In FS mode, this updates the content.
  */
 export async function saveProject(project: Project): Promise<void> {
+    // Electron FS Mode
+    if (hasElectronProjectAPI() && project.path && window.electron.saveProjectContent) {
+        await window.electron.saveProjectContent(project.path, project.content);
+        return; // Commits are saved separately via saveProjectCommits
+    }
+
+    // Browser / Legacy Mode
     const projects = await getProjects();
     const index = projects.findIndex(p => p.id === project.id);
-
     const updatedProject = { ...project, updatedAt: Date.now() };
 
     if (index === -1) {
-        // New project
         await saveAllProjects([...projects, updatedProject]);
     } else {
-        // Update existing
         const updatedProjects = [...projects];
         updatedProjects[index] = updatedProject;
         await saveAllProjects(updatedProjects);
@@ -112,26 +119,23 @@ export async function saveProject(project: Project): Promise<void> {
  * Delete a project.
  */
 export async function deleteProject(id: string): Promise<void> {
+    // For FS mode, deletion is manual on disk for safety now, or we implement a delete handler later.
+    // Browser fallback:
     const projects = await getProjects();
     const filtered = projects.filter(p => p.id !== id);
-
-    if (hasElectronProjectAPI() && window.electron?.deleteProject) {
-        await window.electron.deleteProject(id);
-    } else {
-        await saveAllProjects(filtered);
-    }
+    await saveAllProjects(filtered);
 }
 
 /**
  * Rename a project.
  */
 export async function renameProject(id: string, newName: string): Promise<Project | null> {
+    // FS renaming is complex (move folder), deferring.
+    // Browser fallback:
     const projects = await getProjects();
     const project = projects.find(p => p.id === id);
 
-    if (!project) {
-        return null;
-    }
+    if (!project) return null;
 
     const updatedProject = {
         ...project,
