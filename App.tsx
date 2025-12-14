@@ -23,6 +23,7 @@ import { useMultiSelection } from './hooks/useMultiSelection';
 import { usePrompts } from './hooks/usePrompts';
 import { useProjects } from './hooks/useProjects';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
+import { MenuBar } from './components/MenuBar';
 import { AILogEntry } from './types';
 import {
   ArrowRightLeft,
@@ -1008,8 +1009,68 @@ function App() {
     }
   }, [isShiftHeld, handleCommit, handleAccept]);
 
+  // Web-only handlers for MenuBar
+  const handleWebSave = useCallback(() => {
+    const textToSave = mode === ViewMode.DIFF ? previewText : originalText;
+    if (!textToSave.trim()) return;
+    const blob = new Blob([textToSave], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'document.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [mode, previewText, originalText]);
+
+  const handleWebExportCommits = useCallback(() => {
+    if (commits.length === 0) return;
+    const blob = new Blob([JSON.stringify(commits, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'commits-backup.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [commits]);
+
+  const handleWebImportCommits = useCallback((content: string) => {
+    try {
+      const imported = JSON.parse(content);
+      if (Array.isArray(imported)) {
+        setCommits(prev => [...prev, ...imported]);
+      }
+    } catch (e) {
+      console.error('Invalid JSON', e);
+      setErrorMessage('Invalid JSON file');
+    }
+  }, [setCommits]);
+
   return (
     <div className={clsx("flex flex-col h-full bg-white dark:bg-slate-900 transition-colors duration-200")}>
+      <MenuBar
+        mode={mode}
+        onFileOpen={(content) => {
+          setOriginalText(content);
+          setPreviewText(content);
+          setModifiedText('');
+          resetDiffState();
+        }}
+        onSaveFile={handleWebSave}
+        onExportCommits={handleWebExportCommits}
+        onImportCommits={handleWebImportCommits}
+        onClearAll={() => {
+          setOriginalText('');
+          setModifiedText('');
+          setPreviewText('');
+          resetDiffState();
+        }}
+        onToggleDark={() => setIsDarkMode(prev => !prev)}
+        onFontSize={(size) => setFontSize(size)}
+        onFontFamily={(family) => setFontFamily(family)}
+        onShowHelp={() => setShowHelp(true)}
+        onShowLogs={() => setShowLogs(true)}
+        onShowCommitHistory={() => setShowCommitHistory(true)}
+      />
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
 
