@@ -135,26 +135,16 @@ function App() {
     deleteProject: deleteProjectById,
     renameProject: renameProjectById,
     openRepository,
-    createBrowserRepository,
-    repositoryPath
+    repositoryPath,
+    getRepoHandle
   } = useProjects();
   const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
-  // Browser repository handler - prompts for name in web mode
-  const handleOpenRepository = useCallback(() => {
-    if (window.electron) {
-      // Electron mode: use native folder picker
-      openRepository();
-      setShowProjectsPanel(true);
-    } else {
-      // Browser mode: prompt for repository name
-      const name = prompt('Enter repository name:', 'My Repository');
-      if (name) {
-        createBrowserRepository(name);
-        setShowProjectsPanel(true);
-      }
-    }
-  }, [openRepository, createBrowserRepository]);
+  // Repository handler - uses native picker (Electron) or showDirectoryPicker (browser)
+  const handleOpenRepository = useCallback(async () => {
+    await openRepository();
+    setShowProjectsPanel(true);
+  }, [openRepository]);
 
   const handleNewProject = useCallback(() => {
     setShowProjectsPanel(true);

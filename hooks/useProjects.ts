@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project } from '../types';
 import * as projectStorage from '../services/projectStorage';
+import * as browserFS from '../services/browserFileSystem';
 
 /**
  * Hook for managing projects state.
  * Handles loading, saving, creating, and deleting projects.
+ * Supports both Electron file system and browser File System Access API.
  */
 export function useProjects() {
     const [projects, setProjects] = useState<Project[]>([]);
@@ -12,17 +14,19 @@ export function useProjects() {
     const [repositoryPath, setRepositoryPath] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Load projects and browser repository on mount
+    // Store the FileSystemDirectoryHandle for browser mode
+    const repoHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+
+    // Check if we're in Electron
+    const isElectron = !!(window.electron?.openRepository);
+
+    // Load projects on mount
     useEffect(() => {
         const loadProjectsAndRepo = async () => {
             setIsLoading(true);
             try {
-                // Check for persisted browser repository
-                const browserRepo = projectStorage.getBrowserRepository();
-                if (browserRepo) {
-                    setRepositoryPath(browserRepo.path);
-                }
-
+                // In browser mode, we can't auto-restore the handle (user must re-pick)
+                // Just load any localStorage projects as fallback
                 const loaded = await projectStorage.getProjects();
                 setProjects(loaded);
             } catch (error) {
@@ -33,50 +37,52 @@ export function useProjects() {
         loadProjectsAndRepo();
     }, []);
 
-    // Open a repository (Electron) or load browser repo
+    // Open a repository - works for both Electron and Browser
     const openRepository = useCallback(async () => {
         setIsLoading(true);
         try {
-            const result = await projectStorage.openRepository();
-            if (result) {
-                setRepositoryPath(result.path);
-                setProjects(result.projects);
-                setCurrentProject(null); // Close any active legacy project
+            if (isElectron) {
+                // Electron mode - use IPC
+                const result = await projectStorage.openRepository();
+                if (result) {
+                    setRepositoryPath(result.path);
+                    setProjects(result.projects);
+                    setCurrentProject(null);
+                }
+            } else if (browserFS.isFileSystemAccessSupported()) {
+                // Browser mode - use File System Access API
+                const result = await browserFS.openBrowserDirectory();
+                if (result) {
+                    repoHandleRef.current = result.handle;
+                    setRepositoryPath(result.path);
+                    setProjects(result.projects);
+                    setCurrentProject(null);
+                }
+            } else {
+                console.warn('File System Access API not supported in this browser');
             }
         } catch (error) {
             console.error('Failed to open repository:', error);
         }
         setIsLoading(false);
-    }, []);
-
-    // Create a browser-based repository (for web mode)
-    const createBrowserRepository = useCallback((name: string) => {
-        const repo = projectStorage.createBrowserRepository(name);
-        setRepositoryPath(repo.path);
-        setProjects([]); // Start fresh with new repo
-        setCurrentProject(null);
-        return repo;
-    }, []);
+    }, [isElectron]);
 
     // Load a specific project
     const loadProject = useCallback(async (id: string) => {
-        // If we are in repo mode, find project in state list first
-        if (repositoryPath) {
-            const project = projects.find(p => p.id === id);
-            if (project) {
-                // If content is empty (lazy loaded scan), we might need to load it (optional, currently scan reads all)
-                setCurrentProject(project);
-                return project;
-            }
-        }
-
-        // Fallback / Legacy
-        const project = await projectStorage.getProject(id);
+        // Find project in state
+        const project = projects.find(p => p.id === id);
         if (project) {
             setCurrentProject(project);
+            return project;
         }
-        return project;
-    }, [projects, repositoryPath]);
+
+        // Fallback - try from storage
+        const loadedProject = await projectStorage.getProject(id);
+        if (loadedProject) {
+            setCurrentProject(loadedProject);
+        }
+        return loadedProject;
+    }, [projects]);
 
     // Save current project with new content
     const saveCurrentProject = useCallback(async (content: string) => {
@@ -88,58 +94,107 @@ export function useProjects() {
             updatedAt: Date.now(),
         };
 
-        await projectStorage.saveProject(updatedProject);
+        // Save to file system
+        if (isElectron && currentProject.path) {
+            await projectStorage.saveProject(updatedProject);
+        } else if (repoHandleRef.current && repositoryPath) {
+            await browserFS.saveProjectDraft(repoHandleRef.current, currentProject.name, content);
+        } else {
+            // localStorage fallback
+            await projectStorage.saveProject(updatedProject);
+        }
+
         setCurrentProject(updatedProject);
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
         return updatedProject;
-    }, [currentProject]);
+    }, [currentProject, isElectron, repositoryPath]);
 
-    // Create a new project and optionally open it
+    // Create a new project
     const createNewProject = useCallback(async (name: string, content: string = '', open: boolean = true) => {
-        const newProject = await projectStorage.createProject(name, content, repositoryPath || undefined);
+        let newProject: Project;
+
+        if (isElectron && repositoryPath) {
+            // Electron mode
+            newProject = await projectStorage.createProject(name, content, repositoryPath);
+        } else if (repoHandleRef.current) {
+            // Browser file system mode
+            const result = await browserFS.createProjectFolder(repoHandleRef.current, name, content);
+            if (!result) throw new Error('Failed to create project');
+            newProject = result;
+        } else {
+            // localStorage fallback
+            newProject = await projectStorage.createProject(name, content);
+        }
+
         setProjects(prev => [...prev, newProject]);
         if (open) {
             setCurrentProject(newProject);
         }
         return newProject;
-    }, [repositoryPath]);
+    }, [isElectron, repositoryPath]);
 
     // Delete a project
     const deleteProjectById = useCallback(async (id: string) => {
-        await projectStorage.deleteProject(id);
-        setProjects(prev => prev.filter(p => p.id !== id));
+        const project = projects.find(p => p.id === id);
 
-        // If deleting current project, clear it
+        if (repoHandleRef.current && project) {
+            // Browser file system mode
+            await browserFS.deleteProjectFolder(repoHandleRef.current, project.name);
+        } else {
+            // Electron or localStorage
+            await projectStorage.deleteProject(id);
+        }
+
+        setProjects(prev => prev.filter(p => p.id !== id));
         if (currentProject?.id === id) {
             setCurrentProject(null);
         }
-    }, [currentProject?.id]);
+    }, [projects, currentProject?.id]);
 
     // Rename a project
     const renameProjectById = useCallback(async (id: string, newName: string) => {
-        const updated = await projectStorage.renameProject(id, newName);
+        const project = projects.find(p => p.id === id);
+        if (!project) return null;
+
+        let updated: Project | null = null;
+
+        if (repoHandleRef.current) {
+            // Browser file system mode
+            updated = await browserFS.renameProjectFolder(repoHandleRef.current, project.name, newName);
+        } else {
+            // Electron or localStorage
+            updated = await projectStorage.renameProject(id, newName);
+        }
+
         if (updated) {
-            setProjects(prev => prev.map(p => p.id === id ? updated : p));
+            setProjects(prev => prev.map(p => p.id === id ? updated! : p));
             if (currentProject?.id === id) {
                 setCurrentProject(updated);
             }
         }
         return updated;
-    }, [currentProject?.id]);
+    }, [projects, currentProject?.id]);
 
-    // Close current project (without deleting)
+    // Close current project
     const closeProject = useCallback(() => {
         setCurrentProject(null);
     }, []);
 
-    // Refresh projects list from storage
+    // Refresh projects list
     const refreshProjects = useCallback(async () => {
-        if (repositoryPath) {
-            // Re-open/scan repo if needed, but for now just legacy refresh
+        if (repoHandleRef.current) {
+            // Browser file system - rescan
+            const scanned = await browserFS.scanProjectFolders(repoHandleRef.current);
+            setProjects(scanned);
+        } else {
+            // localStorage
+            const loaded = await projectStorage.getProjects();
+            setProjects(loaded);
         }
-        const loaded = await projectStorage.getProjects();
-        setProjects(loaded);
-    }, [repositoryPath]);
+    }, []);
+
+    // Get repo handle for external use (e.g., saving commits)
+    const getRepoHandle = useCallback(() => repoHandleRef.current, []);
 
     return {
         projects,
@@ -147,7 +202,6 @@ export function useProjects() {
         isLoading,
         repositoryPath,
         openRepository,
-        createBrowserRepository,
         loadProject,
         saveCurrentProject,
         createNewProject,
@@ -155,5 +209,6 @@ export function useProjects() {
         renameProject: renameProjectById,
         closeProject,
         refreshProjects,
+        getRepoHandle,
     };
 }
