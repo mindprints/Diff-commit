@@ -19,7 +19,6 @@ import { useCommitHistory } from './hooks/useCommitHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useElectronMenu } from './hooks/useElectronMenu';
-import { useMultiSelection } from './hooks/useMultiSelection';
 import { usePrompts } from './hooks/usePrompts';
 import { useProjects } from './hooks/useProjects';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
@@ -56,6 +55,34 @@ import {
 import clsx from 'clsx';
 
 type FontSize = 'sm' | 'base' | 'lg' | 'xl';
+
+// Characters that define word boundaries (whitespace and punctuation)
+const BOUNDARY_CHARS = /[\s.,;:!?'"()\[\]{}<>\/\\|@#$%^&*+=~`\-_\n\r\t]/;
+
+/**
+ * Expand a selection range to the nearest word boundaries.
+ * Auto-corrects for users who don't precisely select from word start to word end.
+ */
+function expandToWordBoundaries(start: number, end: number, text: string): { start: number; end: number } {
+  if (text.length === 0 || start >= text.length) {
+    return { start, end };
+  }
+
+  let expandedStart = start;
+  let expandedEnd = end;
+
+  // Expand start backwards until we hit a boundary or beginning of text
+  while (expandedStart > 0 && !BOUNDARY_CHARS.test(text[expandedStart - 1])) {
+    expandedStart--;
+  }
+
+  // Expand end forwards until we hit a boundary or end of text
+  while (expandedEnd < text.length && !BOUNDARY_CHARS.test(text[expandedEnd])) {
+    expandedEnd++;
+  }
+
+  return { start: expandedStart, end: expandedEnd };
+}
 
 function App() {
   const [mode, setMode] = useState<ViewMode>(ViewMode.DIFF);
@@ -101,15 +128,6 @@ function App() {
   // Text to Speech
   const [isSpeaking, setIsSpeaking] = useState(false);
   const previewTextareaRef = useRef<MultiSelectTextAreaRef>(null);
-
-  // Multi-Selection for AI operations on selected ranges
-  const {
-    ranges: selectionRanges,
-    addRange: addSelectionRange,
-    clearRanges: clearSelectionRanges,
-    applyResults: applySelectionResults,
-    hasSelection,
-  } = useMultiSelection({ text: previewText });
 
   // AI Prompts CRUD
   const {
@@ -710,24 +728,27 @@ function App() {
     abortControllerRef.current = null;
   };
 
-  // Handle AI polish on selected text ranges (supports multi-selection)
+  // Handle AI polish on selected text (uses native textarea selection)
   const handlePolishSelection = async (polishMode: PolishMode) => {
-    // Check if there are any selections
-    if (selectionRanges.length === 0) {
-      // Fallback: check for native textarea selection
-      const textarea = previewTextareaRef.current?.getTextarea();
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        if (start !== end) {
-          // Add this native selection to our ranges system then process
-          addSelectionRange(start, end, false, previewText);
-        }
+    // Get native textarea selection
+    const textarea = previewTextareaRef.current?.getTextarea();
+    let start = 0;
+    let end = previewText.length;
+    let selectedText = previewText;
+
+    if (textarea) {
+      const selStart = textarea.selectionStart;
+      const selEnd = textarea.selectionEnd;
+      if (selStart !== selEnd) {
+        // Auto-expand to word boundaries for careless selections
+        const expanded = expandToWordBoundaries(selStart, selEnd, previewText);
+        start = expanded.start;
+        end = expanded.end;
+        selectedText = previewText.substring(start, end);
       }
     }
 
-    // Re-check after potential native selection capture
-    if (selectionRanges.length === 0) {
+    if (!selectedText.trim()) {
       setErrorMessage('Please select some text first.');
       return;
     }
@@ -741,15 +762,9 @@ function App() {
     setIsPolishing(true);
     setErrorMessage(null);
 
-    // Build range inputs for the AI
-    const rangeInputs = selectionRanges.map(r => ({
-      id: r.id,
-      text: r.text,
-    }));
-
     const startTime = Date.now();
     const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRanges(
-      rangeInputs,
+      [{ id: 'selection', text: selectedText }],
       polishMode,
       selectedModel,
       abortControllerRef.current.signal
@@ -766,21 +781,27 @@ function App() {
     }
 
     updateCost(usage);
-    // Map polishMode to human-readable task name for selection-based polish
+    // Map polishMode to human-readable task name
     const taskName = polishMode === 'spelling' ? 'Spelling (Selection)'
       : polishMode === 'grammar' ? 'Grammar (Selection)'
         : polishMode === 'prompt' ? 'Prompt Expansion (Selection)'
           : 'Full Polish (Selection)';
     if (usage) logAIUsage(taskName, usage, durationMs);
 
-    // Apply results back to the text (processes in reverse order to maintain positions)
-    const newText = applySelectionResults(results, previewText);
-    setPreviewText(newText);
+    // Apply result back to the text at the selection position
+    if (results.length > 0) {
+      const result = results[0].result;
+      const newText = previewText.slice(0, start) + result + previewText.slice(end);
 
-    // Clear selections after applying (already done in applySelectionResults)
-    // Trigger a re-diff with the updated preview
-    setModifiedText(newText);
-    performDiff(originalText, newText);
+      // Store the original (pre-edit) text for diffing
+      setOriginalText(previewText);
+      setPreviewText(newText);
+      setModifiedText(newText);
+
+      // Run diff and switch to diff mode to show the changes
+      performDiff(previewText, newText);
+      setMode(ViewMode.DIFF);
+    }
 
     setIsPolishing(false);
     abortControllerRef.current = null;
@@ -836,34 +857,35 @@ function App() {
     // Close menu
     setIsPolishMenuOpen(false);
 
-    // Check for native textarea selection (capture it first)
+    // Check for native textarea selection
     const textarea = previewTextareaRef.current?.getTextarea();
+    let selStart = 0;
+    let selEnd = 0;
+    let selectedText = '';
+
     if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      if (start !== end && selectionRanges.length === 0) {
-        addSelectionRange(start, end, false, previewText);
+      const rawStart = textarea.selectionStart;
+      const rawEnd = textarea.selectionEnd;
+      if (rawStart !== rawEnd) {
+        // Auto-expand to word boundaries for careless selections
+        const expanded = expandToWordBoundaries(rawStart, rawEnd, previewText);
+        selStart = expanded.start;
+        selEnd = expanded.end;
+        selectedText = previewText.substring(selStart, selEnd);
       }
     }
 
-    // Check if there are any stored selection ranges
-    if (selectionRanges.length > 0) {
-      // Handle selection-based AI editing with the full prompt object
+    // If there's a selection, handle it with the prompt
+    if (selectedText.trim()) {
       cancelAIOperation();
       abortControllerRef.current = new AbortController();
       setIsPolishing(true);
       setErrorMessage(null);
 
-      // Build range inputs from selection ranges
-      const rangeInputs = selectionRanges.map(range => ({
-        id: range.id,
-        text: range.text,
-      }));
-
-      // Use the new prompt-based multi-range function
+      // Use the prompt-based function with single selection
       const startTime = Date.now();
       const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRangesWithPrompt(
-        rangeInputs,
+        [{ id: 'selection', text: selectedText }],
         prompt,
         selectedModel,
         abortControllerRef.current.signal
@@ -881,11 +903,20 @@ function App() {
       updateCost(usage);
       if (usage) logAIUsage(`${prompt.name} (Selection)`, usage, durationMs);
 
-      // Apply results back to the text
-      const newText = applySelectionResults(results, previewText);
-      setPreviewText(newText);
-      setModifiedText(newText);
-      performDiff(originalText, newText);
+      // Apply result back to the text at the selection position
+      if (results.length > 0) {
+        const result = results[0].result;
+        const newText = previewText.slice(0, selStart) + result + previewText.slice(selEnd);
+
+        // Store the original (pre-edit) text for diffing
+        setOriginalText(previewText);
+        setPreviewText(newText);
+        setModifiedText(newText);
+
+        // Run diff and switch to diff mode
+        performDiff(previewText, newText);
+        setMode(ViewMode.DIFF);
+      }
 
       setIsPolishing(false);
       abortControllerRef.current = null;
@@ -950,11 +981,6 @@ function App() {
     const end = textarea.selectionEnd;
     const selection = start !== end ? previewText.substring(start, end) : '';
 
-    // If there's a native selection, capture it into our multi-selection system
-    if (start !== end && selectionRanges.length === 0) {
-      addSelectionRange(start, end, false, previewText);
-    }
-
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -971,18 +997,13 @@ function App() {
 
     let textToSpeak = previewText;
 
-    // If there are multi-selections, speak those
-    if (selectionRanges.length > 0) {
-      textToSpeak = selectionRanges.map(r => r.text).join(' ');
-    } else {
-      // Check for native textarea selection
-      const textarea = previewTextareaRef.current?.getTextarea();
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        if (start !== end) {
-          textToSpeak = previewText.substring(start, end);
-        }
+    // Check for native textarea selection
+    const textarea = previewTextareaRef.current?.getTextarea();
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      if (start !== end) {
+        textToSpeak = previewText.substring(start, end);
       }
     }
 
@@ -1609,9 +1630,6 @@ function App() {
                     }
                     setPreviewText(newValue);
                   }}
-                  ranges={selectionRanges}
-                  onAddRange={(start, end, isAdditive) => addSelectionRange(start, end, isAdditive, previewText)}
-                  onClearRanges={clearSelectionRanges}
                   className={clsx(
                     "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 transition-colors outline-none overflow-y-auto",
                     fontClasses[fontFamily],
