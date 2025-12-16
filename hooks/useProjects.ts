@@ -12,11 +12,17 @@ export function useProjects() {
     const [repositoryPath, setRepositoryPath] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Load projects on mount
+    // Load projects and browser repository on mount
     useEffect(() => {
-        const loadProjects = async () => {
+        const loadProjectsAndRepo = async () => {
             setIsLoading(true);
             try {
+                // Check for persisted browser repository
+                const browserRepo = projectStorage.getBrowserRepository();
+                if (browserRepo) {
+                    setRepositoryPath(browserRepo.path);
+                }
+
                 const loaded = await projectStorage.getProjects();
                 setProjects(loaded);
             } catch (error) {
@@ -24,10 +30,10 @@ export function useProjects() {
             }
             setIsLoading(false);
         };
-        loadProjects();
+        loadProjectsAndRepo();
     }, []);
 
-    // Open a repository
+    // Open a repository (Electron) or load browser repo
     const openRepository = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -41,6 +47,15 @@ export function useProjects() {
             console.error('Failed to open repository:', error);
         }
         setIsLoading(false);
+    }, []);
+
+    // Create a browser-based repository (for web mode)
+    const createBrowserRepository = useCallback((name: string) => {
+        const repo = projectStorage.createBrowserRepository(name);
+        setRepositoryPath(repo.path);
+        setProjects([]); // Start fresh with new repo
+        setCurrentProject(null);
+        return repo;
     }, []);
 
     // Load a specific project
@@ -132,6 +147,7 @@ export function useProjects() {
         isLoading,
         repositoryPath,
         openRepository,
+        createBrowserRepository,
         loadProject,
         saveCurrentProject,
         createNewProject,

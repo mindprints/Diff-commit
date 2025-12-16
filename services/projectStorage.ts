@@ -1,6 +1,7 @@
 import { Project } from '../types';
 
 const STORAGE_KEY = 'diff-commit-projects';
+const REPO_STORAGE_KEY = 'diff-commit-repository';
 
 /**
  * Check if running in Electron with project APIs available.
@@ -11,13 +12,63 @@ function hasElectronProjectAPI(): boolean {
 }
 
 /**
+ * Browser repository storage for virtual repos in localStorage.
+ */
+interface BrowserRepository {
+    name: string;
+    path: string;
+    createdAt: number;
+}
+
+/**
+ * Create a browser-based virtual repository.
+ * Stores repo metadata in localStorage.
+ */
+export function createBrowserRepository(name: string): BrowserRepository {
+    const repo: BrowserRepository = {
+        name: name.trim() || 'My Repository',
+        path: name.trim() || 'My Repository', // Use name as path for browser mode
+        createdAt: Date.now(),
+    };
+    localStorage.setItem(REPO_STORAGE_KEY, JSON.stringify(repo));
+    return repo;
+}
+
+/**
+ * Get stored browser repository from localStorage.
+ */
+export function getBrowserRepository(): BrowserRepository | null {
+    try {
+        const stored = localStorage.getItem(REPO_STORAGE_KEY);
+        if (stored) {
+            return JSON.parse(stored) as BrowserRepository;
+        }
+    } catch (e) {
+        console.warn('Failed to parse browser repository:', e);
+    }
+    return null;
+}
+
+/**
  * Open a local repository (Folder).
  * Returns the path and list of projects found.
+ * In browser mode, returns the stored browser repository.
  */
 export async function openRepository(): Promise<{ path: string; projects: Project[] } | null> {
     if (hasElectronProjectAPI() && window.electron.openRepository) {
         return await window.electron.openRepository();
     }
+
+    // Browser fallback: return stored browser repository with local projects
+    const browserRepo = getBrowserRepository();
+    if (browserRepo) {
+        const projects = await getProjects();
+        return {
+            path: browserRepo.path,
+            projects: projects.filter(p => p.repositoryPath === browserRepo.path)
+        };
+    }
+
     return null;
 }
 

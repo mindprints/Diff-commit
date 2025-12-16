@@ -135,9 +135,35 @@ function App() {
     deleteProject: deleteProjectById,
     renameProject: renameProjectById,
     openRepository,
+    createBrowserRepository,
     repositoryPath
   } = useProjects();
   const [showProjectsPanel, setShowProjectsPanel] = useState(false);
+
+  // Browser repository handler - prompts for name in web mode
+  const handleOpenRepository = useCallback(() => {
+    if (window.electron) {
+      // Electron mode: use native folder picker
+      openRepository();
+      setShowProjectsPanel(true);
+    } else {
+      // Browser mode: prompt for repository name
+      const name = prompt('Enter repository name:', 'My Repository');
+      if (name) {
+        createBrowserRepository(name);
+        setShowProjectsPanel(true);
+      }
+    }
+  }, [openRepository, createBrowserRepository]);
+
+  const handleNewProject = useCallback(() => {
+    setShowProjectsPanel(true);
+    // ProjectsPanel will handle the create flow
+  }, []);
+
+  const handleSwitchProject = useCallback(() => {
+    setShowProjectsPanel(true);
+  }, []);
 
   // AI Request Cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1088,6 +1114,9 @@ function App() {
         onFactCheck={() => handleFactCheck()}
         onManagePrompts={() => setShowPromptsModal(true)}
         onManageProjects={() => setShowProjectsPanel(true)}
+        onOpenRepository={handleOpenRepository}
+        onNewProject={handleNewProject}
+        onSwitchProject={handleSwitchProject}
       />
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
