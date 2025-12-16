@@ -5,18 +5,29 @@ interface UseCommitHistoryOptions {
     getCommitText: () => string;
     onAfterCommit?: (committedText: string) => void;
     currentProjectPath?: string;
+    currentProjectName?: string;
+    // Browser file system callbacks (passed from parent that has the handle)
+    browserLoadCommits?: () => Promise<TextCommit[]>;
+    browserSaveCommits?: (commits: TextCommit[]) => Promise<boolean>;
 }
 
-export function useCommitHistory({ getCommitText, onAfterCommit, currentProjectPath }: UseCommitHistoryOptions) {
+export function useCommitHistory({
+    getCommitText,
+    onAfterCommit,
+    currentProjectPath,
+    currentProjectName,
+    browserLoadCommits,
+    browserSaveCommits
+}: UseCommitHistoryOptions) {
     const [commits, setCommits] = useState<TextCommit[]>([]);
     const [showCommitHistory, setShowCommitHistory] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load from Electron store, FS, or localStorage
+    // Load from Electron store, browser FS, or localStorage
     useEffect(() => {
         setIsLoaded(false); // Reset loaded state on path change
         const loadCommits = async () => {
-            // Priority 1: Project-specific file storage
+            // Priority 1: Project-specific file storage (Electron)
             if (currentProjectPath && window.electron?.loadProjectCommits) {
                 const projectCommits = await window.electron.loadProjectCommits(currentProjectPath);
                 setCommits(projectCommits || []);
@@ -24,14 +35,26 @@ export function useCommitHistory({ getCommitText, onAfterCommit, currentProjectP
                 return;
             }
 
-            // Priority 2: Global Electron Store (Legacy / Non-Project)
+            // Priority 2: Browser file system (via callback)
+            if (browserLoadCommits && currentProjectName) {
+                try {
+                    const projectCommits = await browserLoadCommits();
+                    setCommits(projectCommits || []);
+                    setIsLoaded(true);
+                    return;
+                } catch (e) {
+                    console.warn('Failed to load commits from browser FS:', e);
+                }
+            }
+
+            // Priority 3: Global Electron Store (Legacy / Non-Project)
             if (window.electron && window.electron.getVersions) {
                 const storedCommits = await window.electron.getVersions();
                 if (storedCommits && Array.isArray(storedCommits)) {
                     setCommits(storedCommits);
                 }
             } else {
-                // Priority 3: localStorage (Web)
+                // Priority 4: localStorage (Web fallback)
                 const stored = localStorage.getItem('diff-commit-commits');
                 if (stored) {
                     try {
@@ -44,39 +67,43 @@ export function useCommitHistory({ getCommitText, onAfterCommit, currentProjectP
             setIsLoaded(true);
         };
         loadCommits();
-    }, [currentProjectPath]);
+    }, [currentProjectPath, currentProjectName, browserLoadCommits]);
 
-    // Save to Electron store, FS, or localStorage
+    // Save to Electron store, browser FS, or localStorage
     useEffect(() => {
         if (!isLoaded) return; // Don't save if we haven't finished loading for the current context yet
 
         const saveCommits = async () => {
-            // Priority 1: Project-specific file storage
+            // Priority 1: Project-specific file storage (Electron)
             if (currentProjectPath && window.electron?.saveProjectCommits) {
                 await window.electron.saveProjectCommits(currentProjectPath, commits);
                 return;
             }
 
-            // Priority 2: Global Electron Store
+            // Priority 2: Browser file system (via callback)
+            if (browserSaveCommits && currentProjectName && commits.length > 0) {
+                try {
+                    await browserSaveCommits(commits);
+                    return;
+                } catch (e) {
+                    console.warn('Failed to save commits to browser FS:', e);
+                }
+            }
+
+            // Priority 3: Global Electron Store
             if (window.electron && window.electron.saveVersions) {
                 await window.electron.saveVersions(commits);
             } else {
-                // Priority 3: localStorage
+                // Priority 4: localStorage fallback
                 localStorage.setItem('diff-commit-commits', JSON.stringify(commits));
             }
         };
 
-        // Only save if we have commits (or if we want to clear empty state, but usually we just append)
-        // However, if we just switched projects, commits might be empty array. We shouldn't overwrite the new project's file with empty array immediately unless we mean to.
-        // But the load effect runs first.
-        // Let's add a precaution: only save if commits is not empty OR if we know we loaded successfully. 
-        // For simplicity, just saving whenever `commits` changes is standard, assuming load happened first.
-        // BUT: if we switch projects, `currentProjectPath` changes. `loadCommits` runs. `setCommits` updates. 
-        // Then this effect runs because `commits` changed. It saves new commits to new path. Correct.
+        // Only save if we have commits
         if (commits.length > 0) {
             saveCommits();
         }
-    }, [commits, currentProjectPath, isLoaded]);
+    }, [commits, currentProjectPath, currentProjectName, browserSaveCommits, isLoaded]);
 
     const handleCommit = useCallback(() => {
         const textToCommit = getCommitText();
@@ -107,12 +134,27 @@ export function useCommitHistory({ getCommitText, onAfterCommit, currentProjectP
 
     const handleClearAllCommits = useCallback(async () => {
         setCommits([]);
+
+        // Clear in project-specific file storage (Electron)
+        if (currentProjectPath && window.electron?.saveProjectCommits) {
+            await window.electron.saveProjectCommits(currentProjectPath, []);
+            return;
+        }
+
+        // Clear in browser file system
+        if (browserSaveCommits && currentProjectName) {
+            await browserSaveCommits([]);
+            return;
+        }
+
+        // Clear in global Electron store
         if (window.electron && window.electron.clearVersions) {
             await window.electron.clearVersions();
         } else {
+            // Clear in localStorage
             localStorage.removeItem('diff-commit-commits');
         }
-    }, []);
+    }, [currentProjectPath, currentProjectName, browserSaveCommits]);
 
     return {
         commits,

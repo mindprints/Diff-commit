@@ -30,7 +30,12 @@ Verify claims with real-time web search.
 *   **Commit History**: Save "snapshots" of your text as you work.
 *   **Restore**: Instantly revert to any previous committed version.
 *   **Diff Against History**: Compare your current draft against any past version.
-*   **Offline Storage**: All history and settings are saved locally on your machine.
+*   **Per-Project Storage**: Each project has its own independent commit history stored in `.commits/commits.json`.
+
+### 📁 Repository & Project Management
+*   **Repository-based Workflow**: Open a folder as a repository, each subfolder becomes a project.
+*   **Browser File System Access**: Full file system access in Chromium browsers via the File System Access API.
+*   **Project Isolation**: Each project maintains independent content and commit history.
 
 ### 🖱️ Advanced Selection (Ctrl+Drag)
 *   **Multi-Selection**: Hold `Ctrl` to select multiple, non-contiguous pieces of text.
@@ -42,37 +47,23 @@ Verify claims with real-time web search.
 
 ```text
 Diff-commit/
-├── .agent/                 # Agent workflows & syntax reference
-├── components/             # React UI Components
-│   ├── CommitHistoryModal  # Version control UI
-│   ├── DiffSegment         # The visual diff blocks
-│   ├── LogsModal           # AI usage & cost tracking
-│   ├── MultiSelectTextArea # Core editor with selection overlay
-│   ├── ProjectsPanel       # File/Project management
-│   ├── PromptsModal        # Prompt CRUD manager
-│   └── ...
-├── constants/
-│   ├── models.ts           # AI Model definitions & pricing
-│   └── prompts.ts          # Built-in prompt definitions
-├── electron/               # Electron Main Process
-│   ├── main.js             # Window management & IPC
-│   └── preload.js          # Secure bridge
-├── hooks/                  # Custom React Hooks
-│   ├── useDiffState.ts     # Core diffing logic
-│   ├── useElectronMenu.ts  # Native menu integration
-│   ├── useMultiSelection.ts# Discontinuous selection logic
-│   ├── usePrompts.ts       # Prompt management logic
-│   └── ...
+├── src/
+│   ├── main/                   # Electron Main Process
+│   │   └── index.ts            # Window management, IPC, native menus
+│   ├── preload/                # Electron Preload Scripts
+│   │   └── index.ts            # Secure bridge (contextBridge)
+│   └── renderer/               # React Frontend
+│       ├── components/         # UI Components
+│       ├── hooks/              # Custom React Hooks
+│       ├── services/           # API & Storage Services
+│       ├── constants/          # Models & Prompts
+│       ├── App.tsx             # Main Application
+│       └── index.html          # Entry HTML
 ├── public/
-│   └── dictionaries/       # Hunspell (.aff/.dic) files for local checking
-├── services/               # Logic & External APIs
-│   ├── ai.ts               # OpenRouter API Service
-│   ├── factChecker.ts      # Perplexity Fact-Check Service
-│   ├── spellChecker.ts     # Local Typo.js Service
-│   └── promptStorage.ts    # JSON-based persistence
-├── App.tsx                 # Main Application Layout
-├── types.ts                # TypeScript Interfaces
-└── README.md               # This file
+│   └── dictionaries/           # Hunspell (.aff/.dic) files
+├── electron.vite.config.ts     # Unified Vite config for Electron
+├── package.json
+└── README.md
 ```
 
 ---
@@ -97,20 +88,23 @@ Diff-commit/
     ```
 
 ### Running Locally
-*   **Web Mode** (Fastest for UI dev):
-    ```bash
-    npm run dev
-    ```
-*   **Desktop Mode** (Full feature set):
-    ```bash
-    npm run electron:dev
-    ```
 
-### Building for Production
-Create a Windows installer (`.exe`):
+The project uses **electron-vite** for a unified development experience:
+
 ```bash
-npm run electron:build:win
+# Start Electron app with hot reload (recommended)
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run start
+
+# Build Windows installer
+npm run build:win
 ```
+
 *Builds are output to the `release/` directory.*
 
 ---
@@ -121,4 +115,22 @@ To avoid confusion during development:
 *   **Preview (Right)**: The live, editable "Working Copy".
 *   **Commit**: Moving the state of "Preview" into history and making it the new "Original".
 *   **Diff Mode**: The primary view showing the comparison between Original and Preview.
-*   **Prompt**: A saved instruction set for the AI (e.g., "Grammar Fix"). can be **Local** (Typescript logic) or **AI** (LLM prompt).
+*   **Prompt**: A saved instruction set for the AI (e.g., "Grammar Fix"). Can be **Local** (TypeScript logic) or **AI** (LLM prompt).
+*   **Repository**: A folder containing multiple projects.
+*   **Project**: A subfolder within a repository, containing `draft.txt` and `.commits/`.
+
+---
+
+## 📝 Changelog (v1.2.3)
+
+### New Features
+*   **electron-vite Migration**: Unified development with single `npm run dev` command and HMR support.
+*   **Browser File System Access**: Real file system access in Chromium browsers for repository/project management.
+*   **Per-Project Commits**: Each project now maintains its own independent commit history.
+*   **Dynamic Version Display**: Version number now reads from `package.json` in both Electron and browser modes.
+
+### Improvements
+*   **Fixed Local Spell Checker**: Dictionary paths updated for electron-vite compatibility.
+*   **Project Switching**: Content properly resets when switching between projects.
+*   **Clear All Commits**: Now properly clears commits in browser file system mode.
+

@@ -19,14 +19,14 @@ export async function initSpellChecker(): Promise<void> {
     isInitializing = true;
     initPromise = (async () => {
         try {
-            // Load dictionary files from public/dictionaries
-            // These are created by the build process or copied manually
+            // Load dictionary files - use relative path for electron-vite
+            const basePath = import.meta.env.DEV ? '' : '.';
             const [affData, dicData] = await Promise.all([
-                fetch('/dictionaries/en_US.aff').then(r => {
+                fetch(`${basePath}/dictionaries/en_US.aff`).then(r => {
                     if (!r.ok) throw new Error(`Failed to load .aff: ${r.statusText}`);
                     return r.text();
                 }),
-                fetch('/dictionaries/en_US.dic').then(r => {
+                fetch(`${basePath}/dictionaries/en_US.dic`).then(r => {
                     if (!r.ok) throw new Error(`Failed to load .dic: ${r.statusText}`);
                     return r.text();
                 })

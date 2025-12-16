@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { ViewMode } from '../types';
+import { version } from '../../../package.json';
 
 interface MenuBarProps {
     mode: ViewMode;
@@ -226,7 +227,7 @@ export function MenuBar({
                 <MenuItem label="View AI Usage Logs" onClick={onShowLogs} />
                 <MenuItem label="Commit History" onClick={onShowCommitHistory} />
                 <MenuItem separator />
-                <MenuItem label="About" onClick={() => alert("Diff & Commit AI\nVersion 1.2.2 (Web Mode)")} />
+                <MenuItem label="About" onClick={() => alert(`Diff & Commit AI\nVersion ${version}`)} />
             </MenuButton>
         </div>
     );

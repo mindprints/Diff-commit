@@ -178,6 +178,31 @@ function App() {
     // Stay in DIFF mode - do NOT switch to INPUT mode
   }, [resetDiffState]);
 
+  // Memoize browser FS callbacks to prevent stale closures
+  const browserLoadCommits = useMemo(() => {
+    if (!currentProject?.name) return undefined;
+    return async () => {
+      const handle = getRepoHandle();
+      if (handle && currentProject.name) {
+        const { loadProjectCommits } = await import('./services/browserFileSystem');
+        return loadProjectCommits(handle, currentProject.name);
+      }
+      return [];
+    };
+  }, [currentProject?.name, getRepoHandle]);
+
+  const browserSaveCommits = useMemo(() => {
+    if (!currentProject?.name) return undefined;
+    return async (commits: any[]) => {
+      const handle = getRepoHandle();
+      if (handle && currentProject.name) {
+        const { saveProjectCommits } = await import('./services/browserFileSystem');
+        return saveProjectCommits(handle, currentProject.name, commits);
+      }
+      return false;
+    };
+  }, [currentProject?.name, getRepoHandle]);
+
   const {
     commits,
     setCommits,
@@ -189,7 +214,10 @@ function App() {
   } = useCommitHistory({
     getCommitText,
     onAfterCommit,
-    currentProjectPath: currentProject?.path
+    currentProjectPath: currentProject?.path,
+    currentProjectName: currentProject?.name,
+    browserLoadCommits,
+    browserSaveCommits,
   });
 
   // Context Menu for text selection
@@ -1114,10 +1142,7 @@ function App() {
       {/* Header */}
       <header className="flex-none h-16 border-b border-gray-200 dark:border-slate-800 px-6 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shadow-sm transition-colors duration-200">
         <div className="flex items-center gap-2">
-          <div className="bg-indigo-600 p-1.5 rounded-lg">
-            <ArrowRightLeft className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">Diff & Commit AI</h1>
+          <img src="./header_icon_styled.png" alt="Diff & Commit AI" className="h-8" />
           {repositoryPath && (
             <>
               <span className="text-gray-300 dark:text-slate-600">/</span>
@@ -1736,22 +1761,38 @@ function App() {
         onLoadProject={async (id) => {
           const project = await loadProject(id);
           if (project) {
-            let contentToLoad = project.content;
+            let contentToLoad = project.content || '';
 
             // If draft content is empty, try to load the latest commit
-            if ((!contentToLoad || !contentToLoad.trim()) && window.electron?.loadProjectCommits) {
-              try {
-                const commits = await window.electron.loadProjectCommits(project.path);
-                if (commits && commits.length > 0) {
-                  // Use the latest commit
-                  contentToLoad = commits[commits.length - 1].content;
+            if (!contentToLoad.trim()) {
+              // Try Electron first
+              if (window.electron?.loadProjectCommits && project.path) {
+                try {
+                  const commits = await window.electron.loadProjectCommits(project.path);
+                  if (commits && commits.length > 0) {
+                    contentToLoad = commits[commits.length - 1].content;
+                  }
+                } catch (e) {
+                  console.warn('Failed to load commits for initial content:', e);
                 }
-              } catch (e) {
-                console.warn('Failed to load commits for initial content:', e);
+              } else {
+                // Try browser file system
+                const handle = getRepoHandle();
+                if (handle && project.name) {
+                  try {
+                    const { loadProjectCommits } = await import('./services/browserFileSystem');
+                    const commits = await loadProjectCommits(handle, project.name);
+                    if (commits && commits.length > 0) {
+                      contentToLoad = commits[commits.length - 1].content;
+                    }
+                  } catch (e) {
+                    console.warn('Failed to load commits from browser FS:', e);
+                  }
+                }
               }
             }
 
-            // Load project content into the editor
+            // Load project content into the editor - always reset all panels
             setOriginalText(contentToLoad);
             setPreviewText(contentToLoad);
             setModifiedText('');
