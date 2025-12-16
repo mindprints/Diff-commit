@@ -21,6 +21,10 @@ dist
 dist-ssr
 build
 release
+out
+
+# Windows reserved names (can be created by some build tools)
+nul
 
 # Electron
 dist_electron

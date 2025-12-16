@@ -23,16 +23,16 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js')
+            preload: path.join(__dirname, '../preload/index.js')
         },
-        icon: path.join(__dirname, '../public/icon.png')
+        icon: path.join(__dirname, '../../public/icon.png')
     });
 
     if (isDev) {
-        mainWindow.loadURL('http://localhost:5173');
+        mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173');
         mainWindow.webContents.openDevTools();
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+        mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
     }
 }
 
