@@ -164,11 +164,19 @@ export function useAsyncAI({
 
             // Handle error
             if (isError) {
-                setPendingOperations(prev => {
-                    const next = new Map(prev);
+                setPendingOperations((prev: Map<string, PendingOperation>) => {
+                    const next = new Map<string, PendingOperation>(prev);
                     const op = next.get(opId);
                     if (op) {
-                        next.set(opId, { ...op, status: 'error', error: errorMessage });
+                        next.set(opId, {
+                            id: op.id,
+                            originalStart: op.originalStart,
+                            originalEnd: op.originalEnd,
+                            originalText: op.originalText,
+                            promptId: op.promptId,
+                            status: 'error' as const,
+                            error: errorMessage,
+                        });
                     }
                     return next;
                 });
@@ -191,11 +199,19 @@ export function useAsyncAI({
         } catch (err) {
             // Handle unexpected errors
             if ((err as Error).name !== 'AbortError') {
-                setPendingOperations(prev => {
-                    const next = new Map(prev);
+                setPendingOperations((prev: Map<string, PendingOperation>) => {
+                    const next = new Map<string, PendingOperation>(prev);
                     const op = next.get(opId);
                     if (op) {
-                        next.set(opId, { ...op, status: 'error', error: (err as Error).message });
+                        next.set(opId, {
+                            id: op.id,
+                            originalStart: op.originalStart,
+                            originalEnd: op.originalEnd,
+                            originalText: op.originalText,
+                            promptId: op.promptId,
+                            status: 'error' as const,
+                            error: (err as Error).message,
+                        });
                     }
                     return next;
                 });
@@ -245,7 +261,8 @@ export function useAsyncAI({
 
             // Mark this operation as completed
             const next = new Map(prev);
-            next.set(opId, { ...op, status: 'completed', result });
+            const completedOp: PendingOperation = { ...op, status: 'completed', result };
+            next.set(opId, completedOp);
 
             // Clean up completed operations after a delay
             setTimeout(() => {
