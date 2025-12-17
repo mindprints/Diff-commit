@@ -126,6 +126,9 @@ function App() {
   const [selectedModel, setSelectedModel] = useState<Model>(MODELS[0]);
   const [sessionCost, setSessionCost] = useState<number>(0);
 
+  // Background color customization (hue 0-360)
+  const [backgroundHue, setBackgroundHue] = useState<number>(220); // Default blue-ish
+
   const updateCost = (usage?: { inputTokens: number; outputTokens: number }) => {
     if (!usage) return;
     const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
@@ -1178,7 +1181,20 @@ function App() {
   }, [setCommits]);
 
   return (
-    <div className={clsx("flex flex-col h-full bg-white dark:bg-slate-900 transition-colors duration-200")}>
+    <div
+      className={clsx("flex flex-col h-full transition-colors duration-200")}
+      style={{
+        // CSS custom properties for dynamic theming based on hue slider
+        // Dark mode: 10% darker, Light mode: 20% darker for richer colors
+        '--bg-app': `hsl(${backgroundHue}, 30%, ${isDarkMode ? '5%' : '77%'})`,
+        '--bg-panel': `hsl(${backgroundHue}, 25%, ${isDarkMode ? '8%' : '80%'})`,
+        '--bg-header': `hsl(${backgroundHue}, 20%, ${isDarkMode ? '6%' : '82%'})`,
+        '--bg-surface': `hsl(${backgroundHue}, 15%, ${isDarkMode ? '10%' : '78%'})`,
+        '--bg-muted': `hsl(${backgroundHue}, 10%, ${isDarkMode ? '12%' : '75%'})`,
+        '--border-color': `hsl(${backgroundHue}, 15%, ${isDarkMode ? '18%' : '68%'})`,
+        backgroundColor: 'var(--bg-app)',
+      } as React.CSSProperties}
+    >
       <MenuBar
         mode={mode}
         onFileOpen={(content) => {
@@ -1214,7 +1230,10 @@ function App() {
       <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
 
       {/* Header */}
-      <header className="flex-none h-16 border-b border-gray-200 dark:border-slate-800 px-6 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shadow-sm transition-colors duration-200">
+      <header
+        className="flex-none h-16 px-6 flex items-center justify-between z-10 shadow-sm transition-colors duration-200"
+        style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
+      >
         <div className="flex items-center gap-2">
           <img src={headerIcon} alt="Logo" className="h-8" />
           {repositoryPath && (
@@ -1237,9 +1256,30 @@ function App() {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-3 mr-2">
-            {/* Model Selector & Cost */}
+            {/* Background Hue Slider + Model Selector & Cost */}
             <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-1 rounded-lg border border-gray-200 dark:border-slate-800">
-              <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-medium ml-2 mr-1 min-w-[3rem] text-right">
+              {/* Compact Hue Slider */}
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={backgroundHue}
+                onChange={(e) => setBackgroundHue(Number(e.target.value))}
+                className="w-16 h-4 cursor-pointer appearance-none rounded"
+                style={{
+                  background: `linear-gradient(to right, 
+                    hsl(0, 70%, ${isDarkMode ? '15%' : '95%'}),
+                    hsl(60, 70%, ${isDarkMode ? '15%' : '95%'}),
+                    hsl(120, 70%, ${isDarkMode ? '15%' : '95%'}),
+                    hsl(180, 70%, ${isDarkMode ? '15%' : '95%'}),
+                    hsl(240, 70%, ${isDarkMode ? '15%' : '95%'}),
+                    hsl(300, 70%, ${isDarkMode ? '15%' : '95%'}),
+                    hsl(360, 70%, ${isDarkMode ? '15%' : '95%'})
+                  )`
+                }}
+                title={`Background Hue: ${backgroundHue}°`}
+              />
+              <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-medium ml-1 mr-1 min-w-[3rem] text-right">
                 ${sessionCost.toFixed(4)}
               </span>
               <select
@@ -1449,10 +1489,13 @@ function App() {
         <div className="w-full h-full flex flex-row">
           {/* Preview/Editor Panel - NOW LEFT */}
           <div
-            className="flex flex-col h-full bg-white dark:bg-slate-900 relative z-0 transition-colors duration-200 overflow-hidden border-r border-gray-200 dark:border-slate-800"
-            style={{ width: `${leftPanelWidth}%` }}
+            className="flex flex-col h-full relative z-0 transition-colors duration-200 overflow-hidden"
+            style={{ width: `${leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)', borderRight: '1px solid var(--border-color)' }}
           >
-            <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 relative transition-colors duration-200">
+            <div
+              className="flex-none h-14 p-4 flex justify-between items-center relative transition-colors duration-200"
+              style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
+            >
               <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                 <Edit3 className="w-4 h-4" />
                 Editor
@@ -1604,8 +1647,8 @@ function App() {
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col bg-gray-50/50 dark:bg-slate-900/50 min-h-0 overflow-hidden">
-              <div className="flex-1 m-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden relative transition-colors duration-200">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
+              <div className="flex-1 m-4 rounded-xl shadow-sm overflow-hidden relative transition-colors duration-200" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
                 <MultiSelectTextArea
                   ref={previewTextareaRef}
                   value={previewText}
@@ -1638,7 +1681,7 @@ function App() {
               </div>
             </div>
 
-            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
+            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
               <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count">
                 <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
                 <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
@@ -1658,10 +1701,10 @@ function App() {
 
           {/* Interactive Diff Panel - NOW RIGHT */}
           <div
-            className="flex flex-col h-full overflow-hidden bg-gray-50/50 dark:bg-slate-900/50"
-            style={{ width: `${100 - leftPanelWidth}%` }}
+            className="flex flex-col h-full overflow-hidden"
+            style={{ width: `${100 - leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)' }}
           >
-            <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex justify-between items-center transition-colors duration-200">
+            <div className="flex-none h-14 p-4 flex justify-between items-center transition-colors duration-200" style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}>
               <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Diff View
@@ -1672,26 +1715,29 @@ function App() {
               </div>
             </div>
 
-            <div
-              ref={leftPaneRef}
-              onScroll={() => handleScrollSync('right')}
-              className={clsx(
-                "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200 whitespace-pre-wrap",
-                fontClasses[fontFamily],
-                sizeClasses[fontSize]
-              )}
-            >
-              {segments.length > 0 ? (
-                segments.map((seg) => (
-                  <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
-                ))
-              ) : (
-                // No segments - show originalText as plain text (after accept/commit)
-                <span className="text-gray-600 dark:text-slate-400">{originalText || 'Edit text in the left panel, then use AI Edit or Compare to see changes here.'}</span>
-              )}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
+              <div
+                ref={leftPaneRef}
+                onScroll={() => handleScrollSync('right')}
+                className={clsx(
+                  "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 m-4 rounded-xl shadow-sm transition-colors duration-200 whitespace-pre-wrap",
+                  fontClasses[fontFamily],
+                  sizeClasses[fontSize]
+                )}
+                style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}
+              >
+                {segments.length > 0 ? (
+                  segments.map((seg) => (
+                    <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
+                  ))
+                ) : (
+                  // No segments - show originalText as plain text (after accept/commit)
+                  <span className="text-gray-600 dark:text-slate-400">{originalText || 'Edit text in the left panel, then use AI Edit or Compare to see changes here.'}</span>
+                )}
+              </div>
             </div>
 
-            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
+            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-green-100 dark:bg-green-900/50 border border-green-500 dark:border-green-500/50 rounded-sm"></span>
                 <span>Added</span>

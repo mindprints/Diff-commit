@@ -121,6 +121,19 @@ To avoid confusion during development:
 
 ---
 
+## 📝 Changelog (v1.2.6)
+
+### New Features
+*   **Panel Layout Swap**: Editor now on left, Diff View on right for more intuitive workflow.
+*   **Background Hue Theming**: Compact slider in header to customize app color theme (0-360° hue).
+
+### Improvements  
+*   **Unified Theming**: CSS custom properties for consistent color theming across all UI areas.
+*   **Fixed Header Heights**: Both panel headers now have consistent fixed height.
+*   **Panel Background Consistency**: Both panels now use matching background structure.
+
+---
+
 ## 📝 Changelog (v1.2.5)
 
 ### Bug Fixes
