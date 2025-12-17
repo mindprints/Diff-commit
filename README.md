@@ -121,6 +121,19 @@ To avoid confusion during development:
 
 ---
 
+## 📝 Changelog (v1.2.5)
+
+### Bug Fixes
+*   **Fixed Cumulative Diffs**: Subsequent AI edits now correctly show diffs against the original baseline instead of resetting.
+*   **Fixed Electron Spellcheck**: Local spell checker now works in packaged Electron app (dictionary path resolution for `extraResources`).
+
+### Technical Improvements
+*   Added `originalTextRef` to prevent stale closure in `useAsyncAI` diff callback.
+*   Added `publicDir` to electron-vite config for static asset handling.
+*   Added dictionaries to `extraResources` and exposed `resourcesPath` in preload.
+
+---
+
 ## 📝 Changelog (v1.2.3)
 
 ### New Features

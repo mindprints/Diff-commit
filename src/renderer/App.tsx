@@ -1447,84 +1447,17 @@ function App() {
       {/* DIFF MODE - Now the only mode */}
       {mode === ViewMode.DIFF && (
         <div className="w-full h-full flex flex-row">
-          {/* Editor Panel (Resizable) */}
+          {/* Preview/Editor Panel - NOW LEFT */}
           <div
-            className="flex flex-col border-r border-gray-200 dark:border-slate-800 h-full overflow-hidden bg-gray-50/50 dark:bg-slate-900/50"
+            className="flex flex-col h-full bg-white dark:bg-slate-900 relative z-0 transition-colors duration-200 overflow-hidden border-r border-gray-200 dark:border-slate-800"
             style={{ width: `${leftPanelWidth}%` }}
-          >
-            <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex justify-between items-center transition-colors duration-200">
-              <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Interactive Diff
-              </h2>
-              <div className="flex gap-2 text-xs">
-                <button onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
-                <button onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
-              </div>
-            </div>
-
-            <div
-              ref={leftPaneRef}
-              onScroll={() => handleScrollSync('left')}
-              className={clsx(
-                "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200 whitespace-pre-wrap",
-                fontClasses[fontFamily],
-                sizeClasses[fontSize]
-              )}
-            >
-              {segments.length > 0 ? (
-                segments.map((seg) => (
-                  <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
-                ))
-              ) : (
-                // No segments - show originalText as plain text (after accept/commit)
-                <span className="text-gray-600 dark:text-slate-400">{originalText || 'Enter or paste text in the right panel, then use AI Edit or Compare to see differences here.'}</span>
-              )}
-            </div>
-
-            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-green-100 dark:bg-green-900/50 border border-green-500 dark:border-green-500/50 rounded-sm"></span>
-                <span>Added</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-red-100 dark:bg-red-900/50 border border-red-500 dark:border-red-500/50 rounded-sm"></span>
-                <span>Removed</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-500/50 border-dashed rounded-sm"></span>
-                <span>Restored</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Resizer Handle */}
-          <div
-            className="w-1 bg-gray-200 dark:bg-slate-800 hover:bg-indigo-400 dark:hover:bg-indigo-500 cursor-col-resize transition-colors active:bg-indigo-600 dark:active:bg-indigo-500 flex items-center justify-center z-20"
-            onMouseDown={startResizing}
-          >
-            <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300 dark:bg-slate-600"></div>
-          </div>
-
-          {/* Preview/Output Panel (Resizable) */}
-          <div
-            className="flex flex-col h-full bg-white dark:bg-slate-900 relative z-0 transition-colors duration-200 overflow-hidden"
-            style={{ width: `${100 - leftPanelWidth}%` }}
           >
             <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 relative transition-colors duration-200">
               <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                 <Edit3 className="w-4 h-4" />
-                Committed Preview
+                Editor
               </h2>
               <div className="flex gap-2">
-                <button
-                  onClick={copyRightToLeft}
-                  disabled={!previewText.trim()}
-                  className="px-2 py-1 text-sm bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800/50 transition disabled:opacity-30 flex items-center gap-1"
-                  title="Copy right panel content to left panel"
-                >
-                  <ArrowLeft className="w-3 h-3" />
-                </button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1568,7 +1501,7 @@ function App() {
                   )}
 
                   {isPolishMenuOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
+                    <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
                       {/* Built-in Prompts */}
                       <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">
                         Correction Level
@@ -1637,7 +1570,7 @@ function App() {
                   }}
                   size="sm"
                   icon={<RefreshCw className="w-3 h-3" />}
-                  title="Re-compare after editing the preview"
+                  title="Re-compare after editing"
                 >
                   Compare
                 </Button>
@@ -1698,21 +1631,80 @@ function App() {
                   fontClassName={fontClasses[fontFamily]}
                   sizeClassName={sizeClasses[fontSize]}
                   spellCheck={false}
-                  placeholder="Result will appear here. You can also edit this text directly."
+                  placeholder="Type or paste your text here. Use AI Edit to polish it."
                   onContextMenu={handleOpenContextMenu}
-                  onScroll={() => handleScrollSync('right')}
+                  onScroll={() => handleScrollSync('left')}
                 />
               </div>
             </div>
 
             <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
-              <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count (Dummy)">
+              <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count">
                 <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
                 <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
               </button>
             </div>
 
 
+          </div>
+
+          {/* Resizer Handle */}
+          <div
+            className="w-1 bg-gray-200 dark:bg-slate-800 hover:bg-indigo-400 dark:hover:bg-indigo-500 cursor-col-resize transition-colors active:bg-indigo-600 dark:active:bg-indigo-500 flex items-center justify-center z-20"
+            onMouseDown={startResizing}
+          >
+            <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300 dark:bg-slate-600"></div>
+          </div>
+
+          {/* Interactive Diff Panel - NOW RIGHT */}
+          <div
+            className="flex flex-col h-full overflow-hidden bg-gray-50/50 dark:bg-slate-900/50"
+            style={{ width: `${100 - leftPanelWidth}%` }}
+          >
+            <div className="flex-none p-4 border-b border-gray-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex justify-between items-center transition-colors duration-200">
+              <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Diff View
+              </h2>
+              <div className="flex gap-2 text-xs">
+                <button onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
+                <button onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
+              </div>
+            </div>
+
+            <div
+              ref={leftPaneRef}
+              onScroll={() => handleScrollSync('right')}
+              className={clsx(
+                "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 m-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 transition-colors duration-200 whitespace-pre-wrap",
+                fontClasses[fontFamily],
+                sizeClasses[fontSize]
+              )}
+            >
+              {segments.length > 0 ? (
+                segments.map((seg) => (
+                  <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
+                ))
+              ) : (
+                // No segments - show originalText as plain text (after accept/commit)
+                <span className="text-gray-600 dark:text-slate-400">{originalText || 'Edit text in the left panel, then use AI Edit or Compare to see changes here.'}</span>
+              )}
+            </div>
+
+            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex justify-center gap-4 transition-colors duration-200">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-green-100 dark:bg-green-900/50 border border-green-500 dark:border-green-500/50 rounded-sm"></span>
+                <span>Added</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-red-100 dark:bg-red-900/50 border border-red-500 dark:border-red-500/50 rounded-sm"></span>
+                <span>Removed</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-500/50 border-dashed rounded-sm"></span>
+                <span>Restored</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
