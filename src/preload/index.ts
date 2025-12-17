@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expose protected methods that allow the renderer process to use
 contextBridge.exposeInMainWorld('electron', {
     platform: process.platform,
+    resourcesPath: process.resourcesPath,
 
     // API Key management
     getApiKey: (provider) => ipcRenderer.invoke('get-api-key', provider),

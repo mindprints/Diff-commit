@@ -37,6 +37,10 @@
       {
         "from": "public/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "public/dictionaries",
+        "to": "dictionaries"
       }
     ]
   },

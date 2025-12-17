@@ -91,6 +91,12 @@ function App() {
   const [originalText, setOriginalText] = useState<string>('');
   const [modifiedText, setModifiedText] = useState<string>('');
 
+  // Ref to avoid stale closure in useAsyncAI callback
+  const originalTextRef = useRef(originalText);
+  useEffect(() => {
+    originalTextRef.current = originalText;
+  }, [originalText]);
+
   // Initialize spell checker
   useEffect(() => {
     initSpellChecker().catch(console.error);
@@ -283,9 +289,11 @@ function App() {
     onDiffUpdate: (prev, modified) => {
       // Establish baseline on first edit (if originalText is empty)
       // Otherwise keep the existing baseline for cumulative diffs
-      const baseline = originalText.trim() ? originalText : prev;
+      // Use ref to avoid stale closure - originalText from closure would be the initial empty value
+      const currentOriginalText = originalTextRef.current;
+      const baseline = currentOriginalText.trim() ? currentOriginalText : prev;
 
-      if (!originalText.trim()) {
+      if (!currentOriginalText.trim()) {
         setOriginalText(prev); // Set baseline for first edit
       }
       setModifiedText(modified);

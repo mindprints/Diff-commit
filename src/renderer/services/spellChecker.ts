@@ -12,9 +12,17 @@ let dictionary: Typo | null = null;
 let isInitializing = false;
 let initPromise: Promise<void> | null = null;
 
-// Dictionary paths - use relative path for Electron file:// protocol
-const AFF_PATH = './dictionaries/en_US.aff';
-const DIC_PATH = './dictionaries/en_US.dic';
+// Dictionary paths - handle both Electron (extraResources) and browser (relative path)
+function getDictionaryPath(filename: string): string {
+    // In packaged Electron, dictionaries are in resourcesPath/dictionaries/
+    // @ts-ignore - window.electron is defined via preload
+    if (typeof window !== 'undefined' && window.electron?.resourcesPath) {
+        // @ts-ignore
+        return `file://${window.electron.resourcesPath}/dictionaries/${filename}`;
+    }
+    // In dev or browser, use relative path
+    return `./dictionaries/${filename}`;
+}
 
 export async function initSpellChecker(): Promise<void> {
     if (dictionary) return;
@@ -24,11 +32,11 @@ export async function initSpellChecker(): Promise<void> {
     initPromise = (async () => {
         try {
             const [affData, dicData] = await Promise.all([
-                fetch(AFF_PATH).then(r => {
+                fetch(getDictionaryPath('en_US.aff')).then(r => {
                     if (!r.ok) throw new Error(`Failed to load .aff: ${r.statusText}`);
                     return r.text();
                 }),
-                fetch(DIC_PATH).then(r => {
+                fetch(getDictionaryPath('en_US.dic')).then(r => {
                     if (!r.ok) throw new Error(`Failed to load .dic: ${r.statusText}`);
                     return r.text();
                 })
