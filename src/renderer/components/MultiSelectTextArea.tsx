@@ -1,5 +1,6 @@
 import React, { useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import clsx from 'clsx';
+import { PendingOperation } from '../hooks/useAsyncAI';
 
 interface MultiSelectTextAreaProps {
     value: string;
@@ -11,7 +12,9 @@ interface MultiSelectTextAreaProps {
     sizeClassName?: string;
     readOnly?: boolean;
     onContextMenu?: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
+    onClick?: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
     onScroll?: () => void;
+    pendingOperations?: PendingOperation[];
 }
 
 export interface MultiSelectTextAreaRef {
@@ -20,8 +23,8 @@ export interface MultiSelectTextAreaRef {
 }
 
 /**
- * Simple textarea wrapper that exposes ref methods for getting native selection.
- * Provides consistent interface for AI text operations.
+ * Textarea wrapper that supports visual overlays for pending AI operations.
+ * Uses a mirrored backdrop to render highlights behind the text.
  */
 const MultiSelectTextArea = forwardRef<MultiSelectTextAreaRef, MultiSelectTextAreaProps>(
     function MultiSelectTextAreaInner(
@@ -35,11 +38,14 @@ const MultiSelectTextArea = forwardRef<MultiSelectTextAreaRef, MultiSelectTextAr
             sizeClassName,
             readOnly = false,
             onContextMenu,
-            onScroll
+            onClick,
+            onScroll,
+            pendingOperations = []
         },
         ref
     ) {
         const textareaRef = useRef<HTMLTextAreaElement>(null);
+        const backdropRef = useRef<HTMLDivElement>(null);
 
         // Expose methods to parent via ref
         useImperativeHandle(ref, () => ({
@@ -51,23 +57,110 @@ const MultiSelectTextArea = forwardRef<MultiSelectTextAreaRef, MultiSelectTextAr
             onChange(e.target.value);
         }, [onChange]);
 
+        const handleScroll = useCallback(() => {
+            if (textareaRef.current && backdropRef.current) {
+                backdropRef.current.scrollTop = textareaRef.current.scrollTop;
+                backdropRef.current.scrollLeft = textareaRef.current.scrollLeft;
+            }
+            if (onScroll) onScroll();
+        }, [onScroll]);
+
+        // Render the backdrop content with highlights
+        const renderBackdrop = () => {
+            if (pendingOperations.length === 0) return <span className="invisible">{value}</span>;
+
+            // Sort operations by start position to handle sequential rendering
+            const sortedOps = [...pendingOperations]
+                .filter(op => op.status === 'pending')
+                .sort((a, b) => a.originalStart - b.originalStart);
+
+            if (sortedOps.length === 0) return <span className="invisible">{value}</span>;
+
+            const elements: React.ReactNode[] = [];
+            let currentPos = 0;
+
+            sortedOps.forEach((op, index) => {
+                // Safely handle out of bounds or overlapping ranges
+                const start = Math.max(currentPos, Math.min(op.originalStart, value.length));
+                const end = Math.max(start, Math.min(op.originalEnd, value.length));
+
+                // Add text before the highlight
+                if (start > currentPos) {
+                    elements.push(
+                        <span key={`text-${index}`} className="invisible">
+                            {value.substring(currentPos, start)}
+                        </span>
+                    );
+                }
+
+                // Add the highlighted segment
+                // Text is invisible, but background is visible
+                if (end > start) {
+                    elements.push(
+                        <span
+                            key={`op-${op.id}`}
+                            className="bg-indigo-500/60 dark:bg-indigo-400/60 animate-pulse text-transparent rounded px-0.5 -mx-0.5"
+                        >
+                            {value.substring(start, end)}
+                        </span>
+                    );
+                }
+
+                currentPos = end;
+            });
+
+            // Add remaining text
+            if (currentPos < value.length) {
+                elements.push(
+                    <span key="text-end" className="invisible">
+                        {value.substring(currentPos)}
+                    </span>
+                );
+            }
+
+            // Add a zero-width space at the end to ensure trailing newlines are rendered
+            elements.push(<span key="zwsp" className="invisible">&#8203;</span>);
+
+            return elements;
+        };
+
         return (
-            <div className="relative flex-1 overflow-hidden h-full">
+            <div className="relative flex-1 overflow-hidden h-full isolate">
+                {/* Overlay for highlights (Front) */}
+                <div
+                    ref={backdropRef}
+                    className={clsx(
+                        "absolute inset-0 w-full h-full p-4 resize-none pointer-events-none whitespace-pre-wrap break-words overflow-hidden bg-transparent",
+                        fontClassName,
+                        sizeClassName,
+                        className,
+                        // Override standard textarea styling to ensure transparency
+                        "text-transparent select-none"
+                    )}
+                    style={{ zIndex: 20 }}
+                    aria-hidden="true"
+                >
+                    {renderBackdrop()}
+                </div>
+
+                {/* Actual Textarea (Back) */}
                 <textarea
                     ref={textareaRef}
                     value={value}
                     onChange={handleChange}
+                    onScroll={handleScroll}
                     className={clsx(
-                        "w-full h-full p-4 resize-none",
+                        "relative w-full h-full p-4 resize-none",
                         fontClassName,
                         sizeClassName,
                         className
                     )}
+                    style={{ zIndex: 10, backgroundColor: 'transparent' }}
                     placeholder={placeholder}
                     spellCheck={spellCheck}
                     readOnly={readOnly}
                     onContextMenu={onContextMenu}
-                    onScroll={onScroll}
+                    onClick={onClick}
                 />
             </div>
         );

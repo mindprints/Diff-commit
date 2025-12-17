@@ -1,0 +1,7 @@
+I've implemented the final fix for the visuals by switching the highlights to an overlay layer (z-index 20) that sits in front of the text. This guarantees they are visible.
+
+I've also removed the debug. loggs.
+
+Regarding the "AI Edit" button: It won't spin for these operations because we now support parallel processing. If we locked the button, you wouldn't be able to queue multiple edits! The pulsing overlay is the intended feedback for each individual operation.
+
+Please give it once last spinn with Ctrl+Enter. Phase 1 should now be sollid.

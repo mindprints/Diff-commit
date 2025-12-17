@@ -25,7 +25,10 @@ function createWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, '../preload/index.js')
         },
-        icon: path.join(__dirname, '../../public/icon.png')
+        // Icon path: try resources path for production, or relative for dev
+        icon: isDev
+            ? path.join(__dirname, '../../public/icon.png')
+            : path.join(process.resourcesPath, 'icon.png') // Common place for extraResources
     });
 
     if (isDev) {
@@ -247,13 +250,13 @@ function createMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'About Diff & Commit AI',
+                    label: 'About',
                     click: () => {
                         dialog.showMessageBox(mainWindow, {
                             type: 'info',
-                            title: 'About Diff & Commit AI',
+                            title: 'About',
                             message: 'Diff & Commit AI',
-                            detail: 'A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.\n\nVersion 1.2.1'
+                            detail: `A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.\n\nVersion ${app.getVersion()}`
                         });
                     }
                 }

@@ -12,6 +12,10 @@ let dictionary: Typo | null = null;
 let isInitializing = false;
 let initPromise: Promise<void> | null = null;
 
+// Dictionary paths - use relative path for Electron file:// protocol
+const AFF_PATH = './dictionaries/en_US.aff';
+const DIC_PATH = './dictionaries/en_US.dic';
+
 export async function initSpellChecker(): Promise<void> {
     if (dictionary) return;
     if (isInitializing) return initPromise!;
@@ -19,14 +23,12 @@ export async function initSpellChecker(): Promise<void> {
     isInitializing = true;
     initPromise = (async () => {
         try {
-            // Load dictionary files - use relative path for electron-vite
-            const basePath = import.meta.env.DEV ? '' : '.';
             const [affData, dicData] = await Promise.all([
-                fetch(`${basePath}/dictionaries/en_US.aff`).then(r => {
+                fetch(AFF_PATH).then(r => {
                     if (!r.ok) throw new Error(`Failed to load .aff: ${r.statusText}`);
                     return r.text();
                 }),
-                fetch(`${basePath}/dictionaries/en_US.dic`).then(r => {
+                fetch(DIC_PATH).then(r => {
                     if (!r.ok) throw new Error(`Failed to load .dic: ${r.statusText}`);
                     return r.text();
                 })

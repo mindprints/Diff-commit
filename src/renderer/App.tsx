@@ -21,6 +21,7 @@ import { useScrollSync } from './hooks/useScrollSync';
 import { useElectronMenu } from './hooks/useElectronMenu';
 import { usePrompts } from './hooks/usePrompts';
 import { useProjects } from './hooks/useProjects';
+import { useAsyncAI, PendingOperation } from './hooks/useAsyncAI';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
 import { MenuBar } from './components/MenuBar';
 import { AILogEntry } from './types';
@@ -53,6 +54,7 @@ import {
   FolderOpen
 } from 'lucide-react';
 import clsx from 'clsx';
+import headerIcon from './header_icon_styled.png';
 
 type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
@@ -173,14 +175,155 @@ function App() {
     setShowProjectsPanel(true);
   }, []);
 
-  // AI Request Cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
-
   // Error Handling
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Rating & Logging
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
+
+  // Perform diff logic (moved up for access in useAsyncAI)
+  const performDiff = (source: string, target: string) => {
+    const diffResult = Diff.diffWords(source, target);
+
+    let uniqueIdCounter = 0;
+    let groupCounter = 0;
+
+    // First pass: create basic segments
+    const initialSegments: DiffSegment[] = diffResult.map(part => {
+      const id = `seg-${uniqueIdCounter++}`;
+      let type: 'added' | 'removed' | 'unchanged' = 'unchanged';
+      let isIncluded = true;
+
+      if (part.added) {
+        type = 'added';
+        isIncluded = true; // Default: Accept additions
+      }
+      if (part.removed) {
+        type = 'removed';
+        isIncluded = false; // Default: Accept deletions (exclude from output)
+      }
+
+      return {
+        id,
+        value: part.value,
+        type,
+        isIncluded
+      };
+    });
+
+    // Second pass: Group adjacent removed/added segments to treat them as replacements
+    for (let i = 0; i < initialSegments.length - 1; i++) {
+      const current = initialSegments[i];
+      const next = initialSegments[i + 1];
+
+      // Check for Removed -> Added pattern (Substitution)
+      if ((current.type === 'removed' && next.type === 'added') ||
+        (current.type === 'added' && next.type === 'removed')) {
+        const groupId = `group-${groupCounter++}`;
+        current.groupId = groupId;
+        next.groupId = groupId;
+        i++; // Skip next since it's paired
+      }
+    }
+
+    initializeHistory(initialSegments);
+  };
+
+  // Async Parallel AI Operations
+  // Note: Some callbacks defined after hook initialization will be used via closure
+  const {
+    pendingOperations,
+    startOperation,
+    cancelAllOperations: cancelAsyncOperations,
+    isPositionLocked,
+    hasPendingOperations,
+  } = useAsyncAI({
+    getText: () => previewText,
+    setText: setPreviewText,
+    getModel: () => selectedModel,
+    getPrompt: getPrompt,
+    onCostUpdate: (usage) => {
+      const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
+        (usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
+      setSessionCost(prev => prev + cost);
+    },
+    onLog: (taskName, usage, durationMs) => {
+      // Inline logging since logAIUsage is defined later
+      const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
+        (usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
+
+      const logEntry = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        modelId: selectedModel.id,
+        modelName: selectedModel.name,
+        taskType: taskName,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cost,
+        durationMs
+      };
+
+      if (window.electron && window.electron.logUsage) {
+        window.electron.logUsage(logEntry);
+      } else {
+        try {
+          const stored = localStorage.getItem('diff-commit-logs');
+          const logs: any[] = stored ? JSON.parse(stored) : [];
+          logs.push(logEntry);
+          if (logs.length > 1000) logs.shift();
+          localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+        } catch (e) {
+          console.warn('Failed to save log to localStorage:', e);
+        }
+      }
+      setActiveLogId(logEntry.id);
+    },
+    onError: setErrorMessage,
+    onDiffUpdate: (prev, modified) => {
+      // Establish baseline on first edit (if originalText is empty)
+      // Otherwise keep the existing baseline for cumulative diffs
+      const baseline = originalText.trim() ? originalText : prev;
+
+      if (!originalText.trim()) {
+        setOriginalText(prev); // Set baseline for first edit
+      }
+      setModifiedText(modified);
+      performDiff(baseline, modified);
+      setMode(ViewMode.DIFF);
+    },
+  });
+
+  // Quick-send handler for Ctrl+Enter shortcut
+  const handleQuickSend = useCallback((promptId: string = 'grammar') => {
+    const textarea = previewTextareaRef.current?.getTextarea();
+    if (!textarea) return;
+
+    const { start, end } = expandToWordBoundaries(
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      previewText
+    );
+
+    // Only start operation if there's a selection
+    if (start !== end) {
+      startOperation(start, end, promptId);
+    }
+  }, [previewText, startOperation]);
+
+  // Keyboard shortcut for quick send
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        handleQuickSend('grammar');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleQuickSend]);
+
+  // AI Request Cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Commit History (extracted to custom hook)
   const getCommitText = useCallback(() => {
@@ -440,52 +583,7 @@ function App() {
     };
   }, [handleResize, stopResizing]);
 
-  const performDiff = (source: string, target: string) => {
-    const diffResult = Diff.diffWords(source, target);
 
-    let uniqueIdCounter = 0;
-    let groupCounter = 0;
-
-    // First pass: create basic segments
-    const initialSegments: DiffSegment[] = diffResult.map(part => {
-      const id = `seg-${uniqueIdCounter++}`;
-      let type: 'added' | 'removed' | 'unchanged' = 'unchanged';
-      let isIncluded = true;
-
-      if (part.added) {
-        type = 'added';
-        isIncluded = true; // Default: Accept additions
-      }
-      if (part.removed) {
-        type = 'removed';
-        isIncluded = false; // Default: Accept deletions (exclude from output)
-      }
-
-      return {
-        id,
-        value: part.value,
-        type,
-        isIncluded
-      };
-    });
-
-    // Second pass: Group adjacent removed/added segments to treat them as replacements
-    for (let i = 0; i < initialSegments.length - 1; i++) {
-      const current = initialSegments[i];
-      const next = initialSegments[i + 1];
-
-      // Check for Removed -> Added pattern (Substitution)
-      if ((current.type === 'removed' && next.type === 'added') ||
-        (current.type === 'added' && next.type === 'removed')) {
-        const groupId = `group-${groupCounter++}`;
-        current.groupId = groupId;
-        next.groupId = groupId;
-        i++; // Skip next since it's paired
-      }
-    }
-
-    initializeHistory(initialSegments);
-  };
 
   const handleCompare = () => {
     if (!originalText || !modifiedText) return;
@@ -810,32 +908,69 @@ function App() {
   const handleLocalSpellCheck = async () => {
     setIsPolishMenuOpen(false);
 
-    // Get source text
-    const { sourceText, fromRightTab } = getSourceTextForAI();
+    // Get native textarea selection first to check if we should only spellcheck a range
+    const textarea = previewTextareaRef.current?.getTextarea();
+    let selStart = 0;
+    let selEnd = 0;
+    let selectedText = '';
+    let isSelectionMode = false;
 
-    if (!sourceText.trim()) {
-      setErrorMessage('Please enter some text first.');
-      return;
+    if (textarea) {
+      const rawStart = textarea.selectionStart;
+      const rawEnd = textarea.selectionEnd;
+      if (rawStart !== rawEnd) {
+        // Auto-expand to word boundaries
+        const expanded = expandToWordBoundaries(rawStart, rawEnd, previewText);
+        selStart = expanded.start;
+        selEnd = expanded.end;
+        selectedText = previewText.substring(selStart, selEnd);
+        isSelectionMode = true;
+      }
     }
 
     try {
-      await initSpellChecker();
-      const result = checkSpelling(sourceText);
+      await initSpellChecker(); // Ensure loaded
 
-      if (result.isError) {
-        setErrorMessage(result.errorMessage || 'Spell check failed');
-        return;
-      }
+      if (isSelectionMode && selectedText.trim()) {
+        const result = checkSpelling(selectedText);
 
-      if (fromRightTab) {
-        setOriginalText(sourceText);
+        if (result.isError) {
+          setErrorMessage(result.errorMessage || 'Spell check failed');
+          return;
+        }
+
+        // Apply result back to selection
+        const newText = previewText.slice(0, selStart) + result.text + previewText.slice(selEnd);
+
+        // setOriginalText(previewText); // Don't reset baseline - allow cumulative diffs
+        setPreviewText(newText);
+        setModifiedText(newText);
+
+        performDiff(originalText, newText); // Diff against original baseline
+        setMode(ViewMode.DIFF);
+
       } else {
-        setOriginalText(sourceText);
-      }
-      setModifiedText(result.text);
+        // No selection - check entire text (old logic)
+        const { sourceText, fromRightTab } = getSourceTextForAI();
+        if (!sourceText.trim()) {
+          setErrorMessage('Please enter some text first.');
+          return;
+        }
 
-      performDiff(sourceText, result.text);
-      setMode(ViewMode.DIFF);
+        const result = checkSpelling(sourceText);
+        if (result.isError) {
+          setErrorMessage(result.errorMessage || 'Spell check failed');
+          return;
+        }
+
+        setOriginalText(sourceText);
+        setModifiedText(result.text);
+        // Note: For full text, we might want to update previewText too if we are in INPUT mode?
+        // But handleCompare usually sets just orig/mod. 
+        // Let's stick to standard flow:
+        performDiff(sourceText, result.text);
+        setMode(ViewMode.DIFF);
+      }
 
     } catch (e) {
       console.error(e);
@@ -844,133 +979,43 @@ function App() {
   };
 
   // Smart AI Edit handler - routes to selection-based or full-text editing
-  // Now accepts prompt ID (string) and looks up full prompt object
+  // Now delegates to useAsyncAI for unified handling and visual feedback (pulsing overlay)
   const handleAIEdit = async (promptId: string) => {
     // Special case: use local spell checker for spelling
     if (promptId === 'spelling_local') {
       return handleLocalSpellCheck();
     }
 
-    // Look up the full prompt object
-    const prompt = getPrompt(promptId);
-
-    // Close menu
     setIsPolishMenuOpen(false);
 
     // Check for native textarea selection
     const textarea = previewTextareaRef.current?.getTextarea();
-    let selStart = 0;
-    let selEnd = 0;
-    let selectedText = '';
+    let start = 0;
+    let end = 0;
+    let hasSelection = false;
 
     if (textarea) {
-      const rawStart = textarea.selectionStart;
-      const rawEnd = textarea.selectionEnd;
-      if (rawStart !== rawEnd) {
+      const { selectionStart, selectionEnd } = textarea;
+      if (selectionStart !== selectionEnd) {
         // Auto-expand to word boundaries for careless selections
-        const expanded = expandToWordBoundaries(rawStart, rawEnd, previewText);
-        selStart = expanded.start;
-        selEnd = expanded.end;
-        selectedText = previewText.substring(selStart, selEnd);
+        const expanded = expandToWordBoundaries(selectionStart, selectionEnd, previewText);
+        start = expanded.start;
+        end = expanded.end;
+        hasSelection = true;
       }
     }
 
-    // If there's a selection, handle it with the prompt
-    if (selectedText.trim()) {
-      cancelAIOperation();
-      abortControllerRef.current = new AbortController();
-      setIsPolishing(true);
-      setErrorMessage(null);
-
-      // Use the prompt-based function with single selection
-      const startTime = Date.now();
-      const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRangesWithPrompt(
-        [{ id: 'selection', text: selectedText }],
-        prompt,
-        selectedModel,
-        abortControllerRef.current.signal
-      );
-      const durationMs = Date.now() - startTime;
-
-      if (isCancelled) return;
-
-      if (isError) {
-        setErrorMessage(aiError || 'AI polish failed.');
-        setIsPolishing(false);
+    // Trigger async operation (this handles overlay, progress, error, and diff updates automatically)
+    // If no selection, we polish the entire text
+    if (hasSelection) {
+      startOperation(start, end, promptId);
+    } else {
+      if (!previewText.trim()) {
+        setErrorMessage('Please enter some text first.');
         return;
       }
-
-      updateCost(usage);
-      if (usage) logAIUsage(`${prompt.name} (Selection)`, usage, durationMs);
-
-      // Apply result back to the text at the selection position
-      if (results.length > 0) {
-        const result = results[0].result;
-        const newText = previewText.slice(0, selStart) + result + previewText.slice(selEnd);
-
-        // Store the original (pre-edit) text for diffing
-        setOriginalText(previewText);
-        setPreviewText(newText);
-        setModifiedText(newText);
-
-        // Run diff and switch to diff mode
-        performDiff(previewText, newText);
-        setMode(ViewMode.DIFF);
-      }
-
-      setIsPolishing(false);
-      abortControllerRef.current = null;
-
-      return;
+      startOperation(0, previewText.length, promptId);
     }
-
-    // No selections - run full-text polish with the prompt object
-    cancelAIOperation();
-
-    const { sourceText, fromRightTab } = getSourceTextForAI();
-
-    if (!sourceText.trim()) {
-      setErrorMessage('Please enter some text first.');
-      return;
-    }
-
-    abortControllerRef.current = new AbortController();
-    setIsPolishing(true);
-    setErrorMessage(null);
-
-    // Use polishWithPrompt with the full prompt object
-    const startTime = Date.now();
-    const { text: polished, usage, isError, isCancelled } = await polishWithPrompt(
-      sourceText,
-      prompt,
-      selectedModel,
-      abortControllerRef.current.signal
-    );
-    const durationMs = Date.now() - startTime;
-
-    if (isCancelled) return;
-
-    if (isError) {
-      setErrorMessage(polished);
-      setIsPolishing(false);
-      return;
-    }
-
-    updateCost(usage);
-    if (usage) logAIUsage(prompt.name, usage, durationMs);
-
-    if (fromRightTab) {
-      setOriginalText(sourceText);
-    } else {
-      setOriginalText(sourceText);
-    }
-    setModifiedText(polished);
-
-    performDiff(sourceText, polished);
-    setMode(ViewMode.DIFF);
-
-    setIsPolishing(false);
-    abortControllerRef.current = null;
   };
 
   // Open context menu on right-click
@@ -1163,7 +1208,7 @@ function App() {
       {/* Header */}
       <header className="flex-none h-16 border-b border-gray-200 dark:border-slate-800 px-6 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shadow-sm transition-colors duration-200">
         <div className="flex items-center gap-2">
-          <img src="./header_icon_styled.png" alt="Diff & Commit AI" className="h-8" />
+          <img src={headerIcon} alt="Logo" className="h-8" />
           {repositoryPath && (
             <>
               <span className="text-gray-300 dark:text-slate-600">/</span>
@@ -1623,12 +1668,19 @@ function App() {
                 <MultiSelectTextArea
                   ref={previewTextareaRef}
                   value={previewText}
+                  pendingOperations={pendingOperations}
                   onChange={(newValue) => {
                     if (isSpeaking) {
                       window.speechSynthesis.cancel();
                       setIsSpeaking(false);
                     }
                     setPreviewText(newValue);
+                  }}
+                  onClick={(e) => {
+                    if (e.ctrlKey) {
+                      e.preventDefault();
+                      handleQuickSend('grammar');
+                    }
                   }}
                   className={clsx(
                     "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 transition-colors outline-none overflow-y-auto",

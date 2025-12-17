@@ -93,14 +93,14 @@ export const polishWithPrompt = async (
     model: Model,
     signal?: AbortSignal
 ): Promise<AIResponse> => {
-    const userContent = `
-            ${prompt.promptTask}
-            
-            Text:
-            "${text.substring(0, 5000)}"
+    const userContent = `Task: ${prompt.promptTask}
 
-            Return your response in valid JSON format with a single key 'polishedText'.
-    `;
+Text to Process:
+"""
+${text.substring(0, 5000)}
+"""
+
+Instruction: Return your response in valid JSON format with a single key 'polishedText'.`;
 
     const response = await callOpenRouter(model, [
         { role: "system", content: prompt.systemInstruction },

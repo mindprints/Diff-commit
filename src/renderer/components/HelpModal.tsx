@@ -14,7 +14,7 @@ export const HelpModal: React.FC<Props> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200 dark:border-slate-700">
         <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-slate-800">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">How to use Diff & Commit</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">How to use</h3>
           <button
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"

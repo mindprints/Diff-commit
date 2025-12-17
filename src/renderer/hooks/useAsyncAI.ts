@@ -248,9 +248,20 @@ export function useAsyncAI({
                 }
             });
 
-            // Get current text and apply the change
+            // Get current text
             const currentText = getText();
-            const newText = currentText.slice(0, adjustedStart) + result + currentText.slice(adjustedEnd);
+
+            // Preserve trailing newline consistency
+            const originalSlice = currentText.slice(adjustedStart, adjustedEnd);
+            let finalResult = result;
+            if (originalSlice.endsWith('\n') && !finalResult.endsWith('\n')) {
+                finalResult += '\n';
+            } else if (originalSlice.endsWith('\r') && !finalResult.endsWith('\r')) {
+                finalResult += '\r'; // Unlikely single CR, but safely handle
+            }
+
+            // Apply the change
+            const newText = currentText.slice(0, adjustedStart) + finalResult + currentText.slice(adjustedEnd);
 
             // Update the text
             setText(newText);
