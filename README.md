@@ -24,7 +24,8 @@ Verify claims with real-time web search.
 *   **Visual Diff**: Green (Added) / Red (Removed) highlighting.
 *   **Smart Toggles**: Click any change to Accept or Reject it instantly.
 *   **Linked Segments**: Intelligent handling of replacements (swapping words toggles both the removal and addition).
-*   **Committed Preview**: The right-hand panel is always editable. Make manual tweaks, then hit **"Compare"** to see how they differ from the original.
+*   **Editor Panel**: The left-hand panel is always editable. Make manual tweaks, then hit **"Compare"** to see how they differ from the original.
+*   **Auto-Compare Toggle**: Enable real-time diff updates while editing (⚡ icon next to Compare button).
 
 ### 💾 Git-Style Commit System
 *   **Commit History**: Save "snapshots" of your text as you work.
@@ -36,6 +37,7 @@ Verify claims with real-time web search.
 *   **Repository-based Workflow**: Open a folder as a repository, each subfolder becomes a project.
 *   **Browser File System Access**: Full file system access in Chromium browsers via the File System Access API.
 *   **Project Isolation**: Each project maintains independent content and commit history.
+*   **HTML Import**: Import HTML documents—automatically converted to Markdown using Turndown.
 
 ### 🖱️ Advanced Selection (Ctrl+Drag)
 *   **Multi-Selection**: Hold `Ctrl` to select multiple, non-contiguous pieces of text.
@@ -111,13 +113,30 @@ npm run build:win
 
 ## 🛠️ Terminology
 To avoid confusion during development:
-*   **Original (Left)**: The immutable baseline text you are comparing against.
-*   **Preview (Right)**: The live, editable "Working Copy".
-*   **Commit**: Moving the state of "Preview" into history and making it the new "Original".
-*   **Diff Mode**: The primary view showing the comparison between Original and Preview.
+*   **Editor (Left)**: The editable "Working Copy" where you type and edit.
+*   **Diff View (Right)**: Shows the comparison between Original and your edits, with accept/reject toggles.
+*   **Original**: The immutable baseline text you are comparing against.
+*   **Commit**: Saving the current state to history and making it the new baseline.
+*   **Diff Mode**: The primary view showing the comparison between Original and your edits.
 *   **Prompt**: A saved instruction set for the AI (e.g., "Grammar Fix"). Can be **Local** (TypeScript logic) or **AI** (LLM prompt).
 *   **Repository**: A folder containing multiple projects.
 *   **Project**: A subfolder within a repository, containing `draft.txt` and `.commits/`.
+
+---
+
+## 📝 Changelog (v1.2.7)
+
+### New Features
+*   **HTML Import**: Import HTML files—automatically converted to Markdown using Turndown (preserves headings, lists, links, emphasis).
+*   **Auto-Compare Toggle**: Enable real-time diff updates while editing (⚡ icon). Debounced to 500ms to avoid excessive updates.
+*   **Header Fallback Text**: Shows "No Repo" and "Unsaved Project" when no repository/project is selected.
+
+### Bug Fixes
+*   **Fixed Scroll Sync**: Scroll synchronization now works correctly after panel layout swap.
+*   **Fixed Compare Button**: Compare button now properly shows diffs after manual edits.
+
+### Code Cleanup
+*   Removed orphaned comments referencing old panel layout terminology.
 
 ---
 
