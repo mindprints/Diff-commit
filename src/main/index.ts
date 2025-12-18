@@ -94,13 +94,34 @@ function createMenu() {
                         const result = await dialog.showOpenDialog(mainWindow, {
                             properties: ['openFile'],
                             filters: [
-                                { name: 'Supported Files', extensions: ['txt', 'md', 'json'] },
+                                { name: 'Supported Files', extensions: ['txt', 'md', 'html', 'htm', 'json'] },
+                                { name: 'HTML Files', extensions: ['html', 'htm'] },
+                                { name: 'Text Files', extensions: ['txt', 'md'] },
                                 { name: 'All Files', extensions: ['*'] }
                             ]
                         });
                         if (!result.canceled && result.filePaths.length > 0) {
-                            const content = fs.readFileSync(result.filePaths[0], 'utf-8');
-                            sendToRenderer('file-opened', content, result.filePaths[0]);
+                            const filePath = result.filePaths[0];
+                            let content = fs.readFileSync(filePath, 'utf-8');
+
+                            // Convert HTML to Markdown if needed
+                            const ext = path.extname(filePath).toLowerCase();
+                            if (ext === '.html' || ext === '.htm') {
+                                try {
+                                    const TurndownService = require('turndown');
+                                    const turndown = new TurndownService({
+                                        headingStyle: 'atx',
+                                        codeBlockStyle: 'fenced',
+                                        bulletListMarker: '-'
+                                    });
+                                    content = turndown.turndown(content);
+                                } catch (e) {
+                                    console.error('Failed to convert HTML to Markdown:', e);
+                                    // Fall back to raw content if conversion fails
+                                }
+                            }
+
+                            sendToRenderer('file-opened', content, filePath);
                         }
                     }
                 },

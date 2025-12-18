@@ -51,7 +51,8 @@ import {
   Link2,
   Settings,
   ArrowLeft,
-  FolderOpen
+  FolderOpen,
+  Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import headerIcon from './header_icon_styled.png';
@@ -112,6 +113,8 @@ function App() {
   } = useDiffState();
 
   const [previewText, setPreviewText] = useState<string>('');
+  // Flag to skip segments->previewText sync after Compare click
+  const skipNextSegmentsSync = useRef(false);
   const [isPolishing, setIsPolishing] = useState(false);
   const [isFactChecking, setIsFactChecking] = useState(false);
   const [factCheckProgress, setFactCheckProgress] = useState<string>('');
@@ -121,6 +124,9 @@ function App() {
   const [showLogs, setShowLogs] = useState(false);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Auto-compare toggle (for real-time diff updates while editing)
+  const [isAutoCompareEnabled, setIsAutoCompareEnabled] = useState(false);
 
   // Model & Cost Management
   const [selectedModel, setSelectedModel] = useState<Model>(MODELS[0]);
@@ -342,12 +348,11 @@ function App() {
   }, [mode, previewText, originalText]);
 
   const onAfterCommit = useCallback((committedText: string) => {
-    // After commit: both panes should have matching content, stay in DIFF mode
+    // After commit: both panes should have matching content
     setOriginalText(committedText);
     setPreviewText(committedText);
     setModifiedText('');
     resetDiffState();
-    // Stay in DIFF mode - do NOT switch to INPUT mode
   }, [resetDiffState]);
 
   // Memoize browser FS callbacks to prevent stale closures
@@ -442,12 +447,11 @@ function App() {
 
   // Commit handlers that need access to other state (kept in App)
   const handleRestoreCommit = (commit: TextCommit) => {
-    // Restore to both panels with identical content, stay in DIFF mode
+    // Restore to both panels with identical content
     setOriginalText(commit.content);
     setPreviewText(commit.content);
     setModifiedText('');
     resetDiffState();
-    // Stay in DIFF mode - do NOT switch to INPUT mode
   };
 
   const handleCompareCommit = (commit: TextCommit) => {
@@ -483,8 +487,15 @@ function App() {
 
   // When segments change, update preview text (but only if we have segments)
   // If segments is empty, don't overwrite previewText - it may have been set directly
+  // Also skip if we just ran Compare (to preserve user's edits in the editor)
   useEffect(() => {
     if (segments.length === 0) return; // Don't clear previewText when segments are empty
+
+    // Skip sync if flagged (e.g., after Compare button click)
+    if (skipNextSegmentsSync.current) {
+      skipNextSegmentsSync.current = false;
+      return;
+    }
 
     const computedText = segments
       .filter(s => s.isIncluded)
@@ -493,6 +504,21 @@ function App() {
 
     setPreviewText(computedText);
   }, [segments]);
+
+  // Auto-compare effect: debounced real-time diff updates when enabled
+  useEffect(() => {
+    if (!isAutoCompareEnabled) return;
+    // Don't auto-compare if no baseline or texts are identical
+    if (!originalText.trim() || originalText === previewText) return;
+
+    const timer = setTimeout(() => {
+      skipNextSegmentsSync.current = true;
+      setModifiedText(previewText);
+      performDiff(originalText, previewText);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [previewText, isAutoCompareEnabled, originalText]);
 
   // Auto-compare when both panes have content
   // Using a ref to track if we've already triggered to prevent re-triggering on every keystroke
@@ -530,12 +556,11 @@ function App() {
     originalText,
     commits,
     onFileOpened: (content) => {
-      // Set content in both panels, stay in DIFF mode
+      // Load content into both panels
       setOriginalText(content);
       setPreviewText(content);
       setModifiedText('');
       resetDiffState();
-      // Stay in DIFF mode - do NOT switch to INPUT mode
     },
     getSaveText: () => mode === ViewMode.DIFF ? previewText : originalText,
     onClearAll: () => {
@@ -543,7 +568,6 @@ function App() {
       setModifiedText('');
       setPreviewText('');
       resetDiffState();
-      // Stay in DIFF mode - just clear the text
     },
     onCommitsImported: (importedCommits) => {
       setCommits(prev => [...prev, ...importedCommits]);
@@ -659,22 +683,19 @@ function App() {
 
 
   // Helper to get the source text for AI operations
-  // Handles both diff mode (uses previewText) and input mode (uses available tab text)
   const getSourceTextForAI = (): { sourceText: string; fromRightTab: boolean } => {
-    // In DIFF mode with previewText, use it
+    // Use previewText if available (the editor content)
     if (previewText.trim()) {
       return { sourceText: previewText, fromRightTab: true };
     }
 
-    // Check originalText (left panel) and modifiedText (right panel in input)
+    // Fallback to originalText or modifiedText
     const hasLeft = originalText.trim().length > 0;
     const hasRight = modifiedText.trim().length > 0;
 
     if (hasRight && !hasLeft) {
-      // Only right tab has text - will need to move it to left
       return { sourceText: modifiedText, fromRightTab: true };
     } else if (hasLeft) {
-      // Left tab has text (or both have text - prefer left as source)
       return { sourceText: originalText, fromRightTab: false };
     } else if (hasRight) {
       return { sourceText: modifiedText, fromRightTab: true };
@@ -728,12 +749,8 @@ function App() {
           : 'Full Polish';
     if (usage) logAIUsage(taskName, usage, durationMs);
 
-    // If text was in right tab only, move it to left first
-    if (fromRightTab) {
-      setOriginalText(sourceText);
-    } else {
-      setOriginalText(sourceText);
-    }
+    // Set baseline and run diff
+    setOriginalText(sourceText);
     setModifiedText(polished);
 
     // Run the diff immediately and switch to DIFF mode
@@ -1236,22 +1253,30 @@ function App() {
       >
         <div className="flex items-center gap-2">
           <img src={headerIcon} alt="Logo" className="h-8" />
-          {repositoryPath && (
-            <>
-              <span className="text-gray-300 dark:text-slate-600">/</span>
-              <span className="text-lg font-medium text-gray-700 dark:text-slate-300 truncate max-w-[150px]" title={repositoryPath}>
-                {repositoryPath.split(/[\\/]/).pop()}
-              </span>
-            </>
-          )}
-          {currentProject && (
-            <>
-              <span className="text-gray-300 dark:text-slate-600">/</span>
-              <span className="text-lg font-medium text-indigo-600 dark:text-indigo-400 truncate max-w-[200px]" title={currentProject.name}>
-                {currentProject.name}
-              </span>
-            </>
-          )}
+          <span className="text-gray-300 dark:text-slate-600">/</span>
+          <span
+            className={clsx(
+              "text-lg font-medium truncate max-w-[150px]",
+              repositoryPath
+                ? "text-gray-700 dark:text-slate-300"
+                : "text-gray-400 dark:text-slate-500 italic"
+            )}
+            title={repositoryPath || "No repository selected"}
+          >
+            {repositoryPath ? repositoryPath.split(/[\\/]/).pop() : "No Repo"}
+          </span>
+          <span className="text-gray-300 dark:text-slate-600">/</span>
+          <span
+            className={clsx(
+              "text-lg font-medium truncate max-w-[200px]",
+              currentProject
+                ? "text-indigo-600 dark:text-indigo-400"
+                : "text-gray-400 dark:text-slate-500 italic"
+            )}
+            title={currentProject?.name || "No project selected"}
+          >
+            {currentProject?.name || "Unsaved Project"}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -1608,15 +1633,32 @@ function App() {
                   variant="outline"
                   onClick={() => {
                     // Re-compare: use current previewText as the new modified text
+                    // Set flag to prevent the segments effect from overwriting previewText
+                    skipNextSegmentsSync.current = true;
                     setModifiedText(previewText);
                     performDiff(originalText, previewText);
                   }}
                   size="sm"
                   icon={<RefreshCw className="w-3 h-3" />}
                   title="Re-compare after editing"
+                  disabled={isAutoCompareEnabled}
+                  className={clsx(isAutoCompareEnabled && "opacity-50")}
                 >
                   Compare
                 </Button>
+
+                <button
+                  onClick={() => setIsAutoCompareEnabled(prev => !prev)}
+                  className={clsx(
+                    "p-1.5 rounded transition-all",
+                    isAutoCompareEnabled
+                      ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-700"
+                      : "text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+                  )}
+                  title={isAutoCompareEnabled ? "Auto-compare ON: Diffs update as you type" : "Auto-compare OFF: Click Compare to see changes"}
+                >
+                  <Zap className={clsx("w-4 h-4", isAutoCompareEnabled && "fill-current")} />
+                </button>
 
                 <Button
                   variant="primary"
@@ -1676,7 +1718,7 @@ function App() {
                   spellCheck={false}
                   placeholder="Type or paste your text here. Use AI Edit to polish it."
                   onContextMenu={handleOpenContextMenu}
-                  onScroll={() => handleScrollSync('left')}
+                  onScroll={() => handleScrollSync('right')}
                 />
               </div>
             </div>
@@ -1718,7 +1760,7 @@ function App() {
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
               <div
                 ref={leftPaneRef}
-                onScroll={() => handleScrollSync('right')}
+                onScroll={() => handleScrollSync('left')}
                 className={clsx(
                   "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 m-4 rounded-xl shadow-sm transition-colors duration-200 whitespace-pre-wrap",
                   fontClasses[fontFamily],
@@ -1731,8 +1773,8 @@ function App() {
                     <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
                   ))
                 ) : (
-                  // No segments - show originalText as plain text (after accept/commit)
-                  <span className="text-gray-600 dark:text-slate-400">{originalText || 'Edit text in the left panel, then use AI Edit or Compare to see changes here.'}</span>
+                  // No segments - show placeholder or originalText
+                  <span className="text-gray-600 dark:text-slate-400">{originalText || 'Edit text in the Editor, then use AI Edit or Compare to see changes here.'}</span>
                 )}
               </div>
             </div>
