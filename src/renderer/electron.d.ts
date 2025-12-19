@@ -54,7 +54,7 @@ export interface IElectronAPI {
     onMenuShowLogs: (callback: () => void) => void;
     onMenuShowVersions: (callback: () => void) => void;
     onMenuNewProject: (callback: () => void) => void;
-    onMenuSwitchProject: (callback: () => void) => void;
+    onMenuCreateRepository: (callback: () => void) => void;
     onMenuOpenRepository: (callback: () => void) => void;
 
     // Tools Menu Listeners

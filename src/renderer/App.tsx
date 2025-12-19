@@ -186,9 +186,10 @@ function App() {
     // ProjectsPanel will handle the create flow
   }, []);
 
-  const handleSwitchProject = useCallback(() => {
+  const handleCreateRepository = useCallback(async () => {
+    await openRepository(); // This already uses showDirectoryPicker with createDirectory option
     setShowProjectsPanel(true);
-  }, []);
+  }, [openRepository]);
 
   // Error Handling
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -584,7 +585,7 @@ function App() {
     onManagePrompts: () => setShowPromptsModal(true),
     onManageProjects: () => setShowProjectsPanel(true),
     onNewProject: () => setShowProjectsPanel(true),
-    onSwitchProject: () => setShowProjectsPanel(true),
+    onCreateRepository: () => { openRepository(); setShowProjectsPanel(true); },
     onOpenRepository: () => { openRepository(); setShowProjectsPanel(true); },
   });
 
@@ -1240,8 +1241,8 @@ function App() {
         onManagePrompts={() => setShowPromptsModal(true)}
         onManageProjects={() => setShowProjectsPanel(true)}
         onOpenRepository={handleOpenRepository}
+        onCreateRepository={handleCreateRepository}
         onNewProject={handleNewProject}
-        onSwitchProject={handleSwitchProject}
       />
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
@@ -1251,35 +1252,37 @@ function App() {
         className="flex-none h-16 px-6 flex items-center justify-between z-10 shadow-sm transition-colors duration-200"
         style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
       >
-        <div className="flex items-center gap-2">
+        <div id="header-breadcrumb" className="flex items-center gap-2">
           <img src={headerIcon} alt="Logo" className="h-8" />
           <span className="text-gray-300 dark:text-slate-600">/</span>
-          <span
+          <button
+            onClick={() => openRepository()}
             className={clsx(
-              "text-lg font-medium truncate max-w-[150px]",
+              "text-lg font-medium truncate max-w-[150px] hover:underline transition-colors",
               repositoryPath
-                ? "text-gray-700 dark:text-slate-300"
-                : "text-gray-400 dark:text-slate-500 italic"
+                ? "text-gray-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                : "text-gray-400 dark:text-slate-500 italic hover:text-indigo-500 dark:hover:text-indigo-400"
             )}
-            title={repositoryPath || "No repository selected"}
+            title={repositoryPath ? `${repositoryPath} (click to change)` : "Click to open a repository folder"}
           >
             {repositoryPath ? repositoryPath.split(/[\\/]/).pop() : "No Repo"}
-          </span>
+          </button>
           <span className="text-gray-300 dark:text-slate-600">/</span>
-          <span
+          <button
+            onClick={() => setShowProjectsPanel(true)}
             className={clsx(
-              "text-lg font-medium truncate max-w-[200px]",
+              "text-lg font-medium truncate max-w-[200px] hover:underline transition-colors",
               currentProject
-                ? "text-indigo-600 dark:text-indigo-400"
-                : "text-gray-400 dark:text-slate-500 italic"
+                ? "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                : "text-gray-400 dark:text-slate-500 italic hover:text-indigo-500 dark:hover:text-indigo-400"
             )}
-            title={currentProject?.name || "No project selected"}
+            title={currentProject?.name ? `${currentProject.name} (click to switch)` : "Click to create or select a project"}
           >
             {currentProject?.name || "Unsaved Project"}
-          </span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div id="header-controls" className="flex items-center gap-3">
           <div className="flex items-center gap-3 mr-2">
             {/* Background Hue Slider + Model Selector & Cost */}
             <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-1 rounded-lg border border-gray-200 dark:border-slate-800">
@@ -1518,6 +1521,7 @@ function App() {
             style={{ width: `${leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)', borderRight: '1px solid var(--border-color)' }}
           >
             <div
+              id="panel-editor-header"
               className="flex-none h-14 p-4 flex justify-between items-center relative transition-colors duration-200"
               style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
             >
@@ -1746,7 +1750,7 @@ function App() {
             className="flex flex-col h-full overflow-hidden"
             style={{ width: `${100 - leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)' }}
           >
-            <div className="flex-none h-14 p-4 flex justify-between items-center transition-colors duration-200" style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}>
+            <div id="panel-diff-header" className="flex-none h-14 p-4 flex justify-between items-center transition-colors duration-200" style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}>
               <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Diff View
@@ -1964,6 +1968,7 @@ function App() {
         onDeleteProject={deleteProjectById}
         onRenameProject={renameProjectById}
         onOpenRepository={openRepository}
+        onCreateRepository={openRepository}
         repositoryPath={repositoryPath}
         currentContent={previewText || originalText}
       />

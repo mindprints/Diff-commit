@@ -81,35 +81,50 @@ export async function openBrowserDirectory(): Promise<{
 }
 
 /**
- * Scan directory for project folders.
- * Each subfolder is treated as a project if it contains draft.txt
+ * Supported file extensions for projects
+ */
+const PROJECT_FILE_EXTENSIONS = ['.md', '.txt', '.html', '.htm'];
+
+/**
+ * Check if a filename is a supported project file
+ */
+function isProjectFile(filename: string): boolean {
+    const lower = filename.toLowerCase();
+    return PROJECT_FILE_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
+/**
+ * Scan directory for project files.
+ * Each supported file (.md, .txt, .html) is treated as a project.
  */
 export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle): Promise<Project[]> {
     const projects: Project[] = [];
 
     try {
         for await (const entry of repoHandle.values()) {
-            if (entry.kind === 'directory' && !entry.name.startsWith('.')) {
-                const projectHandle = entry as FileSystemDirectoryHandle;
+            // Look for files with supported extensions (skip hidden files and folders)
+            if (entry.kind === 'file' && !entry.name.startsWith('.') && isProjectFile(entry.name)) {
+                const fileHandle = entry as FileSystemFileHandle;
 
                 let content = '';
                 let createdAt = Date.now();
                 let updatedAt = Date.now();
 
-                // Try to read draft.txt
                 try {
-                    const draftHandle = await projectHandle.getFileHandle('draft.txt');
-                    const file = await draftHandle.getFile();
+                    const file = await fileHandle.getFile();
                     content = await file.text();
                     createdAt = file.lastModified;
                     updatedAt = file.lastModified;
                 } catch {
-                    // No draft.txt yet - that's okay, project might be new
+                    // Could not read file
                 }
 
+                // Use filename (without extension) as display name, full filename as id
+                const displayName = entry.name.replace(/\.[^/.]+$/, '');
+
                 projects.push({
-                    id: entry.name,
-                    name: entry.name,
+                    id: entry.name,  // Full filename including extension
+                    name: displayName,
                     content,
                     createdAt,
                     updatedAt,
@@ -125,7 +140,7 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
 }
 
 /**
- * Create a new project folder with draft.txt and .commits/
+ * Create a new project file (defaults to .md extension)
  */
 export async function createProjectFolder(
     repoHandle: FileSystemDirectoryHandle,
@@ -133,64 +148,70 @@ export async function createProjectFolder(
     initialContent: string = ''
 ): Promise<Project | null> {
     try {
-        // Create project directory
-        const projectHandle = await repoHandle.getDirectoryHandle(projectName, { create: true });
+        // Add .md extension if no extension provided
+        const filename = projectName.includes('.') ? projectName : `${projectName}.md`;
 
-        // Create .commits directory
-        await projectHandle.getDirectoryHandle('.commits', { create: true });
-
-        // Create draft.txt with initial content
-        const draftHandle = await projectHandle.getFileHandle('draft.txt', { create: true });
-        const writable = await draftHandle.createWritable();
+        // Create the file directly in the repository
+        const fileHandle = await repoHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
         await writable.write(initialContent);
         await writable.close();
 
+        // Use filename (without extension) as display name
+        const displayName = filename.replace(/\.[^/.]+$/, '');
+
         return {
-            id: projectName,
-            name: projectName,
+            id: filename,  // Full filename including extension
+            name: displayName,
             content: initialContent,
             createdAt: Date.now(),
             updatedAt: Date.now(),
             repositoryPath: repoHandle.name
         };
     } catch (error) {
-        console.error('Failed to create project folder:', error);
+        console.error('Failed to create project file:', error);
         throw error;
     }
 }
 
 /**
- * Save project draft content to draft.txt
+ * Save project content directly to the file
  */
 export async function saveProjectDraft(
     repoHandle: FileSystemDirectoryHandle,
-    projectName: string,
+    projectName: string,  // This is now the filename (e.g., "essay.md")
     content: string
 ): Promise<boolean> {
     try {
-        const projectHandle = await repoHandle.getDirectoryHandle(projectName);
-        const draftHandle = await projectHandle.getFileHandle('draft.txt', { create: true });
-        const writable = await draftHandle.createWritable();
+        const fileHandle = await repoHandle.getFileHandle(projectName, { create: true });
+        const writable = await fileHandle.createWritable();
         await writable.write(content);
         await writable.close();
         return true;
     } catch (error) {
-        console.error('Failed to save draft:', error);
+        console.error('Failed to save project:', error);
         return false;
     }
 }
 
 /**
- * Load commits from .commits/commits.json
+ * Get or create the .diff-commit directory
+ */
+async function getDiffCommitDir(repoHandle: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle> {
+    return await repoHandle.getDirectoryHandle('.diff-commit', { create: true });
+}
+
+/**
+ * Load commits from .diff-commit/{filename}.commits.json
  */
 export async function loadProjectCommits(
     repoHandle: FileSystemDirectoryHandle,
-    projectName: string
+    projectName: string  // This is the filename (e.g., "essay.md")
 ): Promise<any[]> {
     try {
-        const projectHandle = await repoHandle.getDirectoryHandle(projectName);
-        const commitsHandle = await projectHandle.getDirectoryHandle('.commits');
-        const fileHandle = await commitsHandle.getFileHandle('commits.json');
+        const diffCommitDir = await getDiffCommitDir(repoHandle);
+        const commitsFilename = `${projectName}.commits.json`;
+        const fileHandle = await diffCommitDir.getFileHandle(commitsFilename);
         const file = await fileHandle.getFile();
         const text = await file.text();
         return JSON.parse(text);
@@ -201,17 +222,17 @@ export async function loadProjectCommits(
 }
 
 /**
- * Save commits to .commits/commits.json
+ * Save commits to .diff-commit/{filename}.commits.json
  */
 export async function saveProjectCommits(
     repoHandle: FileSystemDirectoryHandle,
-    projectName: string,
+    projectName: string,  // This is the filename (e.g., "essay.md")
     commits: any[]
 ): Promise<boolean> {
     try {
-        const projectHandle = await repoHandle.getDirectoryHandle(projectName);
-        const commitsHandle = await projectHandle.getDirectoryHandle('.commits', { create: true });
-        const fileHandle = await commitsHandle.getFileHandle('commits.json', { create: true });
+        const diffCommitDir = await getDiffCommitDir(repoHandle);
+        const commitsFilename = `${projectName}.commits.json`;
+        const fileHandle = await diffCommitDir.getFileHandle(commitsFilename, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(JSON.stringify(commits, null, 2));
         await writable.close();
@@ -223,14 +244,25 @@ export async function saveProjectCommits(
 }
 
 /**
- * Delete a project folder
+ * Delete a project file and its commits
  */
 export async function deleteProjectFolder(
     repoHandle: FileSystemDirectoryHandle,
-    projectName: string
+    projectName: string  // This is the filename (e.g., "essay.md")
 ): Promise<boolean> {
     try {
-        await repoHandle.removeEntry(projectName, { recursive: true });
+        // Delete the project file
+        await repoHandle.removeEntry(projectName);
+
+        // Also try to delete the commits file
+        try {
+            const diffCommitDir = await getDiffCommitDir(repoHandle);
+            const commitsFilename = `${projectName}.commits.json`;
+            await diffCommitDir.removeEntry(commitsFilename);
+        } catch {
+            // No commits file - that's okay
+        }
+
         return true;
     } catch (error) {
         console.error('Failed to delete project:', error);
@@ -239,49 +271,36 @@ export async function deleteProjectFolder(
 }
 
 /**
- * Rename a project folder
+ * Rename a project file (and its commits file)
  */
 export async function renameProjectFolder(
     repoHandle: FileSystemDirectoryHandle,
-    oldName: string,
-    newName: string
+    oldName: string,  // Old filename (e.g., "essay.md")
+    newName: string   // New display name (will add extension)
 ): Promise<Project | null> {
     try {
-        // File System Access API doesn't support direct rename
-        // We need to copy content and delete old folder
-        const oldHandle = await repoHandle.getDirectoryHandle(oldName);
+        // Get extension from old file
+        const extension = oldName.includes('.') ? oldName.substring(oldName.lastIndexOf('.')) : '.md';
+        const newFilename = newName.includes('.') ? newName : `${newName}${extension}`;
 
-        // Read draft content
-        let content = '';
-        try {
-            const draftHandle = await oldHandle.getFileHandle('draft.txt');
-            const file = await draftHandle.getFile();
-            content = await file.text();
-        } catch {
-            // No draft
-        }
+        // Read old file content
+        const oldFileHandle = await repoHandle.getFileHandle(oldName);
+        const oldFile = await oldFileHandle.getFile();
+        const content = await oldFile.text();
 
-        // Read commits
-        let commits: any[] = [];
-        try {
-            const commitsHandle = await oldHandle.getDirectoryHandle('.commits');
-            const fileHandle = await commitsHandle.getFileHandle('commits.json');
-            const file = await fileHandle.getFile();
-            commits = JSON.parse(await file.text());
-        } catch {
-            // No commits
-        }
+        // Read old commits
+        const commits = await loadProjectCommits(repoHandle, oldName);
 
-        // Create new project
-        const newProject = await createProjectFolder(repoHandle, newName, content);
-        if (!newProject) throw new Error('Failed to create new project folder');
+        // Create new file with content
+        const newProject = await createProjectFolder(repoHandle, newFilename, content);
+        if (!newProject) throw new Error('Failed to create new project file');
 
         // Save commits to new location
         if (commits.length > 0) {
-            await saveProjectCommits(repoHandle, newName, commits);
+            await saveProjectCommits(repoHandle, newFilename, commits);
         }
 
-        // Delete old folder
+        // Delete old file and commits
         await deleteProjectFolder(repoHandle, oldName);
 
         return newProject;

@@ -14,6 +14,7 @@ interface ProjectsPanelProps {
     onDeleteProject: (id: string) => Promise<void>;
     onRenameProject: (id: string, newName: string) => Promise<Project | null>;
     onOpenRepository: () => Promise<void>;
+    onCreateRepository?: () => Promise<void>;
     repositoryPath: string | null;
     currentContent?: string; // Current text to save to new project
 }
@@ -28,6 +29,7 @@ export function ProjectsPanel({
     onDeleteProject,
     onRenameProject,
     onOpenRepository,
+    onCreateRepository,
     repositoryPath,
     currentContent = '',
 }: ProjectsPanelProps) {
@@ -36,6 +38,7 @@ export function ProjectsPanel({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+    const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
     if (!isOpen) return null;
 
@@ -90,26 +93,85 @@ export function ProjectsPanel({
                             <FolderOpen className="w-5 h-5 text-indigo-500" />
                             <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">Projects</h2>
                         </div>
+                        {/* Repository section */}
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-500 dark:text-slate-400">Repo:</span>
+                            {repositoryPath ? (
+                                <span className="text-xs text-indigo-600 dark:text-indigo-400 truncate max-w-[180px]" title={repositoryPath}>
+                                    {repositoryPath.split(/[\\/]/).pop() || repositoryPath}
+                                </span>
+                            ) : (
+                                <span className="text-xs text-gray-400 dark:text-slate-500 italic">No Repo</span>
+                            )}
+                            {!repositoryPath && (
+                                <div className="flex gap-1">
+                                    {onCreateRepository && (
+                                        <button
+                                            onClick={async () => await onCreateRepository()}
+                                            className="text-xs px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
+                                        >
+                                            Create
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={async () => await onOpenRepository()}
+                                        className="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                                    >
+                                        Open
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        {/* Project section */}
                         {repositoryPath && (
-                            <span className="text-xs text-gray-500 dark:text-slate-400 mt-1 truncate max-w-[200px]" title={repositoryPath}>
-                                {repositoryPath}
-                            </span>
+                            <div className="flex items-center gap-2 mt-1 relative">
+                                <span className="text-xs text-gray-500 dark:text-slate-400">Project:</span>
+                                <button
+                                    onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                >
+                                    {currentProject?.name || <span className="italic text-gray-400 dark:text-slate-500">Unsaved Project</span>}
+                                    <span className="text-gray-400">▼</span>
+                                </button>
+                                {showProjectDropdown && (
+                                    <div className="absolute left-16 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 z-50">
+                                        {projects.length === 0 ? (
+                                            <div className="px-3 py-2 text-xs text-gray-400 dark:text-slate-500 italic">No projects yet</div>
+                                        ) : (
+                                            projects.map((project) => (
+                                                <button
+                                                    key={project.id}
+                                                    className={clsx(
+                                                        "w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors",
+                                                        currentProject?.id === project.id && "bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300"
+                                                    )}
+                                                    onClick={async () => {
+                                                        await onLoadProject(project.id);
+                                                        setShowProjectDropdown(false);
+                                                    }}
+                                                >
+                                                    {project.name}
+                                                </button>
+                                            ))
+                                        )}
+                                        <div className="border-t border-gray-100 dark:border-slate-700 mt-1 pt-1">
+                                            <button
+                                                className="w-full text-left px-3 py-1.5 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center gap-1"
+                                                onClick={() => {
+                                                    setShowProjectDropdown(false);
+                                                    setIsCreating(true);
+                                                }}
+                                            >
+                                                <Plus className="w-3 h-3" />
+                                                New Project
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        {!repositoryPath && (
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={async () => {
-                                    await onOpenRepository();
-                                    // Don't close, let them see the new projects list
-                                }}
-                                className="mr-2"
-                            >
-                                Open Repo
-                            </Button>
-                        )}
                         <Button
                             variant="primary"
                             size="sm"
@@ -175,6 +237,12 @@ export function ProjectsPanel({
                                         "px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group",
                                         currentProject?.id === project.id && "bg-indigo-50 dark:bg-indigo-950/20 border-l-4 border-indigo-500"
                                     )}
+                                    onClick={() => {
+                                        // Don't trigger load when editing or confirming delete
+                                        if (editingId !== project.id && deleteConfirmId !== project.id) {
+                                            handleLoad(project.id);
+                                        }
+                                    }}
                                 >
                                     {editingId === project.id ? (
                                         <div className="flex items-center gap-2">
@@ -220,10 +288,7 @@ export function ProjectsPanel({
                                             </div>
                                         </div>
                                     ) : (
-                                        <div
-                                            className="flex items-center justify-between"
-                                            onClick={() => handleLoad(project.id)}
-                                        >
+                                        <div className="flex items-center justify-between">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <FileText className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" />

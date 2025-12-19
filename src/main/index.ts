@@ -77,14 +77,14 @@ function createMenu() {
                     click: () => sendToRenderer('menu-open-repository')
                 },
                 {
+                    label: 'Create Repository...',
+                    click: () => sendToRenderer('menu-create-repository')
+                },
+                { type: 'separator' },
+                {
                     label: 'New Project...',
                     accelerator: 'CmdOrCtrl+N',
                     click: () => sendToRenderer('menu-new-project')
-                },
-                {
-                    label: 'Switch Project...',
-                    accelerator: 'CmdOrCtrl+P',
-                    click: () => sendToRenderer('menu-switch-project')
                 },
                 { type: 'separator' },
                 {
@@ -392,9 +392,15 @@ app.whenReady().then(() => {
         return null;
     });
 
-    // Repository Management Handlers
+    // Supported file extensions for projects
+    const PROJECT_FILE_EXTENSIONS = ['.md', '.txt', '.html', '.htm'];
 
-    // Open Repository (Select Folder)
+    function isProjectFile(filename: string): boolean {
+        const lower = filename.toLowerCase();
+        return PROJECT_FILE_EXTENSIONS.some(ext => lower.endsWith(ext));
+    }
+
+    // Open Repository (Select Folder) - scans for project files
     ipcMain.handle('open-repository', async () => {
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ['openDirectory', 'createDirectory']
@@ -405,32 +411,25 @@ app.whenReady().then(() => {
         const repoPath = result.filePaths[0];
         const projects = [];
 
-        // Scan for subdirectories that look like projects
+        // Scan for project files (.md, .txt, .html)
         try {
             const items = fs.readdirSync(repoPath, { withFileTypes: true });
             for (const item of items) {
-                if (item.isDirectory() && !item.name.startsWith('.')) {
-                    const projectPath = path.join(repoPath, item.name);
-                    const draftPath = path.join(projectPath, 'draft.txt');
+                if (item.isFile() && !item.name.startsWith('.') && isProjectFile(item.name)) {
+                    const filePath = path.join(repoPath, item.name);
+                    const stats = fs.statSync(filePath);
+                    const content = fs.readFileSync(filePath, 'utf-8');
 
-                    // A valid project must have a draft.txt (or we can be lenient and just accept folders)
-                    // Let's accept any folder, and check for draft.txt to read content
-                    let content = '';
-                    let stats = fs.statSync(projectPath);
-
-                    if (fs.existsSync(draftPath)) {
-                        content = fs.readFileSync(draftPath, 'utf-8');
-                        const draftStats = fs.statSync(draftPath);
-                        stats = draftStats; // Use file stats for dates if file exists
-                    }
+                    // Use filename without extension as display name
+                    const displayName = item.name.replace(/\.[^/.]+$/, '');
 
                     projects.push({
-                        id: item.name, // Use folder name as ID for simplicity in FS mode
-                        name: item.name,
+                        id: item.name,  // Full filename including extension
+                        name: displayName,
                         content,
                         createdAt: stats.birthtimeMs,
                         updatedAt: stats.mtimeMs,
-                        path: projectPath,
+                        path: filePath,
                         repositoryPath: repoPath
                     });
                 }
@@ -443,29 +442,26 @@ app.whenReady().then(() => {
         return { path: repoPath, projects };
     });
 
-    // Create New Project in Repository
+    // Create New Project (create a file, default .md)
     ipcMain.handle('create-project', async (event, repoPath, projectName, initialContent = '') => {
         if (!repoPath || !projectName) return null;
 
-        const projectPath = path.join(repoPath, projectName);
-        const draftPath = path.join(projectPath, 'draft.txt');
-        const commitsPath = path.join(projectPath, '.commits');
+        // Add .md extension if no extension provided
+        const filename = projectName.includes('.') ? projectName : `${projectName}.md`;
+        const filePath = path.join(repoPath, filename);
+        const displayName = filename.replace(/\.[^/.]+$/, '');
 
         try {
-            // Create directories
-            if (!fs.existsSync(projectPath)) fs.mkdirSync(projectPath);
-            if (!fs.existsSync(commitsPath)) fs.mkdirSync(commitsPath);
-
-            // Create draft file
-            fs.writeFileSync(draftPath, initialContent, 'utf-8');
+            // Create the file
+            fs.writeFileSync(filePath, initialContent, 'utf-8');
 
             return {
-                id: projectName,
-                name: projectName,
+                id: filename,
+                name: displayName,
                 content: initialContent,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
-                path: projectPath,
+                path: filePath,
                 repositoryPath: repoPath
             };
         } catch (e) {
@@ -474,12 +470,11 @@ app.whenReady().then(() => {
         }
     });
 
-    // Save Project Content
+    // Save Project Content (write directly to the file)
     ipcMain.handle('save-project-content', async (event, projectPath, content) => {
         if (!projectPath) return false;
         try {
-            const draftPath = path.join(projectPath, 'draft.txt');
-            fs.writeFileSync(draftPath, content, 'utf-8');
+            fs.writeFileSync(projectPath, content, 'utf-8');
             return true;
         } catch (e) {
             console.error('Failed to save project content:', e);
@@ -487,11 +482,19 @@ app.whenReady().then(() => {
         }
     });
 
-    // Load Project Commits (from .commits folder)
+    // Helper: get .diff-commit directory path
+    function getDiffCommitPath(repoPath: string): string {
+        return path.join(repoPath, '.diff-commit');
+    }
+
+    // Load Project Commits (from .diff-commit/{filename}.commits.json)
     ipcMain.handle('load-project-commits', async (event, projectPath) => {
         if (!projectPath) return [];
-        const commitsPath = path.join(projectPath, '.commits');
-        const commitsFile = path.join(commitsPath, 'commits.json');
+
+        const repoPath = path.dirname(projectPath);
+        const filename = path.basename(projectPath);
+        const diffCommitDir = getDiffCommitPath(repoPath);
+        const commitsFile = path.join(diffCommitDir, `${filename}.commits.json`);
 
         try {
             if (fs.existsSync(commitsFile)) {
@@ -505,14 +508,19 @@ app.whenReady().then(() => {
         }
     });
 
-    // Save Project Commits
+    // Save Project Commits (to .diff-commit/{filename}.commits.json)
     ipcMain.handle('save-project-commits', async (event, projectPath, commits) => {
         if (!projectPath) return false;
-        const commitsPath = path.join(projectPath, '.commits');
-        const commitsFile = path.join(commitsPath, 'commits.json');
+
+        const repoPath = path.dirname(projectPath);
+        const filename = path.basename(projectPath);
+        const diffCommitDir = getDiffCommitPath(repoPath);
+        const commitsFile = path.join(diffCommitDir, `${filename}.commits.json`);
 
         try {
-            if (!fs.existsSync(commitsPath)) fs.mkdirSync(commitsPath, { recursive: true });
+            if (!fs.existsSync(diffCommitDir)) {
+                fs.mkdirSync(diffCommitDir, { recursive: true });
+            }
             fs.writeFileSync(commitsFile, JSON.stringify(commits, null, 2), 'utf-8');
             return true;
         } catch (e) {

@@ -82,6 +82,14 @@ export const MODELS: Model[] = [
         outputPrice: 2.50
     },
     {
+        id: "google/gemini-3-flash-preview",
+        name: "Gemini 3 Flash Preview",
+        provider: "Google",
+        contextWindow: 1000000,
+        inputPrice: 0.50,
+        outputPrice: 3.00
+    },
+    {
         id: "perplexity/sonar-pro",
         name: "Perplexity Sonar Pro",
         provider: "Perplexity",

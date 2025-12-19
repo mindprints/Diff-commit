@@ -23,8 +23,8 @@ interface MenuBarProps {
     onManageProjects?: () => void;
     // Project/Repository props for browser mode
     onOpenRepository?: () => void;
+    onCreateRepository?: () => void;
     onNewProject?: () => void;
-    onSwitchProject?: () => void;
 }
 
 export function MenuBar({
@@ -45,8 +45,8 @@ export function MenuBar({
     onManagePrompts,
     onManageProjects,
     onOpenRepository,
-    onNewProject,
-    onSwitchProject
+    onCreateRepository,
+    onNewProject
 }: MenuBarProps) {
     // Only show in browser (not electron)
     if (window.electron) return null;
@@ -164,8 +164,9 @@ export function MenuBar({
             {/* File Menu */}
             <MenuButton label="File" id="file">
                 <MenuItem label="Open Repository..." shortcut="Ctrl+Shift+O" onClick={onOpenRepository} />
+                <MenuItem label="Create Repository..." onClick={onCreateRepository} />
+                <MenuItem separator />
                 <MenuItem label="New Project..." shortcut="Ctrl+N" onClick={onNewProject} />
-                <MenuItem label="Switch Project..." shortcut="Ctrl+P" onClick={onSwitchProject} />
                 <MenuItem separator />
                 <MenuItem label="Import File..." shortcut="Ctrl+O" onClick={() => fileInputRef.current?.click()} />
                 <MenuItem label="Save Preview As..." shortcut="Ctrl+S" onClick={onSaveFile} />

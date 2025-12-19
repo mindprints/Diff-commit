@@ -35,7 +35,7 @@ interface UseElectronMenuOptions {
     onManagePrompts: () => void;
     onManageProjects: () => void;
     onNewProject: () => void;
-    onSwitchProject: () => void;
+    onCreateRepository: () => void;
     onOpenRepository: () => void;
 }
 
@@ -56,7 +56,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         onShowLogs,
         onShowCommitHistory,
         onNewProject,
-        onSwitchProject,
+        onCreateRepository,
         onOpenRepository,
     } = options;
 
@@ -88,7 +88,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         });
 
         window.electron.onMenuNewProject(() => onNewProject());
-        window.electron.onMenuSwitchProject(() => onSwitchProject());
+        window.electron.onMenuCreateRepository?.(() => onCreateRepository());
         window.electron.onMenuOpenRepository(() => onOpenRepository());
 
         // Edit menu handlers
@@ -129,7 +129,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
                 window.electron.removeAllListeners('request-export-versions');
                 window.electron.removeAllListeners('versions-imported');
                 window.electron.removeAllListeners('menu-new-project');
-                window.electron.removeAllListeners('menu-switch-project');
+                window.electron.removeAllListeners('menu-create-repository');
                 window.electron.removeAllListeners('menu-open-repository');
                 window.electron.removeAllListeners('menu-clear-all');
                 window.electron.removeAllListeners('menu-toggle-dark');

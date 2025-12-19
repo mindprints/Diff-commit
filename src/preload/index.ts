@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld('electron', {
     onMenuShowLogs: (callback) => ipcRenderer.on('menu-show-logs', () => callback()),
     onMenuShowVersions: (callback) => ipcRenderer.on('menu-show-versions', () => callback()),
     onMenuNewProject: (callback) => ipcRenderer.on('menu-new-project', () => callback()),
-    onMenuSwitchProject: (callback) => ipcRenderer.on('menu-switch-project', () => callback()),
+    onMenuCreateRepository: (callback) => ipcRenderer.on('menu-create-repository', () => callback()),
     onMenuOpenRepository: (callback) => ipcRenderer.on('menu-open-repository', () => callback()),
 
     // Tools Menu Listeners
