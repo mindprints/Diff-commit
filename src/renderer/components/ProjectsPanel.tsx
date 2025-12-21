@@ -44,8 +44,8 @@ export function ProjectsPanel({
 
     const handleCreate = async () => {
         if (!newProjectName.trim()) return;
-        await onCreateProject(newProjectName.trim(), currentContent);
-        setNewProjectName('');
+        // Create new project with current content
+        await onCreateProject(newProjectName.trim(), currentContent); setNewProjectName('');
         setIsCreating(false);
     };
 
@@ -177,6 +177,8 @@ export function ProjectsPanel({
                             size="sm"
                             onClick={() => setIsCreating(true)}
                             icon={<Plus className="w-4 h-4" />}
+                            disabled={!repositoryPath}
+                            title={!repositoryPath ? 'Open or create a repository first' : 'Create new project'}
                         >
                             New
                         </Button>

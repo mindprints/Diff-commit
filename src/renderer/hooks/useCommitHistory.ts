@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TextCommit } from '../types';
 
 interface UseCommitHistoryOptions {
@@ -23,9 +23,20 @@ export function useCommitHistory({
     const [showCommitHistory, setShowCommitHistory] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
 
+    const prevProjectRef = useRef({ path: currentProjectPath, name: currentProjectName });
+
     // Load from Electron store, browser FS, or localStorage
     useEffect(() => {
-        setIsLoaded(false); // Reset loaded state on path change
+        const projectChanged = prevProjectRef.current.path !== currentProjectPath ||
+            prevProjectRef.current.name !== currentProjectName;
+
+        // Only clear if project actually changed
+        if (projectChanged) {
+            setCommits([]);
+            setIsLoaded(false);
+            prevProjectRef.current = { path: currentProjectPath, name: currentProjectName };
+        }
+
         const loadCommits = async () => {
             // Priority 1: Project-specific file storage (Electron)
             if (currentProjectPath && window.electron?.loadProjectCommits) {
@@ -47,20 +58,22 @@ export function useCommitHistory({
                 }
             }
 
-            // Priority 3: Global Electron Store (Legacy / Non-Project)
-            if (window.electron && window.electron.getVersions) {
-                const storedCommits = await window.electron.getVersions();
-                if (storedCommits && Array.isArray(storedCommits)) {
-                    setCommits(storedCommits);
-                }
-            } else {
-                // Priority 4: localStorage (Web fallback)
-                const stored = localStorage.getItem('diff-commit-commits');
-                if (stored) {
-                    try {
-                        setCommits(JSON.parse(stored));
-                    } catch (e) {
-                        console.warn('Failed to parse stored commits:', e);
+            // Priority 3: Only load from global storage in browser fallback mode
+            // In Electron mode, global commits are legacy data that should be cleared
+            if (!currentProjectPath && !currentProjectName) {
+                if (window.electron) {
+                    // In Electron mode, we don't want "global" commits anymore
+                    // We only use project-specific ones.
+                    setCommits([]);
+                } else {
+                    // Browser fallback - can still use localStorage for non-project mode
+                    const stored = localStorage.getItem('diff-commit-commits');
+                    if (stored) {
+                        try {
+                            setCommits(JSON.parse(stored));
+                        } catch (e) {
+                            console.warn('Failed to parse stored commits:', e);
+                        }
                     }
                 }
             }

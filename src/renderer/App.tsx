@@ -170,10 +170,32 @@ function App() {
     deleteProject: deleteProjectById,
     renameProject: renameProjectById,
     openRepository,
+    createRepository,
     repositoryPath,
     getRepoHandle
   } = useProjects();
   const [showProjectsPanel, setShowProjectsPanel] = useState(false);
+
+  // Sync project content to editor when currentProject changes
+  useEffect(() => {
+    if (currentProject) {
+      // Prevent segments effect from overwriting the project content
+      skipNextSegmentsSync.current = true;
+
+      // Load project content into editor
+      const content = currentProject.content || '';
+      setPreviewText(content);
+      setOriginalText(content);
+      setModifiedText('');
+      resetDiffState();
+    } else {
+      // Clear editor state when project is closed or null
+      setPreviewText('');
+      setOriginalText('');
+      setModifiedText('');
+      resetDiffState();
+    }
+  }, [currentProject?.id]); // Only trigger when project ID changes, not on every content change
 
   // Repository handler - uses native picker (Electron) or showDirectoryPicker (browser)
   const handleOpenRepository = useCallback(async () => {
@@ -187,9 +209,9 @@ function App() {
   }, []);
 
   const handleCreateRepository = useCallback(async () => {
-    await openRepository(); // This already uses showDirectoryPicker with createDirectory option
+    await createRepository();
     setShowProjectsPanel(true);
-  }, [openRepository]);
+  }, [createRepository]);
 
   // Error Handling
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -585,8 +607,13 @@ function App() {
     onManagePrompts: () => setShowPromptsModal(true),
     onManageProjects: () => setShowProjectsPanel(true),
     onNewProject: () => setShowProjectsPanel(true),
-    onCreateRepository: () => { openRepository(); setShowProjectsPanel(true); },
+    onCreateRepository: async () => { await createRepository(); setShowProjectsPanel(true); },
     onOpenRepository: () => { openRepository(); setShowProjectsPanel(true); },
+    onSaveProject: async () => {
+      if (currentProject?.path && window.electron?.saveProjectBundle) {
+        await window.electron.saveProjectBundle(currentProject.path);
+      }
+    },
   });
 
   // Resizing Logic
@@ -1962,15 +1989,22 @@ function App() {
           }
           return project;
         }}
-        onCreateProject={async (name, content) => {
-          return createNewProject(name, content || previewText || originalText);
+        onCreateProject={async (name) => {
+          // Always create with empty content - don't inherit from previous project
+          const newProject = await createNewProject(name, '');
+          // Clear editor state for new project
+          setOriginalText('');
+          setPreviewText('');
+          setModifiedText('');
+          resetDiffState();
+          return newProject;
         }}
         onDeleteProject={deleteProjectById}
         onRenameProject={renameProjectById}
         onOpenRepository={openRepository}
-        onCreateRepository={openRepository}
+        onCreateRepository={createRepository}
         repositoryPath={repositoryPath}
-        currentContent={previewText || originalText}
+        currentContent=""
       />
     </div>
   );

@@ -25,17 +25,29 @@ export function useProjects() {
         const loadProjectsAndRepo = async () => {
             setIsLoading(true);
             try {
-                // In browser mode, we can't auto-restore the handle (user must re-pick)
-                // Just load any localStorage projects as fallback
-                const loaded = await projectStorage.getProjects();
-                setProjects(loaded);
+                // In Electron mode, clear legacy localStorage data on startup
+                // This prevents conflicts with the file-based project system
+                if (isElectron) {
+                    // In Electron mode, clear legacy localStorage data on startup
+                    // to prevent conflicts with the new file-based project system.
+                    // This ensures a clean slate until a repository is opened.
+                    localStorage.removeItem('diff-commit-projects');
+                    localStorage.removeItem('diff-commit-repository');
+                    localStorage.removeItem('diff-commit-commits');
+                    setProjects([]);
+                } else {
+                    // In browser mode, we can't auto-restore the handle (user must re-pick)
+                    // Just load any localStorage projects as fallback
+                    const loaded = await projectStorage.getProjects();
+                    setProjects(loaded);
+                }
             } catch (error) {
                 console.error('Failed to load projects:', error);
             }
             setIsLoading(false);
         };
         loadProjectsAndRepo();
-    }, []);
+    }, [isElectron]);
 
     // Open a repository - works for both Electron and Browser
     const openRepository = useCallback(async () => {
@@ -45,6 +57,12 @@ export function useProjects() {
                 // Electron mode - use IPC
                 const result = await projectStorage.openRepository();
                 if (result) {
+                    // Clear legacy localStorage data to prevent conflicts
+                    // with file-based project system
+                    localStorage.removeItem('diff-commit-projects');
+                    localStorage.removeItem('diff-commit-repository');
+                    localStorage.removeItem('diff-commit-commits');
+
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
                     setCurrentProject(null);
@@ -66,6 +84,30 @@ export function useProjects() {
         }
         setIsLoading(false);
     }, [isElectron]);
+
+    // Create a new repository (folder on disk)
+    const createRepository = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const result = await projectStorage.createRepository();
+            if (result) {
+                // Clear legacy localStorage data to prevent conflicts
+                localStorage.removeItem('diff-commit-projects');
+                localStorage.removeItem('diff-commit-repository');
+                localStorage.removeItem('diff-commit-commits');
+
+                setRepositoryPath(result.path);
+                setProjects(result.projects);
+                setCurrentProject(null);
+            }
+            return result;
+        } catch (error) {
+            console.error('Failed to create repository:', error);
+            return null;
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     // Load a specific project
     const loadProject = useCallback(async (id: string) => {
@@ -202,6 +244,7 @@ export function useProjects() {
         isLoading,
         repositoryPath,
         openRepository,
+        createRepository,
         loadProject,
         saveCurrentProject,
         createNewProject,

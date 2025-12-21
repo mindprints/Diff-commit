@@ -1,0 +1,13 @@
+import { app } from 'electron';
+import { mkdirSync } from 'fs';
+import { join } from 'path';
+
+// User's documents folder
+const docsPath = app.getPath('documents');
+fs.mkdirSync(path.join(docsPath, 'MyApp', 'subfolder'), { recursive: true });
+
+// App data folder
+const appDataPath = app.getPath('userData');
+fs.mkdirSync(path.join(appDataPath, 'cache'), { recursive: true });
+The { recursive: true } option ensures all parent directories are created if they don't exist, and it won't throw an error if the folder already exists.
+Do you need this for a specific use case like saving user files, creating cache directories, or something else?

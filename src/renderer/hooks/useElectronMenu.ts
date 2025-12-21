@@ -37,6 +37,7 @@ interface UseElectronMenuOptions {
     onNewProject: () => void;
     onCreateRepository: () => void;
     onOpenRepository: () => void;
+    onSaveProject: () => void;
 }
 
 export function useElectronMenu(options: UseElectronMenuOptions) {
@@ -90,6 +91,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
         window.electron.onMenuNewProject(() => onNewProject());
         window.electron.onMenuCreateRepository?.(() => onCreateRepository());
         window.electron.onMenuOpenRepository(() => onOpenRepository());
+        window.electron.onMenuSaveProject?.(() => options.onSaveProject());
 
         // Edit menu handlers
         window.electron.onMenuClearAll(() => onClearAll());
@@ -131,6 +133,7 @@ export function useElectronMenu(options: UseElectronMenuOptions) {
                 window.electron.removeAllListeners('menu-new-project');
                 window.electron.removeAllListeners('menu-create-repository');
                 window.electron.removeAllListeners('menu-open-repository');
+                window.electron.removeAllListeners('menu-save-project');
                 window.electron.removeAllListeners('menu-clear-all');
                 window.electron.removeAllListeners('menu-toggle-dark');
                 window.electron.removeAllListeners('menu-font-size');

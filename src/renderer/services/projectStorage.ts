@@ -73,6 +73,23 @@ export async function openRepository(): Promise<{ path: string; projects: Projec
 }
 
 /**
+ * Create a new repository (folder on disk).
+ * Opens a Save dialog for the user to choose location and name.
+ */
+export async function createRepository(): Promise<{ path: string; projects: Project[] } | null> {
+    if (hasElectronProjectAPI() && window.electron.createRepository) {
+        return await window.electron.createRepository();
+    }
+
+    // Browser fallback: create virtual repository with prompt
+    const name = prompt('Enter repository name:');
+    if (!name) return null;
+
+    const repo = createBrowserRepository(name);
+    return { path: repo.path, projects: [] };
+}
+
+/**
  * Get all projects from storage (Browser Fallback).
  * For Electron, this is handled by openRepository() now, but can still return legacy stored projects if needed.
  */

@@ -26,10 +26,12 @@ contextBridge.exposeInMainWorld('electron', {
 
     // Repository & Project System
     openRepository: () => ipcRenderer.invoke('open-repository'),
+    createRepository: () => ipcRenderer.invoke('create-repository'),
     createProject: (repoPath, name, content) => ipcRenderer.invoke('create-project', repoPath, name, content),
     saveProjectContent: (path, content) => ipcRenderer.invoke('save-project-content', path, content),
     loadProjectCommits: (path) => ipcRenderer.invoke('load-project-commits', path),
     saveProjectCommits: (path, commits) => ipcRenderer.invoke('save-project-commits', path, commits),
+    saveProjectBundle: (projectPath) => ipcRenderer.invoke('save-project-bundle', projectPath),
 
     // AI Prompts CRUD
     getPrompts: () => ipcRenderer.invoke('get-prompts'),
@@ -52,6 +54,7 @@ contextBridge.exposeInMainWorld('electron', {
     onMenuNewProject: (callback) => ipcRenderer.on('menu-new-project', () => callback()),
     onMenuCreateRepository: (callback) => ipcRenderer.on('menu-create-repository', () => callback()),
     onMenuOpenRepository: (callback) => ipcRenderer.on('menu-open-repository', () => callback()),
+    onMenuSaveProject: (callback) => ipcRenderer.on('menu-save-project', () => callback()),
 
     // Tools Menu Listeners
     onMenuToolsSpellingLocal: (callback) => ipcRenderer.on('menu-tools-spelling-local', () => callback()),

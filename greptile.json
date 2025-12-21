@@ -1,0 +1,17 @@
+{
+    "ignore": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/.git/**",
+        "package-lock.json"
+    ],
+    "instructions": "This is a React/Electron application called Diff-commit. It uses Vite for the renderer and handles file-based project management. Focus on the relationship between main and renderer processes when analyzing code.",
+    "review": {
+        "triggers": [
+            {
+                "pattern": "src/renderer/**",
+                "instructions": "Ensure UI consistency and proper state management when switching projects."
+            }
+        ]
+    }
+}

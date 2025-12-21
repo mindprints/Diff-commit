@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItemConstructorOptions } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Store from 'electron-store';
@@ -131,6 +131,11 @@ function createMenu() {
                     click: async () => {
                         sendToRenderer('request-save');
                     }
+                },
+                {
+                    label: 'Save Project...',
+                    accelerator: 'CmdOrCtrl+Shift+S',
+                    click: () => sendToRenderer('menu-save-project')
                 },
                 { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' }
@@ -285,7 +290,7 @@ function createMenu() {
         }
     ];
 
-    const menu = Menu.buildFromTemplate(template);
+    const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
     Menu.setApplicationMenu(menu);
 }
 
@@ -309,7 +314,7 @@ app.whenReady().then(() => {
 
     // Logging Handlers
     ipcMain.handle('log-usage', (event, logEntry) => {
-        const logs = store.get('aiLogs') || [];
+        const logs = (store.get('aiLogs') || []) as Array<Record<string, unknown>>;
         if (logs.length > 1000) logs.shift();
         logs.push(logEntry);
         store.set('aiLogs', logs);
@@ -317,7 +322,7 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle('update-log-rating', (event, id, rating, feedback) => {
-        const logs = store.get('aiLogs') || [];
+        const logs = (store.get('aiLogs') || []) as Array<Record<string, unknown>>;
         const index = logs.findIndex(l => l.id === id);
         if (index !== -1) {
             logs[index].rating = rating;
@@ -526,6 +531,77 @@ app.whenReady().then(() => {
         } catch (e) {
             console.error('Failed to save commits:', e);
             return false;
+        }
+    });
+
+    // Create Repository (Create a new folder on disk)
+    ipcMain.handle('create-repository', async () => {
+        const docsPath = app.getPath('documents');
+        const defaultPath = path.join(docsPath, 'Diff-Commit');
+
+        const result = await dialog.showSaveDialog(mainWindow, {
+            title: 'Create Repository',
+            defaultPath: defaultPath,
+            buttonLabel: 'Create',
+            properties: ['createDirectory' as any],
+            nameFieldLabel: 'Repository Name'
+        });
+
+        if (result.canceled || !result.filePath) return null;
+
+        const repoPath = result.filePath;
+
+        try {
+            // Create the repository folder
+            fs.mkdirSync(repoPath, { recursive: true });
+
+            // Create .diff-commit folder for commit storage
+            fs.mkdirSync(path.join(repoPath, '.diff-commit'), { recursive: true });
+
+            return { path: repoPath, projects: [] };
+        } catch (e) {
+            console.error('Failed to create repository:', e);
+            throw e;
+        }
+    });
+
+    // Save Project Bundle (Export project content + commits as folder)
+    ipcMain.handle('save-project-bundle', async (event, projectPath) => {
+        if (!projectPath) return null;
+
+        const repoPath = path.dirname(projectPath);
+        const filename = path.basename(projectPath);
+        const displayName = filename.replace(/\.[^/.]+$/, '');
+        const diffCommitDir = path.join(repoPath, '.diff-commit');
+        const commitsFile = path.join(diffCommitDir, `${filename}.commits.json`);
+
+        // Read current content
+        const projectContent = fs.existsSync(projectPath)
+            ? fs.readFileSync(projectPath, 'utf-8')
+            : '';
+        const commitsContent = fs.existsSync(commitsFile)
+            ? fs.readFileSync(commitsFile, 'utf-8')
+            : '[]';
+
+        // Show save dialog for the bundle folder
+        const docsPath = app.getPath('documents');
+        const result = await dialog.showSaveDialog(mainWindow, {
+            title: 'Save Project Bundle',
+            defaultPath: path.join(docsPath, `${displayName}-bundle`),
+            buttonLabel: 'Save Bundle'
+        });
+
+        if (result.canceled || !result.filePath) return null;
+
+        try {
+            const bundleDir = result.filePath;
+            fs.mkdirSync(bundleDir, { recursive: true });
+            fs.writeFileSync(path.join(bundleDir, filename), projectContent, 'utf-8');
+            fs.writeFileSync(path.join(bundleDir, `${filename}.commits.json`), commitsContent, 'utf-8');
+            return bundleDir;
+        } catch (e) {
+            console.error('Failed to save project bundle:', e);
+            throw e;
         }
     });
 

@@ -34,10 +34,12 @@ export interface IElectronAPI {
 
     // Repository & Project System
     openRepository: () => Promise<{ path: string; projects: Project[] } | null>;
+    createRepository: () => Promise<{ path: string; projects: Project[] } | null>;
     createProject: (repoPath: string, name: string, content?: string) => Promise<Project | null>;
     saveProjectContent: (path: string, content: string) => Promise<boolean>;
     loadProjectCommits: (path: string) => Promise<TextCommit[]>;
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
+    saveProjectBundle: (projectPath: string) => Promise<string | null>;
 
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => void;
@@ -56,6 +58,7 @@ export interface IElectronAPI {
     onMenuNewProject: (callback: () => void) => void;
     onMenuCreateRepository: (callback: () => void) => void;
     onMenuOpenRepository: (callback: () => void) => void;
+    onMenuSaveProject: (callback: () => void) => void;
 
     // Tools Menu Listeners
     onMenuToolsSpellingLocal: (callback: () => void) => void;
