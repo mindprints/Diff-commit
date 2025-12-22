@@ -16,6 +16,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { PromptsModal } from './components/PromptsModal';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { WelcomeModal } from './components/WelcomeModal';
+import { SavePromptDialog } from './components/SavePromptDialog';
 import { useCommitHistory } from './hooks/useCommitHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
@@ -53,7 +54,8 @@ import {
   Settings,
   ArrowLeft,
   FolderOpen,
-  Zap
+  Zap,
+  Save
 } from 'lucide-react';
 import clsx from 'clsx';
 import headerIcon from './header_icon_styled.png';
@@ -429,6 +431,10 @@ function App() {
 
   // Context Menu for text selection
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
+
+  // Save as Prompt dialog state
+  const [savePromptDialogOpen, setSavePromptDialogOpen] = useState(false);
+  const [pendingPromptText, setPendingPromptText] = useState('');
 
   const logAIUsage = async (taskType: string, usage: { inputTokens: number; outputTokens: number }, durationMs?: number) => {
     if (!selectedModel || !usage) return;
@@ -1140,6 +1146,27 @@ function App() {
       setModifiedText('');
       resetDiffState();
     }
+  };
+
+  // Save selected text as a new custom prompt
+  const handleSaveAsPrompt = () => {
+    if (contextMenu?.selection) {
+      setPendingPromptText(contextMenu.selection);
+      setSavePromptDialogOpen(true);
+      setContextMenu(null);
+    }
+  };
+
+  // Handle saving the prompt from the dialog
+  const handleSavePromptSubmit = async (prompt: AIPrompt) => {
+    await createPrompt({
+      name: prompt.name,
+      systemInstruction: prompt.systemInstruction,
+      promptTask: prompt.promptTask,
+      color: prompt.color,
+    });
+    // Open prompts modal to show the new prompt
+    setShowPromptsModal(true);
   };
 
   const fontClasses = {
@@ -1933,8 +1960,25 @@ function App() {
             disabled: !contextMenu?.selection,
             subLabel: '$$$$',
             divider: true
+          },
+          {
+            label: 'Save as Prompt',
+            icon: <Save className="w-4 h-4 text-indigo-500" />,
+            onClick: handleSaveAsPrompt,
+            disabled: !contextMenu?.selection
           }
         ]}
+      />
+
+      {/* Save as Prompt Dialog */}
+      <SavePromptDialog
+        isOpen={savePromptDialogOpen}
+        onClose={() => {
+          setSavePromptDialogOpen(false);
+          setPendingPromptText('');
+        }}
+        selectedText={pendingPromptText}
+        onSave={handleSavePromptSubmit}
       />
 
       {/* Prompts Management Modal */}
