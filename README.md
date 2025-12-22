@@ -31,12 +31,17 @@ Verify claims with real-time web search.
 *   **Commit History**: Save "snapshots" of your text as you work.
 *   **Restore**: Instantly revert to any previous committed version.
 *   **Diff Against History**: Compare your current draft against any past version.
-*   **Per-Project Storage**: Each project has its own independent commit history stored in `.commits/commits.json`.
+*   **Isolated Storage**: Each project folder has its own `.diff-commit/commits.json` file—no cross-contamination between projects.
 
 ### 📁 Repository & Project Management
-*   **Repository-based Workflow**: Open a folder as a repository, each subfolder becomes a project.
+*   **Repository-based Workflow**: A repository is a folder containing project subfolders.
+*   **Folder-Based Projects**: Each project is a self-contained folder with:
+    *   `content.md` — Your document text
+    *   `.diff-commit/commits.json` — Version history
+    *   `.diff-commit/metadata.json` — Project metadata (creation timestamp)
+*   **Welcome Gate**: On first launch, you must create or open a repository before accessing the editor.
 *   **Browser File System Access**: Full file system access in Chromium browsers via the File System Access API.
-*   **Project Isolation**: Each project maintains independent content and commit history.
+*   **Project Isolation**: Each project maintains completely independent content and commit history.
 *   **HTML Import**: Import HTML documents—automatically converted to Markdown using Turndown.
 
 ### 🖱️ Advanced Selection (Ctrl+Drag)
@@ -66,6 +71,21 @@ Diff-commit/
 ├── electron.vite.config.ts     # Unified Vite config for Electron
 ├── package.json
 └── README.md
+```
+
+### Project Folder Structure
+```text
+My Writing Projects/            # Repository (folder you create/open)
+├── My Essay/                   # Project (folder)
+│   ├── content.md              # Your document
+│   └── .diff-commit/           # Version control data
+│       ├── commits.json        # Commit history
+│       └── metadata.json       # Project metadata (createdAt)
+├── Work Notes/                 # Another project
+│   ├── content.md
+│   └── .diff-commit/
+│       ├── commits.json
+│       └── metadata.json
 ```
 
 ---
@@ -119,8 +139,34 @@ To avoid confusion during development:
 *   **Commit**: Saving the current state to history and making it the new baseline.
 *   **Diff Mode**: The primary view showing the comparison between Original and your edits.
 *   **Prompt**: A saved instruction set for the AI (e.g., "Grammar Fix"). Can be **Local** (TypeScript logic) or **AI** (LLM prompt).
-*   **Repository**: A folder containing multiple projects.
-*   **Project**: A subfolder within a repository, containing `draft.txt` and `.commits/`.
+*   **Repository**: A folder on your computer that contains project folders.
+*   **Project**: A folder within a repository containing `content.md` and `.diff-commit/`.
+
+---
+
+## 📝 Changelog (v1.2.9)
+
+### Breaking Changes
+*   **Folder-Based Projects**: Projects are now folders (not files). Each project contains:
+    *   `content.md` — The document text
+    *   `.diff-commit/commits.json` — Version history
+    *   `.diff-commit/metadata.json` — Creation timestamp
+*   **Note**: Old file-based repositories will need to be recreated with the new structure.
+
+### New Features
+*   **Welcome Modal**: Users must create or open a repository on first launch—no more "invisible" commits.
+*   **Metadata Tracking**: Proper `createdAt` (persisted) and `updatedAt` (file modification time) tracking.
+*   **Content Persistence**: Document content is saved to `content.md` on every commit.
+*   **Fresh Content Loading**: Switching projects re-reads content from disk, ensuring no stale data.
+
+### Bug Fixes
+*   **Fixed Content Residue**: New projects now start with a clean editor—no inherited content.
+*   **Fixed Commit Crossover**: Each project's commits are now fully isolated in their own folder.
+*   **Fixed Project Switching**: Content and commits correctly load when switching between projects.
+
+### UI/UX Improvements
+*   **Clearer Repository Creation**: Default name changed from "Diff-Commit-Repos" to "My Writing Projects".
+*   **Better Empty State Messaging**: Clear guidance on creating repositories vs. projects.
 
 ---
 

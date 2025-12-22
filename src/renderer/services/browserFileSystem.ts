@@ -42,6 +42,12 @@ declare global {
 const PROJECT_CONTENT_FILE = 'content.md';
 const DIFF_COMMIT_DIR = '.diff-commit';
 const COMMITS_FILE = 'commits.json';
+const METADATA_FILE = 'metadata.json';
+
+// Metadata structure
+interface ProjectMetadata {
+    createdAt: number;
+}
 
 // Store the current directory handle
 let currentRepoHandle: FileSystemDirectoryHandle | null = null;
@@ -64,6 +70,30 @@ async function isProjectFolder(dirHandle: FileSystemDirectoryHandle): Promise<bo
     } catch {
         return false;
     }
+}
+
+/**
+ * Read project metadata from .diff-commit/metadata.json
+ */
+async function readProjectMetadata(diffCommitHandle: FileSystemDirectoryHandle): Promise<ProjectMetadata | null> {
+    try {
+        const metaHandle = await diffCommitHandle.getFileHandle(METADATA_FILE);
+        const file = await metaHandle.getFile();
+        const text = await file.text();
+        return JSON.parse(text) as ProjectMetadata;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Write project metadata to .diff-commit/metadata.json
+ */
+async function writeProjectMetadata(diffCommitHandle: FileSystemDirectoryHandle, metadata: ProjectMetadata): Promise<void> {
+    const metaHandle = await diffCommitHandle.getFileHandle(METADATA_FILE, { create: true });
+    const writable = await metaHandle.createWritable();
+    await writable.write(JSON.stringify(metadata, null, 2));
+    await writable.close();
 }
 
 /**
@@ -120,13 +150,27 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
                     let createdAt = Date.now();
                     let updatedAt = Date.now();
 
-                    // Read content.md if exists
+                    // Try to read metadata for createdAt
+                    try {
+                        const diffCommitHandle = await dirHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
+                        const metadata = await readProjectMetadata(diffCommitHandle);
+                        if (metadata?.createdAt) {
+                            createdAt = metadata.createdAt;
+                        }
+                    } catch {
+                        // No metadata yet
+                    }
+
+                    // Read content.md if exists - use lastModified for updatedAt
                     try {
                         const contentHandle = await dirHandle.getFileHandle(PROJECT_CONTENT_FILE);
                         const file = await contentHandle.getFile();
                         content = await file.text();
-                        createdAt = file.lastModified;
                         updatedAt = file.lastModified;
+                        // Only use file.lastModified for createdAt as fallback if no metadata
+                        if (createdAt === Date.now()) {
+                            createdAt = file.lastModified;
+                        }
                     } catch {
                         // No content.md yet
                     }
@@ -150,13 +194,15 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
 }
 
 /**
- * Create a new project folder with content.md and .diff-commit/commits.json
+ * Create a new project folder with content.md, .diff-commit/commits.json, and metadata.json
  */
 export async function createProjectFolder(
     repoHandle: FileSystemDirectoryHandle,
     projectName: string,
     initialContent: string = ''
 ): Promise<Project | null> {
+    const now = Date.now();
+
     try {
         // Create project folder
         const projectHandle = await repoHandle.getDirectoryHandle(projectName, { create: true });
@@ -176,12 +222,15 @@ export async function createProjectFolder(
         await commitsWritable.write('[]');
         await commitsWritable.close();
 
+        // Create metadata.json with createdAt timestamp
+        await writeProjectMetadata(diffCommitHandle, { createdAt: now });
+
         return {
             id: projectName,
             name: projectName,
             content: initialContent,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
+            createdAt: now,
+            updatedAt: now,
             repositoryPath: repoHandle.name
         };
     } catch (error) {
@@ -294,9 +343,31 @@ export async function renameProjectFolder(
         // Read commits
         const commits = await loadProjectCommits(repoHandle, oldName);
 
+        // Read metadata for createdAt
+        let createdAt = Date.now();
+        try {
+            const diffCommitHandle = await oldHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
+            const metadata = await readProjectMetadata(diffCommitHandle);
+            if (metadata?.createdAt) {
+                createdAt = metadata.createdAt;
+            }
+        } catch {
+            // No metadata
+        }
+
         // Create new project with data
         const newProject = await createProjectFolder(repoHandle, newName, content);
         if (!newProject) throw new Error('Failed to create new project folder');
+
+        // Preserve original createdAt
+        try {
+            const newProjectHandle = await repoHandle.getDirectoryHandle(newName);
+            const newDiffCommitHandle = await newProjectHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
+            await writeProjectMetadata(newDiffCommitHandle, { createdAt });
+            newProject.createdAt = createdAt;
+        } catch {
+            // Failed to preserve metadata
+        }
 
         // Save commits to new location
         if (commits.length > 0) {

@@ -401,6 +401,35 @@ app.whenReady().then(() => {
     const PROJECT_CONTENT_FILE = 'content.md';
     const DIFF_COMMIT_DIR = '.diff-commit';
     const COMMITS_FILE = 'commits.json';
+    const METADATA_FILE = 'metadata.json';
+
+    interface ProjectMetadata {
+        createdAt: number;
+    }
+
+    /**
+     * Read project metadata from .diff-commit/metadata.json
+     */
+    function readProjectMetadata(diffCommitPath: string): ProjectMetadata | null {
+        const metadataPath = path.join(diffCommitPath, METADATA_FILE);
+        try {
+            if (fs.existsSync(metadataPath)) {
+                const data = fs.readFileSync(metadataPath, 'utf-8');
+                return JSON.parse(data) as ProjectMetadata;
+            }
+        } catch (e) {
+            console.warn('Failed to read metadata:', e);
+        }
+        return null;
+    }
+
+    /**
+     * Write project metadata to .diff-commit/metadata.json
+     */
+    function writeProjectMetadata(diffCommitPath: string, metadata: ProjectMetadata): void {
+        const metadataPath = path.join(diffCommitPath, METADATA_FILE);
+        fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8');
+    }
 
     /**
      * Check if a directory is a valid project folder.
@@ -432,6 +461,7 @@ app.whenReady().then(() => {
                     // Check if this is a project folder (has .diff-commit)
                     if (isProjectFolder(projectPath)) {
                         const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+                        const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
                         let content = '';
 
                         // Read content if exists
@@ -439,13 +469,20 @@ app.whenReady().then(() => {
                             content = fs.readFileSync(contentPath, 'utf-8');
                         }
 
+                        // Get timestamps - prefer metadata for createdAt, content file for updatedAt
                         const stats = fs.statSync(projectPath);
+                        const contentStats = fs.existsSync(contentPath) ? fs.statSync(contentPath) : null;
+                        const metadata = readProjectMetadata(diffCommitPath);
+
+                        const createdAt = metadata?.createdAt || stats.birthtimeMs;
+                        const updatedAt = contentStats?.mtimeMs || stats.mtimeMs;
+
                         projects.push({
                             id: item.name,  // Folder name
                             name: item.name,
                             content,
-                            createdAt: stats.birthtimeMs,
-                            updatedAt: stats.mtimeMs,
+                            createdAt,
+                            updatedAt,
                             path: projectPath,  // Full path to project folder
                             repositoryPath: repoPath
                         });
@@ -464,6 +501,7 @@ app.whenReady().then(() => {
     ipcMain.handle('create-project', async (event, repoPath, projectName, initialContent = '') => {
         if (!repoPath || !projectName) return null;
 
+        const now = Date.now();
         const projectPath = path.join(repoPath, projectName);
         const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
         const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
@@ -482,12 +520,15 @@ app.whenReady().then(() => {
             // Create empty commits.json
             fs.writeFileSync(commitsPath, '[]', 'utf-8');
 
+            // Create metadata.json with createdAt
+            writeProjectMetadata(diffCommitPath, { createdAt: now });
+
             return {
                 id: projectName,
                 name: projectName,
                 content: initialContent,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
+                createdAt: now,
+                updatedAt: now,
                 path: projectPath,
                 repositoryPath: repoPath
             };
