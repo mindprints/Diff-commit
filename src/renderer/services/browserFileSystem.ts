@@ -147,7 +147,7 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
                 // Check if this is a project folder
                 if (await isProjectFolder(dirHandle)) {
                     let content = '';
-                    let createdAt = Date.now();
+                    let createdAt: number | undefined = undefined;
                     let updatedAt = Date.now();
 
                     // Try to read metadata for createdAt
@@ -167,12 +167,17 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
                         const file = await contentHandle.getFile();
                         content = await file.text();
                         updatedAt = file.lastModified;
-                        // Only use file.lastModified for createdAt as fallback if no metadata
-                        if (createdAt === Date.now()) {
+                        // Use file.lastModified for createdAt only if no metadata was found
+                        if (createdAt === undefined) {
                             createdAt = file.lastModified;
                         }
                     } catch {
                         // No content.md yet
+                    }
+
+                    // Final fallback: if still no createdAt, use current time
+                    if (createdAt === undefined) {
+                        createdAt = Date.now();
                     }
 
                     projects.push({
