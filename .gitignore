@@ -61,3 +61,8 @@ key.json
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Local repositories and artifacts
+Repos/
+commits-backup.json
+metadata.json

@@ -16,7 +16,6 @@ interface ProjectsPanelProps {
     onOpenRepository: () => Promise<void>;
     onCreateRepository?: () => Promise<void>;
     repositoryPath: string | null;
-    currentContent?: string; // Current text to save to new project
 }
 
 export function ProjectsPanel({
@@ -31,7 +30,6 @@ export function ProjectsPanel({
     onOpenRepository,
     onCreateRepository,
     repositoryPath,
-    currentContent = '',
 }: ProjectsPanelProps) {
     const [isCreating, setIsCreating] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
@@ -44,8 +42,9 @@ export function ProjectsPanel({
 
     const handleCreate = async () => {
         if (!newProjectName.trim()) return;
-        // Create new project with current content
-        await onCreateProject(newProjectName.trim(), currentContent); setNewProjectName('');
+        // Create new project with EMPTY content - don't inherit residue from previous session
+        await onCreateProject(newProjectName.trim(), '');
+        setNewProjectName('');
         setIsCreating(false);
     };
 
@@ -214,11 +213,9 @@ export function ProjectsPanel({
                                 Cancel
                             </Button>
                         </div>
-                        {currentContent && (
-                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-2">
-                                Current text will be saved to this project
-                            </p>
-                        )}
+                        <p className="text-xs text-gray-500 dark:text-slate-500 mt-2">
+                            New projects start with a clean slate.
+                        </p>
                     </div>
                 )}
 
@@ -227,8 +224,17 @@ export function ProjectsPanel({
                     {projects.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400 dark:text-slate-500">
                             <FileText className="w-12 h-12 mb-4 opacity-50" />
-                            <p className="text-lg font-medium">No projects yet</p>
-                            <p className="text-sm">Create a new project {repositoryPath ? 'in this repo' : ''} to get started</p>
+                            {repositoryPath ? (
+                                <>
+                                    <p className="text-lg font-medium">No projects yet</p>
+                                    <p className="text-sm text-center px-4">Click <span className="text-indigo-500 font-medium">+New</span> above to create your first project in this repo.</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-lg font-medium">No repository selected</p>
+                                    <p className="text-sm text-center px-4">First <span className="text-indigo-500 font-medium">Create</span> or <span className="text-indigo-500 font-medium">Open</span> a repository above, then create projects inside it.</p>
+                                </>
+                            )}
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-100 dark:divide-slate-800">

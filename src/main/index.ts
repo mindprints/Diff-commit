@@ -537,7 +537,7 @@ app.whenReady().then(() => {
     // Create Repository (Create a new folder on disk)
     ipcMain.handle('create-repository', async () => {
         const docsPath = app.getPath('documents');
-        const defaultPath = path.join(docsPath, 'Diff-Commit');
+        const defaultPath = path.join(docsPath, 'Diff-Commit-Repos');
 
         const result = await dialog.showSaveDialog(mainWindow, {
             title: 'Create Repository',

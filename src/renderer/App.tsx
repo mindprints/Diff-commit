@@ -379,29 +379,30 @@ function App() {
   }, [resetDiffState]);
 
   // Memoize browser FS callbacks to prevent stale closures
+  // Use project.id (the full filename like "essay.md") for commit storage, not display name
   const browserLoadCommits = useMemo(() => {
-    if (!currentProject?.name) return undefined;
+    if (!currentProject?.id) return undefined;
     return async () => {
       const handle = getRepoHandle();
-      if (handle && currentProject.name) {
+      if (handle && currentProject.id) {
         const { loadProjectCommits } = await import('./services/browserFileSystem');
-        return loadProjectCommits(handle, currentProject.name);
+        return loadProjectCommits(handle, currentProject.id);
       }
       return [];
     };
-  }, [currentProject?.name, getRepoHandle]);
+  }, [currentProject?.id, getRepoHandle]);
 
   const browserSaveCommits = useMemo(() => {
-    if (!currentProject?.name) return undefined;
+    if (!currentProject?.id) return undefined;
     return async (commits: any[]) => {
       const handle = getRepoHandle();
-      if (handle && currentProject.name) {
+      if (handle && currentProject.id) {
         const { saveProjectCommits } = await import('./services/browserFileSystem');
-        return saveProjectCommits(handle, currentProject.name, commits);
+        return saveProjectCommits(handle, currentProject.id, commits);
       }
       return false;
     };
-  }, [currentProject?.name, getRepoHandle]);
+  }, [currentProject?.id, getRepoHandle]);
 
   const {
     commits,
@@ -415,7 +416,7 @@ function App() {
     getCommitText,
     onAfterCommit,
     currentProjectPath: currentProject?.path,
-    currentProjectName: currentProject?.name,
+    currentProjectName: currentProject?.id, // Use id (filename) for unique identification
     browserLoadCommits,
     browserSaveCommits,
   });
@@ -2004,7 +2005,6 @@ function App() {
         onOpenRepository={openRepository}
         onCreateRepository={createRepository}
         repositoryPath={repositoryPath}
-        currentContent=""
       />
     </div>
   );

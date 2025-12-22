@@ -82,9 +82,27 @@ export function useCommitHistory({
         loadCommits();
     }, [currentProjectPath, currentProjectName, browserLoadCommits]);
 
+    // Track which project the currently loaded commits belong to
+    // This prevents saving stale commits to a new project
+    const loadedForProjectRef = useRef<{ path?: string; name?: string }>({});
+
+    // Update the ref whenever we finish loading for a project
+    useEffect(() => {
+        if (isLoaded) {
+            loadedForProjectRef.current = { path: currentProjectPath, name: currentProjectName };
+        }
+    }, [isLoaded, currentProjectPath, currentProjectName]);
+
     // Save to Electron store, browser FS, or localStorage
     useEffect(() => {
         if (!isLoaded) return; // Don't save if we haven't finished loading for the current context yet
+
+        // CRITICAL: Don't save if the project context has changed since we loaded
+        // This prevents saving old project's commits to a new project's file
+        const loadedFor = loadedForProjectRef.current;
+        if (loadedFor.path !== currentProjectPath || loadedFor.name !== currentProjectName) {
+            return; // Stale commits - don't save to wrong project
+        }
 
         const saveCommits = async () => {
             // Priority 1: Project-specific file storage (Electron)
