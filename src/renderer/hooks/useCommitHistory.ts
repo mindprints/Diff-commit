@@ -58,23 +58,13 @@ export function useCommitHistory({
                 }
             }
 
-            // Priority 3: Only load from global storage in browser fallback mode
-            // In Electron mode, global commits are legacy data that should be cleared
+            // Priority 3: No project selected - clear commits
+            // Both Electron and Browser mode should show empty commits when no project is loaded
             if (!currentProjectPath && !currentProjectName) {
-                if (window.electron) {
-                    // In Electron mode, we don't want "global" commits anymore
-                    // We only use project-specific ones.
-                    setCommits([]);
-                } else {
-                    // Browser fallback - can still use localStorage for non-project mode
-                    const stored = localStorage.getItem('diff-commit-commits');
-                    if (stored) {
-                        try {
-                            setCommits(JSON.parse(stored));
-                        } catch (e) {
-                            console.warn('Failed to parse stored commits:', e);
-                        }
-                    }
+                setCommits([]);
+                // Also clear any stale localStorage data in browser mode
+                if (!window.electron) {
+                    localStorage.removeItem('diff-commit-commits');
                 }
             }
             setIsLoaded(true);
@@ -86,11 +76,17 @@ export function useCommitHistory({
     // This prevents saving stale commits to a new project
     const loadedForProjectRef = useRef<{ path?: string; name?: string }>({});
 
-    // Update the ref whenever we finish loading for a project
+    // Track previous isLoaded to detect false→true transitions
+    const prevIsLoadedRef = useRef(isLoaded);
+
+    // Update the ref ONLY when loading transitions from incomplete to complete
+    // This prevents the race condition where effects run with the same state snapshot
+    // and the ref gets updated with new project context while commits are still stale
     useEffect(() => {
-        if (isLoaded) {
+        if (isLoaded && !prevIsLoadedRef.current) {
             loadedForProjectRef.current = { path: currentProjectPath, name: currentProjectName };
         }
+        prevIsLoadedRef.current = isLoaded;
     }, [isLoaded, currentProjectPath, currentProjectName]);
 
     // Save to Electron store, browser FS, or localStorage
