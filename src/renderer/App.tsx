@@ -1159,14 +1159,23 @@ function App() {
 
   // Handle saving the prompt from the dialog
   const handleSavePromptSubmit = async (prompt: AIPrompt) => {
-    await createPrompt({
-      name: prompt.name,
-      systemInstruction: prompt.systemInstruction,
-      promptTask: prompt.promptTask,
-      color: prompt.color,
-    });
-    // Open prompts modal to show the new prompt
-    setShowPromptsModal(true);
+    try {
+      await createPrompt({
+        name: prompt.name,
+        systemInstruction: prompt.systemInstruction,
+        promptTask: prompt.promptTask,
+        color: prompt.color,
+      });
+      // Success: close dialog and clear state
+      setSavePromptDialogOpen(false);
+      setPendingPromptText('');
+      // Open prompts modal to show the new prompt
+      setShowPromptsModal(true);
+    } catch (error) {
+      // Log error and re-throw so the dialog can display it
+      console.error('Failed to save prompt:', error);
+      throw error; // Dialog will catch this and show error message
+    }
   };
 
   const fontClasses = {

@@ -71,6 +71,14 @@ export function SavePromptDialog({
         return () => document.removeEventListener('keydown', handleEscape);
     }, [isOpen, onClose]);
 
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
     const handleSave = async () => {
         if (!name.trim()) {
             setError('Please enter a name for your prompt');
@@ -94,12 +102,15 @@ export function SavePromptDialog({
             await onSave(newPrompt);
             onClose();
         } catch (e) {
-            setError((e as Error).message || 'Failed to save prompt');
+            if (isMountedRef.current) {
+                setError((e as Error).message || 'Failed to save prompt');
+            }
         } finally {
-            setIsSaving(false);
+            if (isMountedRef.current) {
+                setIsSaving(false);
+            }
         }
     };
-
     if (!isOpen) return null;
 
     // Truncate preview if too long
