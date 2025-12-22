@@ -109,24 +109,49 @@ export function useProjects() {
         }
     }, []);
 
-    // Load a specific project
+    // Load a specific project - ALWAYS re-read content from disk
     const loadProject = useCallback(async (id: string) => {
-        // Find project in state
+        // Find project in state to get the path
         const project = projects.find(p => p.id === id);
-        if (project) {
-            setCurrentProject(project);
-            return project;
+        if (!project) {
+            // Fallback - try from storage
+            const loadedProject = await projectStorage.getProject(id);
+            if (loadedProject) {
+                setCurrentProject(loadedProject);
+            }
+            return loadedProject;
         }
 
-        // Fallback - try from storage
-        const loadedProject = await projectStorage.getProject(id);
-        if (loadedProject) {
-            setCurrentProject(loadedProject);
-        }
-        return loadedProject;
-    }, [projects]);
+        // Re-read content from disk to get latest
+        let freshContent = project.content;
 
-    // Save current project with new content
+        if (isElectron && project.path && window.electron?.loadProjectContent) {
+            // Electron mode - use IPC to read content.md
+            try {
+                freshContent = await window.electron.loadProjectContent(project.path);
+            } catch (e) {
+                console.log('Using cached content for project:', project.name, e);
+            }
+        } else if (repoHandleRef.current) {
+            // Browser mode - re-read from file system
+            try {
+                const projectHandle = await repoHandleRef.current.getDirectoryHandle(project.name);
+                const contentHandle = await projectHandle.getFileHandle('content.md');
+                const file = await contentHandle.getFile();
+                freshContent = await file.text();
+            } catch {
+                // Use cached content if can't read
+                console.log('Using cached content for project:', project.name);
+            }
+        }
+
+        const freshProject = { ...project, content: freshContent };
+        setCurrentProject(freshProject);
+        setProjects(prev => prev.map(p => p.id === id ? freshProject : p));
+        return freshProject;
+    }, [projects, isElectron]);
+
+    // Save current project content to disk
     const saveCurrentProject = useCallback(async (content: string) => {
         if (!currentProject) return null;
 
@@ -138,8 +163,12 @@ export function useProjects() {
 
         // Save to file system
         if (isElectron && currentProject.path) {
-            await projectStorage.saveProject(updatedProject);
-        } else if (repoHandleRef.current && repositoryPath) {
+            // Electron mode - save to content.md in project folder
+            if (window.electron?.saveProjectContent) {
+                await window.electron.saveProjectContent(currentProject.path, content);
+            }
+        } else if (repoHandleRef.current && currentProject.name) {
+            // Browser mode - save to content.md
             await browserFS.saveProjectDraft(repoHandleRef.current, currentProject.name, content);
         } else {
             // localStorage fallback
@@ -149,7 +178,7 @@ export function useProjects() {
         setCurrentProject(updatedProject);
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
         return updatedProject;
-    }, [currentProject, isElectron, repositoryPath]);
+    }, [currentProject, isElectron]);
 
     // Create a new project
     const createNewProject = useCallback(async (name: string, content: string = '', open: boolean = true) => {

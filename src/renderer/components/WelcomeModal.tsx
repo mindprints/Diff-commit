@@ -1,0 +1,106 @@
+import React from 'react';
+import { FolderOpen, FolderPlus, FileText, GitBranch } from 'lucide-react';
+import { Button } from './Button';
+
+interface WelcomeModalProps {
+    isOpen: boolean;
+    onCreateRepository: () => Promise<void>;
+    onOpenRepository: () => Promise<void>;
+    isLoading?: boolean;
+}
+
+export function WelcomeModal({
+    isOpen,
+    onCreateRepository,
+    onOpenRepository,
+    isLoading = false,
+}: WelcomeModalProps) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+            {/* Backdrop - no onClick to close, user must choose an action */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+            {/* Modal */}
+            <div className="relative w-full max-w-md m-4 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                {/* Header */}
+                <div className="px-8 pt-8 pb-4 text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+                        <GitBranch className="w-8 h-8 text-white" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">
+                        Welcome to Diff-Commit
+                    </h1>
+                    <p className="text-gray-600 dark:text-slate-400 text-sm">
+                        To get started, you need to select where your projects will be stored.
+                    </p>
+                </div>
+
+                {/* Explanation */}
+                <div className="px-8 py-4">
+                    <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-4 mb-6">
+                        <h3 className="font-semibold text-indigo-900 dark:text-indigo-200 mb-2 flex items-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            What is a Repository?
+                        </h3>
+                        <p className="text-sm text-indigo-800 dark:text-indigo-300">
+                            A <strong>repository</strong> is a folder on your computer where your writing projects
+                            and their version history are stored. Each project is a document (like an essay,
+                            article, or notes) that you can edit and track changes over time.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div className="px-8 pb-8 space-y-3">
+                    <Button
+                        variant="primary"
+                        size="lg"
+                        className="w-full justify-center py-3"
+                        onClick={onCreateRepository}
+                        disabled={isLoading}
+                        icon={<FolderPlus className="w-5 h-5" />}
+                    >
+                        Create New Repository
+                    </Button>
+                    <p className="text-xs text-center text-gray-500 dark:text-slate-500 -mt-1 mb-2">
+                        Choose a location and name for a new folder to store your projects
+                    </p>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-gray-200 dark:border-slate-700" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white dark:bg-slate-900 px-2 text-gray-400 dark:text-slate-500">
+                                or
+                            </span>
+                        </div>
+                    </div>
+
+                    <Button
+                        variant="secondary"
+                        size="lg"
+                        className="w-full justify-center py-3"
+                        onClick={onOpenRepository}
+                        disabled={isLoading}
+                        icon={<FolderOpen className="w-5 h-5" />}
+                    >
+                        Open Existing Repository
+                    </Button>
+                    <p className="text-xs text-center text-gray-500 dark:text-slate-500 -mt-1">
+                        Select an existing folder that contains your projects
+                    </p>
+                </div>
+
+                {/* Footer */}
+                <div className="px-8 py-4 bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800">
+                    <p className="text-xs text-center text-gray-400 dark:text-slate-500">
+                        Your work is always saved locally on your computer.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}

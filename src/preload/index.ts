@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('electron', {
     createRepository: () => ipcRenderer.invoke('create-repository'),
     createProject: (repoPath, name, content) => ipcRenderer.invoke('create-project', repoPath, name, content),
     saveProjectContent: (path, content) => ipcRenderer.invoke('save-project-content', path, content),
+    loadProjectContent: (path) => ipcRenderer.invoke('load-project-content', path),
     loadProjectCommits: (path) => ipcRenderer.invoke('load-project-commits', path),
     saveProjectCommits: (path, commits) => ipcRenderer.invoke('save-project-commits', path, commits),
     saveProjectBundle: (projectPath) => ipcRenderer.invoke('save-project-bundle', projectPath),

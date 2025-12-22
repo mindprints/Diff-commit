@@ -37,6 +37,7 @@ export interface IElectronAPI {
     createRepository: () => Promise<{ path: string; projects: Project[] } | null>;
     createProject: (repoPath: string, name: string, content?: string) => Promise<Project | null>;
     saveProjectContent: (path: string, content: string) => Promise<boolean>;
+    loadProjectContent: (path: string) => Promise<string>;
     loadProjectCommits: (path: string) => Promise<TextCommit[]>;
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;

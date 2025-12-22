@@ -15,6 +15,7 @@ import { CommitHistoryModal } from './components/CommitHistoryModal';
 import { ContextMenu } from './components/ContextMenu';
 import { PromptsModal } from './components/PromptsModal';
 import { ProjectsPanel } from './components/ProjectsPanel';
+import { WelcomeModal } from './components/WelcomeModal';
 import { useCommitHistory } from './hooks/useCommitHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
@@ -370,39 +371,44 @@ function App() {
     return mode === ViewMode.DIFF ? previewText : originalText;
   }, [mode, previewText, originalText]);
 
-  const onAfterCommit = useCallback((committedText: string) => {
+  const onAfterCommit = useCallback(async (committedText: string) => {
     // After commit: both panes should have matching content
     setOriginalText(committedText);
     setPreviewText(committedText);
     setModifiedText('');
     resetDiffState();
-  }, [resetDiffState]);
 
-  // Memoize browser FS callbacks to prevent stale closures
-  // Use project.id (the full filename like "essay.md") for commit storage, not display name
+    // CRITICAL: Save content to disk so it persists when switching projects
+    if (currentProject) {
+      await saveCurrentProject(committedText);
+    }
+  }, [resetDiffState, currentProject, saveCurrentProject]);
+
+  // Memoize browser FS callbacks for folder-based projects
+  // Project name = folder name (used for commit storage)
   const browserLoadCommits = useMemo(() => {
-    if (!currentProject?.id) return undefined;
+    if (!currentProject?.name) return undefined;
     return async () => {
       const handle = getRepoHandle();
-      if (handle && currentProject.id) {
+      if (handle && currentProject.name) {
         const { loadProjectCommits } = await import('./services/browserFileSystem');
-        return loadProjectCommits(handle, currentProject.id);
+        return loadProjectCommits(handle, currentProject.name);
       }
       return [];
     };
-  }, [currentProject?.id, getRepoHandle]);
+  }, [currentProject?.name, getRepoHandle]);
 
   const browserSaveCommits = useMemo(() => {
-    if (!currentProject?.id) return undefined;
+    if (!currentProject?.name) return undefined;
     return async (commits: any[]) => {
       const handle = getRepoHandle();
-      if (handle && currentProject.id) {
+      if (handle && currentProject.name) {
         const { saveProjectCommits } = await import('./services/browserFileSystem');
-        return saveProjectCommits(handle, currentProject.id, commits);
+        return saveProjectCommits(handle, currentProject.name, commits);
       }
       return false;
     };
-  }, [currentProject?.id, getRepoHandle]);
+  }, [currentProject?.name, getRepoHandle]);
 
   const {
     commits,
@@ -416,7 +422,7 @@ function App() {
     getCommitText,
     onAfterCommit,
     currentProjectPath: currentProject?.path,
-    currentProjectName: currentProject?.id, // Use id (filename) for unique identification
+    currentProjectName: currentProject?.name, // Folder name for unique identification
     browserLoadCommits,
     browserSaveCommits,
   });
@@ -2005,6 +2011,13 @@ function App() {
         onOpenRepository={openRepository}
         onCreateRepository={createRepository}
         repositoryPath={repositoryPath}
+      />
+
+      {/* Welcome Gate - forces users to select a repository before using the app */}
+      <WelcomeModal
+        isOpen={!repositoryPath}
+        onCreateRepository={handleCreateRepository}
+        onOpenRepository={handleOpenRepository}
       />
     </div>
   );

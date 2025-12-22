@@ -397,15 +397,21 @@ app.whenReady().then(() => {
         return null;
     });
 
-    // Supported file extensions for projects
-    const PROJECT_FILE_EXTENSIONS = ['.md', '.txt', '.html', '.htm'];
+    // Supported file extensions for project content
+    const PROJECT_CONTENT_FILE = 'content.md';
+    const DIFF_COMMIT_DIR = '.diff-commit';
+    const COMMITS_FILE = 'commits.json';
 
-    function isProjectFile(filename: string): boolean {
-        const lower = filename.toLowerCase();
-        return PROJECT_FILE_EXTENSIONS.some(ext => lower.endsWith(ext));
+    /**
+     * Check if a directory is a valid project folder.
+     * A project folder contains a .diff-commit directory.
+     */
+    function isProjectFolder(dirPath: string): boolean {
+        const diffCommitPath = path.join(dirPath, DIFF_COMMIT_DIR);
+        return fs.existsSync(diffCommitPath) && fs.statSync(diffCommitPath).isDirectory();
     }
 
-    // Open Repository (Select Folder) - scans for project files
+    // Open Repository (Select Folder) - scans for project folders
     ipcMain.handle('open-repository', async () => {
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ['openDirectory', 'createDirectory']
@@ -416,27 +422,34 @@ app.whenReady().then(() => {
         const repoPath = result.filePaths[0];
         const projects = [];
 
-        // Scan for project files (.md, .txt, .html)
+        // Scan for project folders (subdirectories with .diff-commit)
         try {
             const items = fs.readdirSync(repoPath, { withFileTypes: true });
             for (const item of items) {
-                if (item.isFile() && !item.name.startsWith('.') && isProjectFile(item.name)) {
-                    const filePath = path.join(repoPath, item.name);
-                    const stats = fs.statSync(filePath);
-                    const content = fs.readFileSync(filePath, 'utf-8');
+                if (item.isDirectory() && !item.name.startsWith('.')) {
+                    const projectPath = path.join(repoPath, item.name);
 
-                    // Use filename without extension as display name
-                    const displayName = item.name.replace(/\.[^/.]+$/, '');
+                    // Check if this is a project folder (has .diff-commit)
+                    if (isProjectFolder(projectPath)) {
+                        const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+                        let content = '';
 
-                    projects.push({
-                        id: item.name,  // Full filename including extension
-                        name: displayName,
-                        content,
-                        createdAt: stats.birthtimeMs,
-                        updatedAt: stats.mtimeMs,
-                        path: filePath,
-                        repositoryPath: repoPath
-                    });
+                        // Read content if exists
+                        if (fs.existsSync(contentPath)) {
+                            content = fs.readFileSync(contentPath, 'utf-8');
+                        }
+
+                        const stats = fs.statSync(projectPath);
+                        projects.push({
+                            id: item.name,  // Folder name
+                            name: item.name,
+                            content,
+                            createdAt: stats.birthtimeMs,
+                            updatedAt: stats.mtimeMs,
+                            path: projectPath,  // Full path to project folder
+                            repositoryPath: repoPath
+                        });
+                    }
                 }
             }
         } catch (e) {
@@ -447,26 +460,35 @@ app.whenReady().then(() => {
         return { path: repoPath, projects };
     });
 
-    // Create New Project (create a file, default .md)
+    // Create New Project (create a folder with content.md and .diff-commit)
     ipcMain.handle('create-project', async (event, repoPath, projectName, initialContent = '') => {
         if (!repoPath || !projectName) return null;
 
-        // Add .md extension if no extension provided
-        const filename = projectName.includes('.') ? projectName : `${projectName}.md`;
-        const filePath = path.join(repoPath, filename);
-        const displayName = filename.replace(/\.[^/.]+$/, '');
+        const projectPath = path.join(repoPath, projectName);
+        const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+        const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
+        const commitsPath = path.join(diffCommitPath, COMMITS_FILE);
 
         try {
-            // Create the file
-            fs.writeFileSync(filePath, initialContent, 'utf-8');
+            // Create project folder
+            fs.mkdirSync(projectPath, { recursive: true });
+
+            // Create .diff-commit folder
+            fs.mkdirSync(diffCommitPath, { recursive: true });
+
+            // Create content.md
+            fs.writeFileSync(contentPath, initialContent, 'utf-8');
+
+            // Create empty commits.json
+            fs.writeFileSync(commitsPath, '[]', 'utf-8');
 
             return {
-                id: filename,
-                name: displayName,
+                id: projectName,
+                name: projectName,
                 content: initialContent,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
-                path: filePath,
+                path: projectPath,
                 repositoryPath: repoPath
             };
         } catch (e) {
@@ -475,11 +497,12 @@ app.whenReady().then(() => {
         }
     });
 
-    // Save Project Content (write directly to the file)
+    // Save Project Content (write to content.md in project folder)
     ipcMain.handle('save-project-content', async (event, projectPath, content) => {
         if (!projectPath) return false;
         try {
-            fs.writeFileSync(projectPath, content, 'utf-8');
+            const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+            fs.writeFileSync(contentPath, content, 'utf-8');
             return true;
         } catch (e) {
             console.error('Failed to save project content:', e);
@@ -487,23 +510,30 @@ app.whenReady().then(() => {
         }
     });
 
-    // Helper: get .diff-commit directory path
-    function getDiffCommitPath(repoPath: string): string {
-        return path.join(repoPath, '.diff-commit');
-    }
+    // Load Project Content (read from content.md in project folder)
+    ipcMain.handle('load-project-content', async (event, projectPath) => {
+        if (!projectPath) return '';
+        try {
+            const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+            if (fs.existsSync(contentPath)) {
+                return fs.readFileSync(contentPath, 'utf-8');
+            }
+            return '';
+        } catch (e) {
+            console.error('Failed to load project content:', e);
+            return '';
+        }
+    });
 
-    // Load Project Commits (from .diff-commit/{filename}.commits.json)
+    // Load Project Commits (from projectPath/.diff-commit/commits.json)
     ipcMain.handle('load-project-commits', async (event, projectPath) => {
         if (!projectPath) return [];
 
-        const repoPath = path.dirname(projectPath);
-        const filename = path.basename(projectPath);
-        const diffCommitDir = getDiffCommitPath(repoPath);
-        const commitsFile = path.join(diffCommitDir, `${filename}.commits.json`);
+        const commitsPath = path.join(projectPath, DIFF_COMMIT_DIR, COMMITS_FILE);
 
         try {
-            if (fs.existsSync(commitsFile)) {
-                const data = fs.readFileSync(commitsFile, 'utf-8');
+            if (fs.existsSync(commitsPath)) {
+                const data = fs.readFileSync(commitsPath, 'utf-8');
                 return JSON.parse(data);
             }
             return [];
@@ -513,20 +543,18 @@ app.whenReady().then(() => {
         }
     });
 
-    // Save Project Commits (to .diff-commit/{filename}.commits.json)
+    // Save Project Commits (to projectPath/.diff-commit/commits.json)
     ipcMain.handle('save-project-commits', async (event, projectPath, commits) => {
         if (!projectPath) return false;
 
-        const repoPath = path.dirname(projectPath);
-        const filename = path.basename(projectPath);
-        const diffCommitDir = getDiffCommitPath(repoPath);
-        const commitsFile = path.join(diffCommitDir, `${filename}.commits.json`);
+        const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
+        const commitsPath = path.join(diffCommitPath, COMMITS_FILE);
 
         try {
-            if (!fs.existsSync(diffCommitDir)) {
-                fs.mkdirSync(diffCommitDir, { recursive: true });
+            if (!fs.existsSync(diffCommitPath)) {
+                fs.mkdirSync(diffCommitPath, { recursive: true });
             }
-            fs.writeFileSync(commitsFile, JSON.stringify(commits, null, 2), 'utf-8');
+            fs.writeFileSync(commitsPath, JSON.stringify(commits, null, 2), 'utf-8');
             return true;
         } catch (e) {
             console.error('Failed to save commits:', e);
@@ -537,14 +565,15 @@ app.whenReady().then(() => {
     // Create Repository (Create a new folder on disk)
     ipcMain.handle('create-repository', async () => {
         const docsPath = app.getPath('documents');
-        const defaultPath = path.join(docsPath, 'Diff-Commit-Repos');
+        // Clear name that indicates this is a single repository for your projects
+        const defaultPath = path.join(docsPath, 'My Writing Projects');
 
         const result = await dialog.showSaveDialog(mainWindow, {
-            title: 'Create Repository',
+            title: 'Create New Repository Folder',
             defaultPath: defaultPath,
             buttonLabel: 'Create',
             properties: ['createDirectory' as any],
-            nameFieldLabel: 'Repository Name'
+            nameFieldLabel: 'Folder Name'
         });
 
         if (result.canceled || !result.filePath) return null;
@@ -554,9 +583,6 @@ app.whenReady().then(() => {
         try {
             // Create the repository folder
             fs.mkdirSync(repoPath, { recursive: true });
-
-            // Create .diff-commit folder for commit storage
-            fs.mkdirSync(path.join(repoPath, '.diff-commit'), { recursive: true });
 
             return { path: repoPath, projects: [] };
         } catch (e) {
