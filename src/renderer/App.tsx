@@ -1,22 +1,10 @@
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Diff from 'diff';
-import { DiffSegment, ViewMode, FontFamily, PolishMode, TextCommit, AIPrompt } from './types';
-import { Button } from './components/Button';
-import { DiffSegment as DiffSegmentComponent } from './components/DiffSegment';
-import { HelpModal } from './components/HelpModal';
+import { DiffSegment, ViewMode, FontFamily, PolishMode, TextCommit, AIPrompt, AILogEntry, Project } from './types';
 import { polishMergedText, polishMultipleRanges, polishWithPrompt, polishMultipleRangesWithPrompt } from './services/ai';
 import { runFactCheck, getFactCheckModels } from './services/factChecker';
 import { initSpellChecker, checkSpelling } from './services/spellChecker';
 import { MODELS, Model, getCostTier } from './constants/models';
-import { RatingPrompt } from './components/RatingPrompt';
-import { LogsModal } from './components/LogsModal';
-import { CommitHistoryModal } from './components/CommitHistoryModal';
-import { ContextMenu } from './components/ContextMenu';
-import { PromptsModal } from './components/PromptsModal';
-import { ProjectsPanel } from './components/ProjectsPanel';
-import { WelcomeModal } from './components/WelcomeModal';
-import { SavePromptDialog } from './components/SavePromptDialog';
 import { useCommitHistory } from './hooks/useCommitHistory';
 import { useDiffState } from './hooks/useDiffState';
 import { useScrollSync } from './hooks/useScrollSync';
@@ -24,43 +12,17 @@ import { useElectronMenu } from './hooks/useElectronMenu';
 import { usePrompts } from './hooks/usePrompts';
 import { useProjects } from './hooks/useProjects';
 import { useAsyncAI, PendingOperation } from './hooks/useAsyncAI';
-import MultiSelectTextArea, { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
+import { MultiSelectTextAreaRef } from './components/MultiSelectTextArea';
 import { MenuBar } from './components/MenuBar';
-import { AILogEntry } from './types';
-import {
-  ArrowRightLeft,
-  Copy,
-  FileText,
-  Sparkles,
-  Wand2,
-  ChevronRight,
-  HelpCircle,
-  Edit3,
-  Type as TypeIcon,
-  GripVertical,
-  Volume2,
-  Square,
-  Check,
-  Moon,
-  Sun,
-  X,
-  BarChart3,
-  Trash2,
-  Shield,
-  RefreshCw,
-  History,
-  GitBranch,
-  Link2,
-  Settings,
-  ArrowLeft,
-  FolderOpen,
-  Zap,
-  Save
-} from 'lucide-react';
+import { AppHeader } from './components/AppHeader';
+import { EditorPanel } from './components/EditorPanel';
+import { AIPromptPanel } from './components/AIPromptPanel';
+import { DiffPanel } from './components/DiffPanel';
+import { AppModals } from './components/AppModals';
+import { FontSize, fontClasses, sizeClasses } from './constants/ui';
 import clsx from 'clsx';
-import headerIcon from './header_icon_styled.png';
 
-type FontSize = 'sm' | 'base' | 'lg' | 'xl';
+// Redundant FontSize type removed, now in constants/ui.ts
 
 // Characters that define word boundaries (whitespace and punctuation)
 const BOUNDARY_CHARS = /[\s.,;:!?'"()\[\]{}<>\/\\|@#$%^&*+=~`\-_\n\r\t]/;
@@ -123,7 +85,6 @@ function App() {
   const [factCheckProgress, setFactCheckProgress] = useState<string>('');
   const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -501,8 +462,10 @@ function App() {
   const [fontFamily, setFontFamily] = useState<FontFamily>('sans');
   const [fontSize, setFontSize] = useState<FontSize>('base');
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(50); // Percentage
+  const [topPanelHeight, setTopPanelHeight] = useState<number>(60); // Percentage
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const isResizing = useRef(false);
+  const isResizingLeftRight = useRef(false);
+  const isResizingTopBottom = useRef(false);
 
   // Scroll Sync (extracted to custom hook)
   const leftPaneRef = useRef<HTMLDivElement>(null);
@@ -629,25 +592,41 @@ function App() {
     },
   });
 
-  // Resizing Logic
+  // Resizing Logic (Horizontal - Left/Right)
   const startResizing = useCallback(() => {
-    isResizing.current = true;
+    isResizingLeftRight.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   }, []);
 
   const stopResizing = useCallback(() => {
-    isResizing.current = false;
+    isResizingLeftRight.current = false;
+    isResizingTopBottom.current = false;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   }, []);
 
   const handleResize = useCallback((e: MouseEvent) => {
-    if (!isResizing.current) return;
-    const newWidth = (e.clientX / window.innerWidth) * 100;
-    if (newWidth > 20 && newWidth < 80) {
-      setLeftPanelWidth(newWidth);
+    if (isResizingLeftRight.current) {
+      const newWidth = (e.clientX / window.innerWidth) * 100;
+      if (newWidth > 20 && newWidth < 80) {
+        setLeftPanelWidth(newWidth);
+      }
+    } else if (isResizingTopBottom.current) {
+      const headerHeight = 64; // h-16 = 64px
+      const availableHeight = window.innerHeight - headerHeight;
+      const newHeight = ((e.clientY - headerHeight) / availableHeight) * 100;
+      if (newHeight > 20 && newHeight < 80) {
+        setTopPanelHeight(newHeight);
+      }
     }
+  }, []);
+
+  // Resizing Logic (Vertical - Top/Bottom)
+  const startResizingVertical = useCallback(() => {
+    isResizingTopBottom.current = true;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
   }, []);
 
   useEffect(() => {
@@ -1178,18 +1157,7 @@ function App() {
     }
   };
 
-  const fontClasses = {
-    sans: 'font-sans',
-    serif: 'font-serif',
-    mono: 'font-mono'
-  };
-
-  const sizeClasses = {
-    sm: 'text-sm leading-loose',
-    base: 'text-base leading-relaxed',
-    lg: 'text-lg leading-relaxed',
-    xl: 'text-xl leading-relaxed'
-  };
+  // fontClasses and sizeClasses now imported from constants/ui.ts
 
 
 
@@ -1301,778 +1269,198 @@ function App() {
           resetDiffState();
         }}
         onToggleDark={() => setIsDarkMode(prev => !prev)}
-        onFontSize={(size) => setFontSize(size)}
-        onFontFamily={(family) => setFontFamily(family)}
+        onFontSize={setFontSize}
+        onFontFamily={setFontFamily}
         onShowHelp={() => setShowHelp(true)}
         onShowLogs={() => setShowLogs(true)}
         onShowCommitHistory={() => setShowCommitHistory(true)}
         onPolish={(mode) => handleAIEdit(mode)}
-        onFactCheck={() => handleFactCheck()}
+        onFactCheck={handleFactCheck}
         onManagePrompts={() => setShowPromptsModal(true)}
         onManageProjects={() => setShowProjectsPanel(true)}
         onOpenRepository={handleOpenRepository}
         onCreateRepository={handleCreateRepository}
-        onNewProject={handleNewProject}
-      />
-      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
-      <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
-
-      {/* Header */}
-      <header
-        className="flex-none h-16 px-6 flex items-center justify-between z-10 shadow-sm transition-colors duration-200"
-        style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
-      >
-        <div id="header-breadcrumb" className="flex items-center gap-2">
-          <img src={headerIcon} alt="Logo" className="h-8" />
-          <span className="text-gray-300 dark:text-slate-600">/</span>
-          <button
-            onClick={() => openRepository()}
-            className={clsx(
-              "text-lg font-medium truncate max-w-[150px] hover:underline transition-colors",
-              repositoryPath
-                ? "text-gray-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
-                : "text-gray-400 dark:text-slate-500 italic hover:text-indigo-500 dark:hover:text-indigo-400"
-            )}
-            title={repositoryPath ? `${repositoryPath} (click to change)` : "Click to open a repository folder"}
-          >
-            {repositoryPath ? repositoryPath.split(/[\\/]/).pop() : "No Repo"}
-          </button>
-          <span className="text-gray-300 dark:text-slate-600">/</span>
-          <button
-            onClick={() => setShowProjectsPanel(true)}
-            className={clsx(
-              "text-lg font-medium truncate max-w-[200px] hover:underline transition-colors",
-              currentProject
-                ? "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-                : "text-gray-400 dark:text-slate-500 italic hover:text-indigo-500 dark:hover:text-indigo-400"
-            )}
-            title={currentProject?.name ? `${currentProject.name} (click to switch)` : "Click to create or select a project"}
-          >
-            {currentProject?.name || "Unsaved Project"}
-          </button>
-        </div>
-
-        <div id="header-controls" className="flex items-center gap-3">
-          <div className="flex items-center gap-3 mr-2">
-            {/* Background Hue Slider + Model Selector & Cost */}
-            <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-1 rounded-lg border border-gray-200 dark:border-slate-800">
-              {/* Compact Hue Slider */}
-              <input
-                type="range"
-                min="0"
-                max="360"
-                value={backgroundHue}
-                onChange={(e) => setBackgroundHue(Number(e.target.value))}
-                className="w-16 h-4 cursor-pointer appearance-none rounded"
-                style={{
-                  background: `linear-gradient(to right, 
-                    hsl(0, 70%, ${isDarkMode ? '15%' : '95%'}),
-                    hsl(60, 70%, ${isDarkMode ? '15%' : '95%'}),
-                    hsl(120, 70%, ${isDarkMode ? '15%' : '95%'}),
-                    hsl(180, 70%, ${isDarkMode ? '15%' : '95%'}),
-                    hsl(240, 70%, ${isDarkMode ? '15%' : '95%'}),
-                    hsl(300, 70%, ${isDarkMode ? '15%' : '95%'}),
-                    hsl(360, 70%, ${isDarkMode ? '15%' : '95%'})
-                  )`
-                }}
-                title={`Background Hue: ${backgroundHue}°`}
-              />
-              <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-medium ml-1 mr-1 min-w-[3rem] text-right">
-                ${sessionCost.toFixed(4)}
-              </span>
-              <select
-                className="text-xs bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[14rem] truncate"
-                value={selectedModel.id}
-                onChange={(e) => {
-                  const model = MODELS.find(m => m.id === e.target.value);
-                  if (model) setSelectedModel(model);
-                }}
-                title={`Select AI Model - Current: ${selectedModel.name} (${getCostTier(selectedModel)})`}
-              >
-                {MODELS.map(m => (
-                  <option key={m.id} value={m.id}>
-                    {getCostTier(m)} {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Settings Dropdown - Font, Size, Dark Mode */}
-          <div className="relative">
-            <button
-              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className={clsx(
-                "text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2",
-                isSettingsOpen && "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded"
-              )}
-              title="Appearance Settings"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            {isSettingsOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsSettingsOpen(false)}></div>
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-100 dark:border-slate-700 py-2 z-20 animate-in fade-in slide-in-from-top-2 duration-200">
-                  {/* Dark Mode Toggle */}
-                  <div className="px-4 py-2 flex items-center justify-between">
-                    <span className="text-sm text-gray-700 dark:text-slate-300">Dark Mode</span>
-                    <button
-                      onClick={() => setIsDarkMode(!isDarkMode)}
-                      className={clsx(
-                        "w-10 h-6 rounded-full transition-colors relative",
-                        isDarkMode ? "bg-indigo-600" : "bg-gray-300 dark:bg-slate-600"
-                      )}
-                    >
-                      <span className={clsx(
-                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow",
-                        isDarkMode ? "translate-x-5" : "translate-x-1"
-                      )} />
-                    </button>
-                  </div>
-
-                  <div className="border-t border-gray-100 dark:border-slate-700 my-2" />
-
-                  {/* Font Family */}
-                  <div className="px-4 py-2">
-                    <div className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Font Family</div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setFontFamily('sans')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-semibold transition-all", fontFamily === 'sans' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        Sans
-                      </button>
-                      <button
-                        onClick={() => setFontFamily('serif')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-serif font-semibold transition-all", fontFamily === 'serif' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        Serif
-                      </button>
-                      <button
-                        onClick={() => setFontFamily('mono')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-mono font-semibold transition-all", fontFamily === 'mono' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        Mono
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Font Size */}
-                  <div className="px-4 py-2">
-                    <div className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Font Size</div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setFontSize('sm')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-xs font-semibold transition-all", fontSize === 'sm' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        S
-                      </button>
-                      <button
-                        onClick={() => setFontSize('base')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-sm font-semibold transition-all", fontSize === 'base' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        M
-                      </button>
-                      <button
-                        onClick={() => setFontSize('lg')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-base font-semibold transition-all", fontSize === 'lg' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        L
-                      </button>
-                      <button
-                        onClick={() => setFontSize('xl')}
-                        className={clsx("flex-1 px-2 py-1.5 rounded text-lg font-semibold transition-all", fontSize === 'xl' ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700")}
-                      >
-                        XL
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* <button
-            onClick={() => setShowProjectsPanel(true)}
-            className={clsx(
-              "text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 relative",
-              currentProject && "text-indigo-600 dark:text-indigo-400"
-            )}
-            title={currentProject ? `Project: ${currentProject.name}` : "Projects"}
-          >
-            <FolderOpen className="w-5 h-5" />
-            {projects.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {projects.length}
-              </span>
-            )}
-          </button> */}
-
-          <button
-            onClick={() => setShowLogs(true)}
-            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
-            title="View AI Usage Logs"
-          >
-            <BarChart3 className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={() => setShowCommitHistory(true)}
-            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 relative"
-            title="Commit History"
-          >
-            <History className="w-5 h-5" />
-            {commits.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-indigo-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {commits.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setShowHelp(true)}
-            className="text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2"
-            title="Help & Instructions"
-          >
-            <HelpCircle className="w-5 h-5" />
-          </button>
-
-          {mode === ViewMode.DIFF && (
-            <>
-
-
-              <button
-                onClick={() => setIsScrollSyncEnabled(!isScrollSyncEnabled)}
-                className={clsx(
-                  "p-2 rounded transition-colors",
-                  isScrollSyncEnabled
-                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30"
-                    : "text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400"
-                )}
-                title={isScrollSyncEnabled ? "Scroll Sync: ON" : "Scroll Sync: OFF"}
-              >
-                <Link2 className="w-5 h-5" />
-              </button>
-
-              <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-1"></div>
-
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setOriginalText('');
-                  setModifiedText('');
-                  setPreviewText('');
-                  resetDiffState();
-                  // Stay in DIFF mode, just clear the text
-                }}
-                size="sm"
-                icon={<Trash2 className="w-4 h-4" />}
-              >
-                Clear All
-              </Button>
-
-              <Button variant="primary" size="sm" onClick={copyFinal} icon={<Copy className="w-4 h-4" />}>
-                Copy
-              </Button>
-
-
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* DIFF MODE - Now the only mode */}
-      {mode === ViewMode.DIFF && (
-        <div className="w-full h-full flex flex-row">
-          {/* Preview/Editor Panel - NOW LEFT */}
-          <div
-            className="flex flex-col h-full relative z-0 transition-colors duration-200 overflow-hidden"
-            style={{ width: `${leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)', borderRight: '1px solid var(--border-color)' }}
-          >
-            <div
-              id="panel-editor-header"
-              className="flex-none h-14 p-4 flex justify-between items-center relative transition-colors duration-200"
-              style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
-            >
-              <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
-                <Edit3 className="w-4 h-4" />
-                Editor
-              </h2>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleReadAloud}
-                  className={clsx("text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20", isSpeaking && "bg-indigo-100 dark:bg-indigo-900/40")}
-                  title={isSpeaking ? "Stop Speaking" : "Read Aloud (Select text to read section)"}
-                  icon={isSpeaking ? <Square className="w-3 h-3 fill-current" /> : <Volume2 className="w-4 h-4" />}
-                >
-                  {isSpeaking ? "Stop" : "Read"}
-                </Button>
-                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1"></div>
-
-                <div className="relative flex items-center gap-1">
-                  {isPolishMenuOpen && (
-                    <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
-                    isLoading={isPolishing || isFactChecking}
-                    disabled={isPolishing || isFactChecking}
-                    icon={<Wand2 className="w-3 h-3" />}
-                    className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
-                  >
-                    {isFactChecking ? 'Checking...' : 'AI Edit...'}
-                  </Button>
-                  {(isPolishing || isFactChecking) && (
-                    <button
-                      onClick={cancelAIOperation}
-                      className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                      title="Cancel AI Operation"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                  {isFactChecking && factCheckProgress && (
-                    <span className="text-xs text-gray-500 dark:text-slate-400 max-w-32 truncate">
-                      {factCheckProgress}
-                    </span>
-                  )}
-
-                  {isPolishMenuOpen && (
-                    <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
-                      {/* Built-in Prompts */}
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">
-                        Correction Level
-                      </div>
-                      {builtInPrompts.map(prompt => (
-                        <button
-                          key={prompt.id}
-                          onClick={() => handleAIEdit(prompt.id)}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
-                        >
-                          <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
-                          {prompt.name}
-                        </button>
-                      ))}
-
-                      {/* Custom Prompts */}
-                      {customPrompts.length > 0 && (
-                        <>
-                          <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                          <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
-                            Custom Prompts
-                          </div>
-                          {customPrompts.map(prompt => (
-                            <button
-                              key={prompt.id}
-                              onClick={() => handleAIEdit(prompt.id)}
-                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
-                            >
-                              <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
-                              {prompt.name}
-                            </button>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Verification Section */}
-                      <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
-                        Verification
-                      </div>
-                      <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-cyan-500" />
-                        Fact Check
-                        <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
-                      </button>
-
-                      {/* Manage Prompts */}
-                      <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                      <button
-                        onClick={() => { setIsPolishMenuOpen(false); setShowPromptsModal(true); }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700/50 hover:text-gray-700 dark:hover:text-slate-300 transition-colors flex items-center gap-2"
-                      >
-                        <Settings className="w-4 h-4" />
-                        Manage Prompts...
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    // Re-compare: use current previewText as the new modified text
-                    // Set flag to prevent the segments effect from overwriting previewText
-                    skipNextSegmentsSync.current = true;
-                    setModifiedText(previewText);
-                    performDiff(originalText, previewText);
-                  }}
-                  size="sm"
-                  icon={<RefreshCw className="w-3 h-3" />}
-                  title="Re-compare after editing"
-                  disabled={isAutoCompareEnabled}
-                  className={clsx(isAutoCompareEnabled && "opacity-50")}
-                >
-                  Compare
-                </Button>
-
-                <button
-                  onClick={() => setIsAutoCompareEnabled(prev => !prev)}
-                  className={clsx(
-                    "p-1.5 rounded transition-all",
-                    isAutoCompareEnabled
-                      ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-700"
-                      : "text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
-                  )}
-                  title={isAutoCompareEnabled ? "Auto-compare ON: Diffs update as you type" : "Auto-compare OFF: Click Compare to see changes"}
-                >
-                  <Zap className={clsx("w-4 h-4", isAutoCompareEnabled && "fill-current")} />
-                </button>
-
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleCommitClick}
-                  disabled={!previewText.trim()}
-                  className={clsx(
-                    "relative transition-all min-w-[6rem]",
-                    isShiftHeld
-                      ? "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                      : hasUnsavedChanges
-                        ? "bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
-                        : "bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
-                  )}
-                  icon={<GitBranch className="w-3 h-3" />}
-                  title={isShiftHeld
-                    ? "Save to commit history"
-                    : "Accept changes (Shift+Click to save to history)"
-                  }
-                >
-                  {isShiftHeld ? 'Save Commit' : 'Commit'}
-                  {commits.length > 0 && !isShiftHeld && (
-                    <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold">
-                      {commits.length}
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
-              <div className="flex-1 m-4 rounded-xl shadow-sm overflow-hidden relative transition-colors duration-200" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
-                <MultiSelectTextArea
-                  ref={previewTextareaRef}
-                  value={previewText}
-                  pendingOperations={pendingOperations}
-                  onChange={(newValue) => {
-                    if (isSpeaking) {
-                      window.speechSynthesis.cancel();
-                      setIsSpeaking(false);
-                    }
-                    setPreviewText(newValue);
-                  }}
-                  onClick={(e) => {
-                    if (e.ctrlKey) {
-                      e.preventDefault();
-                      handleQuickSend('grammar');
-                    }
-                  }}
-                  className={clsx(
-                    "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 transition-colors outline-none overflow-y-auto",
-                    fontClasses[fontFamily],
-                    sizeClasses[fontSize]
-                  )}
-                  fontClassName={fontClasses[fontFamily]}
-                  sizeClassName={sizeClasses[fontSize]}
-                  spellCheck={false}
-                  placeholder="Type or paste your text here. Use AI Edit to polish it."
-                  onContextMenu={handleOpenContextMenu}
-                  onScroll={() => handleScrollSync('right')}
-                />
-              </div>
-            </div>
-
-            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
-              <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count">
-                <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
-                <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
-              </button>
-            </div>
-
-
-          </div>
-
-          {/* Resizer Handle */}
-          <div
-            className="w-1 bg-gray-200 dark:bg-slate-800 hover:bg-indigo-400 dark:hover:bg-indigo-500 cursor-col-resize transition-colors active:bg-indigo-600 dark:active:bg-indigo-500 flex items-center justify-center z-20"
-            onMouseDown={startResizing}
-          >
-            <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300 dark:bg-slate-600"></div>
-          </div>
-
-          {/* Interactive Diff Panel - NOW RIGHT */}
-          <div
-            className="flex flex-col h-full overflow-hidden"
-            style={{ width: `${100 - leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)' }}
-          >
-            <div id="panel-diff-header" className="flex-none h-14 p-4 flex justify-between items-center transition-colors duration-200" style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}>
-              <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Diff View
-              </h2>
-              <div className="flex gap-2 text-xs">
-                <button onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
-                <button onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
-              <div
-                ref={leftPaneRef}
-                onScroll={() => handleScrollSync('left')}
-                className={clsx(
-                  "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 m-4 rounded-xl shadow-sm transition-colors duration-200 whitespace-pre-wrap",
-                  fontClasses[fontFamily],
-                  sizeClasses[fontSize]
-                )}
-                style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}
-              >
-                {segments.length > 0 ? (
-                  segments.map((seg) => (
-                    <DiffSegmentComponent key={seg.id} segment={seg} onClick={toggleSegment} />
-                  ))
-                ) : (
-                  // No segments - show placeholder or originalText
-                  <span className="text-gray-600 dark:text-slate-400">{originalText || 'Edit text in the Editor, then use AI Edit or Compare to see changes here.'}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-green-100 dark:bg-green-900/50 border border-green-500 dark:border-green-500/50 rounded-sm"></span>
-                <span>Added</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-red-100 dark:bg-red-900/50 border border-red-500 dark:border-red-500/50 rounded-sm"></span>
-                <span>Removed</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-blue-50 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-500/50 border-dashed rounded-sm"></span>
-                <span>Restored</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Rating Prompt Toast */}
-      {activeLogId && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <RatingPrompt
-            logId={activeLogId}
-            onRate={(id, rating, feedback) => {
-              handleRate(id, rating, feedback);
-              setActiveLogId(null);
-            }}
-            onDismiss={() => setActiveLogId(null)}
-          />
-        </div>
-      )}
-
-      {/* Error Toast */}
-      {errorMessage && (
-        <div className="fixed bottom-6 left-6 z-50 max-w-md animate-in slide-in-from-bottom-2 duration-200">
-          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg shadow-lg p-4 flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 text-red-500 dark:text-red-400 mt-0.5">
-              <X className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
-            </div>
-            <button
-              onClick={() => setErrorMessage(null)}
-              className="flex-shrink-0 text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-300 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-      {/* Commit History Modal */}
-      <CommitHistoryModal
-        isOpen={showCommitHistory}
-        onClose={() => setShowCommitHistory(false)}
-        commits={commits}
-        onRestore={handleRestoreCommit}
-        onCompare={handleCompareCommit}
-        onDelete={handleDeleteCommit}
-        onClearAll={handleClearAllCommits}
-        currentOriginalText={originalText}
-      />
-
-      {/* Context Menu for text selection */}
-      <ContextMenu
-        x={contextMenu?.x ?? 0}
-        y={contextMenu?.y ?? 0}
-        isOpen={!!contextMenu}
-        onClose={() => setContextMenu(null)}
-        actions={[
-          {
-            label: 'Read Selected',
-            icon: <Volume2 className="w-4 h-4" />,
-            onClick: handleReadAloud,
-            disabled: !contextMenu?.selection
-          },
-          {
-            label: 'Spelling Only',
-            icon: <Wand2 className="w-4 h-4 text-blue-500" />,
-            onClick: () => handlePolishSelection('spelling'),
-            disabled: !contextMenu?.selection,
-            divider: true
-          },
-          {
-            label: 'Grammar & Spelling',
-            icon: <Wand2 className="w-4 h-4 text-emerald-500" />,
-            onClick: () => handlePolishSelection('grammar'),
-            disabled: !contextMenu?.selection
-          },
-          {
-            label: 'Full Polish',
-            icon: <Wand2 className="w-4 h-4 text-purple-500" />,
-            onClick: () => handlePolishSelection('polish'),
-            disabled: !contextMenu?.selection,
-            subLabel: '$$'
-          },
-          {
-            label: 'Prompt Expansion',
-            icon: <Wand2 className="w-4 h-4 text-amber-500" />,
-            onClick: () => handlePolishSelection('prompt'),
-            disabled: !contextMenu?.selection,
-            divider: true
-          },
-          {
-            label: 'Execute Prompt',
-            icon: <Wand2 className="w-4 h-4 text-rose-500" />,
-            onClick: () => handlePolishSelection('execute'),
-            disabled: !contextMenu?.selection
-          },
-          {
-            label: 'Fact Check',
-            icon: <Shield className="w-4 h-4 text-cyan-500" />,
-            onClick: handleFactCheck,
-            disabled: !contextMenu?.selection,
-            subLabel: '$$$$',
-            divider: true
-          },
-          {
-            label: 'Save as Prompt',
-            icon: <Save className="w-4 h-4 text-indigo-500" />,
-            onClick: handleSaveAsPrompt,
-            disabled: !contextMenu?.selection
-          }
-        ]}
-      />
-
-      {/* Save as Prompt Dialog */}
-      <SavePromptDialog
-        isOpen={savePromptDialogOpen}
-        onClose={() => {
-          setSavePromptDialogOpen(false);
-          setPendingPromptText('');
-        }}
-        selectedText={pendingPromptText}
-        onSave={handleSavePromptSubmit}
-      />
-
-      {/* Prompts Management Modal */}
-      <PromptsModal
-        isOpen={showPromptsModal}
-        onClose={() => setShowPromptsModal(false)}
-        prompts={aiPrompts}
-        onCreatePrompt={async (data) => { await createPrompt(data); }}
-        onUpdatePrompt={async (id, updates) => { await updatePrompt(id, updates); }}
-        onDeletePrompt={async (id) => { await deletePrompt(id); }}
-        onResetBuiltIn={async (id) => { await resetBuiltIn(id); }}
-      />
-
-      {/* Projects Panel */}
-      <ProjectsPanel
-        isOpen={showProjectsPanel}
-        onClose={() => setShowProjectsPanel(false)}
-        projects={projects}
-        currentProject={currentProject}
-        onLoadProject={async (id) => {
-          const project = await loadProject(id);
-          if (project) {
-            let contentToLoad = project.content || '';
-
-            // If draft content is empty, try to load the latest commit
-            if (!contentToLoad.trim()) {
-              // Try Electron first
-              if (window.electron?.loadProjectCommits && project.path) {
-                try {
-                  const commits = await window.electron.loadProjectCommits(project.path);
-                  if (commits && commits.length > 0) {
-                    contentToLoad = commits[commits.length - 1].content;
-                  }
-                } catch (e) {
-                  console.warn('Failed to load commits for initial content:', e);
-                }
-              } else {
-                // Try browser file system
-                const handle = getRepoHandle();
-                if (handle && project.name) {
-                  try {
-                    const { loadProjectCommits } = await import('./services/browserFileSystem');
-                    const commits = await loadProjectCommits(handle, project.name);
-                    if (commits && commits.length > 0) {
-                      contentToLoad = commits[commits.length - 1].content;
-                    }
-                  } catch (e) {
-                    console.warn('Failed to load commits from browser FS:', e);
-                  }
-                }
-              }
-            }
-
-            // Load project content into the editor - always reset all panels
-            setOriginalText(contentToLoad);
-            setPreviewText(contentToLoad);
-            setModifiedText('');
-            resetDiffState();
-          }
-          return project;
-        }}
-        onCreateProject={async (name) => {
-          // Always create with empty content - don't inherit from previous project
-          const newProject = await createNewProject(name, '');
-          // Clear editor state for new project
+        onNewProject={() => {
           setOriginalText('');
           setPreviewText('');
           setModifiedText('');
           resetDiffState();
-          return newProject;
         }}
-        onDeleteProject={deleteProjectById}
-        onRenameProject={renameProjectById}
-        onOpenRepository={openRepository}
-        onCreateRepository={createRepository}
-        repositoryPath={repositoryPath}
       />
 
-      {/* Welcome Gate - forces users to select a repository before using the app */}
-      <WelcomeModal
-        isOpen={!repositoryPath}
-        onCreateRepository={handleCreateRepository}
+      <AppHeader
+        repositoryPath={repositoryPath}
+        currentProject={currentProject}
         onOpenRepository={handleOpenRepository}
+        setShowProjectsPanel={setShowProjectsPanel}
+        backgroundHue={backgroundHue}
+        setBackgroundHue={setBackgroundHue}
+        sessionCost={sessionCost}
+        selectedModel={selectedModel}
+        setSelectedModel={setSelectedModel}
+        isDarkMode={isDarkMode}
+        setIsDarkMode={setIsDarkMode}
+        fontFamily={fontFamily}
+        setFontFamily={setFontFamily}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        setShowLogs={setShowLogs}
+        setShowCommitHistory={setShowCommitHistory}
+        setShowHelp={setShowHelp}
+        commitCount={commits.length}
+        mode={mode}
+        isScrollSyncEnabled={isScrollSyncEnabled}
+        setIsScrollSyncEnabled={setIsScrollSyncEnabled}
+        onClearAll={() => {
+          setOriginalText('');
+          setModifiedText('');
+          setPreviewText('');
+          resetDiffState();
+        }}
+        onCopyFinal={copyFinal}
       />
-    </div>
+
+
+
+      {/* DIFF MODE - Now the only mode */}
+      {
+        mode === ViewMode.DIFF && (
+          <div className="w-full h-full flex flex-row">
+            {/* Preview/Editor Panel - NOW LEFT */}
+            <div
+              className="flex flex-col h-full relative z-0 transition-colors duration-200 overflow-hidden"
+              style={{ width: `${leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)', borderRight: '1px solid var(--border-color)' }}
+            >
+              <EditorPanel
+                topPanelHeight={topPanelHeight}
+                isSpeaking={isSpeaking}
+                setIsSpeaking={setIsSpeaking}
+                handleReadAloud={handleReadAloud}
+                isPolishMenuOpen={isPolishMenuOpen}
+                setIsPolishMenuOpen={setIsPolishMenuOpen}
+                isPolishing={isPolishing}
+                isFactChecking={isFactChecking}
+                cancelAIOperation={cancelAIOperation}
+                factCheckProgress={factCheckProgress}
+                builtInPrompts={builtInPrompts}
+                handleAIEdit={handleAIEdit}
+                customPrompts={customPrompts}
+                handleFactCheck={handleFactCheck}
+                setShowPromptsModal={setShowPromptsModal}
+                previewText={previewText}
+                setPreviewText={setPreviewText}
+                originalText={originalText}
+                setModifiedText={setModifiedText}
+                performDiff={performDiff}
+                isAutoCompareEnabled={isAutoCompareEnabled}
+                setIsAutoCompareEnabled={setIsAutoCompareEnabled}
+                handleCommitClick={handleCommitClick}
+                isShiftHeld={isShiftHeld}
+                hasUnsavedChanges={hasUnsavedChanges}
+                commits={commits}
+                previewTextareaRef={previewTextareaRef}
+                pendingOperations={pendingOperations}
+                fontFamily={fontFamily}
+                fontSize={fontSize}
+                handleQuickSend={handleQuickSend}
+                handleOpenContextMenu={handleOpenContextMenu}
+                handleScrollSync={handleScrollSync}
+                skipNextSegmentsSync={skipNextSegmentsSync}
+              />
+
+              {/* Horizontal Resizer Handle */}
+              <div
+                className="group h-1.5 bg-gray-200 dark:bg-slate-800 hover:bg-indigo-400 dark:hover:bg-indigo-500 cursor-row-resize transition-colors active:bg-indigo-600 dark:active:bg-indigo-500 flex items-center justify-center z-20"
+                onMouseDown={startResizingVertical}
+              >
+                <div className="w-12 h-1 group-hover:h-1.5 transition-all rounded-full bg-gray-300 dark:bg-slate-600"></div>
+              </div>
+
+              <AIPromptPanel topPanelHeight={topPanelHeight} />
+            </div>
+
+            {/* Resizer Handle */}
+            <div
+              className="w-1 bg-gray-200 dark:bg-slate-800 hover:bg-indigo-400 dark:hover:bg-indigo-500 cursor-col-resize transition-colors active:bg-indigo-600 dark:active:bg-indigo-500 flex items-center justify-center z-20"
+              onMouseDown={startResizing}
+            >
+              <div className="h-8 w-1 hover:w-2 transition-all rounded-full bg-gray-300 dark:bg-slate-600"></div>
+            </div>
+
+            <DiffPanel
+              leftPanelWidth={leftPanelWidth}
+              handleAcceptAll={handleAcceptAll}
+              handleRejectAll={handleRejectAll}
+              leftPaneRef={leftPaneRef}
+              handleScrollSync={handleScrollSync}
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              segments={segments}
+              toggleSegment={toggleSegment}
+              originalText={originalText}
+            />
+
+          </div>
+        )
+      }
+
+      <AppModals
+        activeLogId={activeLogId}
+        handleRate={handleRate}
+        setActiveLogId={setActiveLogId}
+        errorMessage={errorMessage}
+        setErrorMessage={setErrorMessage}
+        showCommitHistory={showCommitHistory}
+        setShowCommitHistory={setShowCommitHistory}
+        commits={commits}
+        handleRestoreCommit={handleRestoreCommit}
+        handleCompareCommit={handleCompareCommit}
+        handleDeleteCommit={handleDeleteCommit}
+        handleClearAllCommits={handleClearAllCommits}
+        originalText={originalText}
+        contextMenu={contextMenu}
+        setContextMenu={setContextMenu}
+        handleReadAloud={handleReadAloud}
+        handlePolishSelection={handlePolishSelection}
+        handleFactCheck={handleFactCheck}
+        handleSaveAsPrompt={handleSaveAsPrompt}
+        savePromptDialogOpen={savePromptDialogOpen}
+        setSavePromptDialogOpen={setSavePromptDialogOpen}
+        pendingPromptText={pendingPromptText}
+        setPendingPromptText={setPendingPromptText}
+        handleSavePromptSubmit={handleSavePromptSubmit}
+        showPromptsModal={showPromptsModal}
+        setShowPromptsModal={setShowPromptsModal}
+        aiPrompts={aiPrompts}
+        createPrompt={createPrompt}
+        updatePrompt={updatePrompt}
+        deletePrompt={deletePrompt}
+        resetBuiltIn={resetBuiltIn}
+        showProjectsPanel={showProjectsPanel}
+        setShowProjectsPanel={setShowProjectsPanel}
+        projects={projects}
+        currentProject={currentProject}
+        loadProject={loadProject}
+        setOriginalText={setOriginalText}
+        setPreviewText={setPreviewText}
+        setModifiedText={setModifiedText}
+        resetDiffState={resetDiffState}
+        createNewProject={createNewProject}
+        deleteProjectById={deleteProjectById}
+        renameProjectById={renameProjectById}
+        openRepository={openRepository}
+        createRepository={createRepository}
+        repositoryPath={repositoryPath}
+        getRepoHandle={getRepoHandle}
+        showHelp={showHelp}
+        setShowHelp={setShowHelp}
+        showLogs={showLogs}
+        setShowLogs={setShowLogs}
+        handleCreateRepository={handleCreateRepository}
+        handleOpenRepository={handleOpenRepository}
+      />
+
+    </div >
   );
 }
 

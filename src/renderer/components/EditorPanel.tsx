@@ -1,0 +1,300 @@
+import React from 'react';
+import { Edit3, Volume2, Square, Wand2, X, Shield, Settings, RefreshCw, Zap, GitBranch } from 'lucide-react';
+import clsx from 'clsx';
+import { Button } from './Button';
+import MultiSelectTextArea, { MultiSelectTextAreaRef } from './MultiSelectTextArea';
+import { AIPrompt, TextCommit, PolishMode, FontFamily } from '../types';
+import { PendingOperation } from '../hooks/useAsyncAI';
+import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
+
+interface EditorPanelProps {
+    topPanelHeight: number;
+    isSpeaking: boolean;
+    setIsSpeaking: (speaking: boolean) => void;
+    handleReadAloud: () => void;
+    isPolishMenuOpen: boolean;
+    setIsPolishMenuOpen: (open: boolean) => void;
+    isPolishing: boolean;
+    isFactChecking: boolean;
+    cancelAIOperation: () => void;
+    factCheckProgress: string;
+    builtInPrompts: AIPrompt[];
+    handleAIEdit: (id: string | number) => void;
+    customPrompts: AIPrompt[];
+    handleFactCheck: () => void;
+    setShowPromptsModal: (show: boolean) => void;
+    previewText: string;
+    setPreviewText: (text: string) => void;
+    originalText: string;
+    setModifiedText: (text: string) => void;
+    performDiff: (old: string, newVal: string) => void;
+    isAutoCompareEnabled: boolean;
+    setIsAutoCompareEnabled: (enabled: boolean | ((prev: boolean) => boolean)) => void;
+    handleCommitClick: () => void;
+    isShiftHeld: boolean;
+    hasUnsavedChanges: boolean;
+    commits: TextCommit[];
+    previewTextareaRef: React.RefObject<MultiSelectTextAreaRef>;
+    pendingOperations: PendingOperation[];
+    fontFamily: FontFamily;
+    fontSize: FontSize;
+    handleQuickSend: (mode: PolishMode) => void;
+    handleOpenContextMenu: (e: React.MouseEvent) => void;
+    handleScrollSync: (side: 'left' | 'right') => void;
+    skipNextSegmentsSync: React.MutableRefObject<boolean>;
+}
+
+export function EditorPanel({
+    topPanelHeight,
+    isSpeaking,
+    setIsSpeaking,
+    handleReadAloud,
+    isPolishMenuOpen,
+    setIsPolishMenuOpen,
+    isPolishing,
+    isFactChecking,
+    cancelAIOperation,
+    factCheckProgress,
+    builtInPrompts,
+    handleAIEdit,
+    customPrompts,
+    handleFactCheck,
+    setShowPromptsModal,
+    previewText,
+    setPreviewText,
+    originalText,
+    setModifiedText,
+    performDiff,
+    isAutoCompareEnabled,
+    setIsAutoCompareEnabled,
+    handleCommitClick,
+    isShiftHeld,
+    hasUnsavedChanges,
+    commits,
+    previewTextareaRef,
+    pendingOperations,
+    fontFamily,
+    fontSize,
+    handleQuickSend,
+    handleOpenContextMenu,
+    handleScrollSync,
+    skipNextSegmentsSync
+}: EditorPanelProps) {
+    return (
+        <div className="flex flex-col overflow-hidden" style={{ height: `${topPanelHeight}%` }}>
+            <div
+                id="panel-editor-header"
+                className="flex-none h-14 p-4 flex justify-between items-center relative transition-colors duration-200"
+                style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
+            >
+                <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
+                    <Edit3 className="w-4 h-4" />
+                    Editor
+                </h2>
+                <div className="flex gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleReadAloud}
+                        className={clsx("text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20", isSpeaking && "bg-indigo-100 dark:bg-indigo-900/40")}
+                        title={isSpeaking ? "Stop Speaking" : "Read Aloud (Select text to read section)"}
+                        icon={isSpeaking ? <Square className="w-3 h-3 fill-current" /> : <Volume2 className="w-4 h-4" />}
+                    >
+                        {isSpeaking ? "Stop" : "Read"}
+                    </Button>
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1"></div>
+
+                    <div className="relative flex items-center gap-1">
+                        {isPolishMenuOpen && (
+                            <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
+                            isLoading={isPolishing || isFactChecking}
+                            disabled={isPolishing || isFactChecking}
+                            icon={<Wand2 className="w-3 h-3" />}
+                            className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
+                        >
+                            {isFactChecking ? 'Checking...' : 'AI Edit...'}
+                        </Button>
+                        {(isPolishing || isFactChecking) && (
+                            <button
+                                onClick={cancelAIOperation}
+                                className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                title="Cancel AI Operation"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                        {isFactChecking && factCheckProgress && (
+                            <span className="text-xs text-gray-500 dark:text-slate-400 max-w-32 truncate">
+                                {factCheckProgress}
+                            </span>
+                        )}
+
+                        {isPolishMenuOpen && (
+                            <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
+                                {/* Built-in Prompts */}
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">
+                                    Correction Level
+                                </div>
+                                {builtInPrompts.map(prompt => (
+                                    <button
+                                        key={prompt.id}
+                                        onClick={() => handleAIEdit(prompt.id)}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
+                                    >
+                                        <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
+                                        {prompt.name}
+                                    </button>
+                                ))}
+
+                                {/* Custom Prompts */}
+                                {customPrompts.length > 0 && (
+                                    <>
+                                        <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                                        <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
+                                            Custom Prompts
+                                        </div>
+                                        {customPrompts.map(prompt => (
+                                            <button
+                                                key={prompt.id}
+                                                onClick={() => handleAIEdit(prompt.id)}
+                                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
+                                            >
+                                                <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
+                                                {prompt.name}
+                                            </button>
+                                        ))}
+                                    </>
+                                )}
+
+                                {/* Verification Section */}
+                                <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
+                                    Verification
+                                </div>
+                                <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
+                                    <Shield className="w-4 h-4 text-cyan-500" />
+                                    Fact Check
+                                    <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
+                                </button>
+
+                                {/* Manage Prompts */}
+                                <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                                <button
+                                    onClick={() => { setIsPolishMenuOpen(false); setShowPromptsModal(true); }}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700/50 hover:text-gray-700 dark:hover:text-slate-300 transition-colors flex items-center gap-2"
+                                >
+                                    <Settings className="w-4 h-4" />
+                                    Manage Prompts...
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            // Re-compare: use current previewText as the new modified text
+                            // Set flag to prevent the segments effect from overwriting previewText
+                            skipNextSegmentsSync.current = true;
+                            setModifiedText(previewText);
+                            performDiff(originalText, previewText);
+                        }}
+                        size="sm"
+                        icon={<RefreshCw className="w-3 h-3" />}
+                        title="Re-compare after editing"
+                        disabled={isAutoCompareEnabled}
+                        className={clsx(isAutoCompareEnabled && "opacity-50")}
+                    >
+                        Compare
+                    </Button>
+
+                    <button
+                        onClick={() => setIsAutoCompareEnabled((prev: boolean) => !prev)}
+                        className={clsx(
+                            "p-1.5 rounded transition-all",
+                            isAutoCompareEnabled
+                                ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-700"
+                                : "text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+                        )}
+                        title={isAutoCompareEnabled ? "Auto-compare ON: Diffs update as you type" : "Auto-compare OFF: Click Compare to see changes"}
+                    >
+                        <Zap className={clsx("w-4 h-4", isAutoCompareEnabled && "fill-current")} />
+                    </button>
+
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleCommitClick}
+                        disabled={!previewText.trim()}
+                        className={clsx(
+                            "relative transition-all min-w-[6rem]",
+                            isShiftHeld
+                                ? "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                                : hasUnsavedChanges
+                                    ? "bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
+                                    : "bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                        )}
+                        icon={<GitBranch className="w-3 h-3" />}
+                        title={isShiftHeld
+                            ? "Save to commit history"
+                            : "Accept changes (Shift+Click to save to history)"
+                        }
+                    >
+                        {isShiftHeld ? 'Save Commit' : 'Commit'}
+                        {commits.length > 0 && !isShiftHeld && (
+                            <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold">
+                                {commits.length}
+                            </span>
+                        )}
+                    </Button>
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
+                <div className="flex-1 m-4 rounded-xl shadow-sm overflow-hidden relative transition-colors duration-200" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
+                    <MultiSelectTextArea
+                        ref={previewTextareaRef}
+                        value={previewText}
+                        pendingOperations={pendingOperations}
+                        onChange={(newValue) => {
+                            if (isSpeaking) {
+                                window.speechSynthesis.cancel();
+                                setIsSpeaking(false);
+                            }
+                            setPreviewText(newValue);
+                        }}
+                        onClick={(e) => {
+                            if (e.ctrlKey) {
+                                e.preventDefault();
+                                handleQuickSend('grammar');
+                            }
+                        }}
+                        className={clsx(
+                            "flex-1 w-full resize-none bg-transparent border-none focus:ring-0 text-gray-800 dark:text-slate-200 transition-colors outline-none overflow-y-auto",
+                            fontClasses[fontFamily],
+                            sizeClasses[fontSize]
+                        )}
+                        fontClassName={fontClasses[fontFamily]}
+                        sizeClassName={sizeClasses[fontSize]}
+                        spellCheck={false}
+                        placeholder="Type or paste your text here. Use AI Edit to polish it."
+                        onContextMenu={handleOpenContextMenu}
+                        onScroll={() => handleScrollSync('right')}
+                    />
+                </div>
+            </div>
+
+            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
+                <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count">
+                    <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
+                    <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
+                </button>
+            </div>
+        </div>
+    );
+}

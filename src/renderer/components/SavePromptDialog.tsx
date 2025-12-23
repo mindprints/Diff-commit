@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Palette, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { AIPrompt } from '../types';
