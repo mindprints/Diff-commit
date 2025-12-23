@@ -107,7 +107,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
         const textarea = e.currentTarget;
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
-        const selection = start !== end ? previewText.substring(start, end) : '';
+        const selection = start !== end ? textarea.value.substring(start, end) : '';
 
         setContextMenu({
             x: e.clientX,
@@ -115,7 +115,6 @@ export function UIProvider({ children }: { children: ReactNode }) {
             selection
         });
     };
-
     return (
         <UIContext.Provider value={{
             showHelp, setShowHelp,

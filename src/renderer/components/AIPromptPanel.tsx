@@ -1,15 +1,9 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
 
-interface AIPromptPanelProps {
-    topPanelHeight: number;
-}
-
-export function AIPromptPanel({
-    topPanelHeight
-}: AIPromptPanelProps) {
+export function AIPromptPanel() {
     return (
-        <div className="flex flex-col min-h-0 overflow-hidden" style={{ height: `${100 - topPanelHeight}%`, backgroundColor: 'var(--bg-panel)' }}>
+        <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--bg-panel)' }}>
             <div
                 className="flex-none h-12 p-4 flex justify-between items-center transition-colors duration-200"
                 style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}

@@ -5,7 +5,7 @@ import { DiffSegment as DiffSegmentComponent } from './DiffSegment';
 import { DiffSegment, FontFamily } from '../types';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 
-import { useUI, useProject, useEditor } from '../contexts';
+import { useUI, useEditor } from '../contexts';
 
 export function DiffPanel() {
     const { leftPanelWidth } = useUI();
@@ -18,7 +18,7 @@ export function DiffPanel() {
     return (
         <div
             className="flex flex-col h-full overflow-hidden"
-            style={{ width: `${100 - leftPanelWidth}%`, backgroundColor: 'var(--bg-panel)' }}
+            style={{ backgroundColor: 'var(--bg-panel)' }}
         >
             <div id="panel-diff-header" className="flex-none h-14 p-4 flex justify-between items-center transition-colors duration-200" style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}>
                 <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">

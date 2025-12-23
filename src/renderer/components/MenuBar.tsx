@@ -174,8 +174,7 @@ export function MenuBar() {
                 <MenuItem label="Font Family" subItems={[
                     { label: 'Sans Serif', onClick: () => setFontFamily('sans') },
                     { label: 'Serif', onClick: () => setFontFamily('serif') },
-                    { label: 'Monounce', onClick: () => setFontFamily('mono') },
-                ]} />
+                    { label: 'Monospace', onClick: () => setFontFamily('mono') },]} />
             </MenuButton>
 
             {/* Tools Menu */}

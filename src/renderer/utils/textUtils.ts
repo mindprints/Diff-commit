@@ -5,10 +5,13 @@ export const BOUNDARY_CHARS = /[\s.,;:!?'"()\[\]{}<>\/\\|@#$%^&*+=~`\-_\n\r\t]/;
  * Auto-corrects for users who don't precisely select from word start to word end.
  */
 export function expandToWordBoundaries(start: number, end: number, text: string): { start: number; end: number } {
+    // Clamp inputs to valid range
+    start = Math.max(0, Math.min(start, text.length));
+    end = Math.max(start, Math.min(end, text.length));
+
     if (text.length === 0 || start >= text.length) {
         return { start, end };
     }
-
     let expandedStart = start;
     let expandedEnd = end;
 

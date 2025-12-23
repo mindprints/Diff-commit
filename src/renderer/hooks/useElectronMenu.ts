@@ -19,6 +19,7 @@ export function useElectronMenu() {
     const {
         mode, previewText, originalText, setFontSize, setFontFamily
     } = useEditor();
+
     const getSaveText = () => mode === 'diff' ? previewText : originalText;
 
     useEffect(() => {

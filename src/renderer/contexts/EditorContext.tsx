@@ -4,6 +4,7 @@ import { ViewMode, FontFamily, DiffSegment } from '../types';
 import { FontSize } from '../constants/ui';
 import { useDiffState } from '../hooks/useDiffState';
 import { useScrollSync } from '../hooks/useScrollSync';
+import { useUI } from './UIContext';
 
 interface EditorContextType {
     originalText: string;
@@ -62,6 +63,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     const [fontSize, setFontSize] = useState<FontSize>('base');
     const [mode, setMode] = useState<ViewMode>(ViewMode.INPUT);
     const [isAutoCompareEnabled, setIsAutoCompareEnabled] = useState(false);
+
+    const { setErrorMessage } = useUI();
 
     const originalTextRef = useRef('');
     const skipNextSegmentsSync = useRef(false);
@@ -173,21 +176,48 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         addToHistory(newSegments);
     }, [segments, addToHistory]);
 
-    const handleCopyFinal = useCallback(() => {
-        navigator.clipboard.writeText(previewText);
-    }, [previewText]);
+    const handleCopyFinal = useCallback(async () => {
+        if (!previewText) return;
+
+        try {
+            await navigator.clipboard.writeText(previewText);
+        } catch (err) {
+            console.warn('Clipboard API failed, using fallback:', err);
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = previewText;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                textarea.style.top = '0';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (!successful) throw new Error('execCommand copy failed');
+            } catch (fallbackErr) {
+                console.error('Copy failed:', fallbackErr);
+                setErrorMessage('Failed to copy text to clipboard.');
+            }
+        }
+    }, [previewText, setErrorMessage]);
 
     const handleWebSave = useCallback(() => {
         const textToSave = mode === ViewMode.DIFF ? previewText : originalText;
         if (!textToSave.trim()) return;
-        const blob = new Blob([textToSave], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'document.txt';
-        a.click();
-        URL.revokeObjectURL(url);
-    }, [mode, previewText, originalText]);
+        try {
+            const blob = new Blob([textToSave], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'document.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to save file:', err);
+            setErrorMessage('Failed to save file locally.');
+        }
+    }, [mode, previewText, originalText, setErrorMessage]);
 
     return (
         <EditorContext.Provider value={{

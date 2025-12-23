@@ -23,7 +23,7 @@ interface ProjectContextType {
 
     // useCommitHistory
     commits: TextCommit[];
-    setCommits: (commits: TextCommit[]) => void;
+    setCommits: React.Dispatch<React.SetStateAction<TextCommit[]>>;
     handleCommit: (summary?: string) => Promise<string | undefined>;
     handleAccept: () => void;
     handleCommitClick: () => Promise<void>;
@@ -212,8 +212,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const handleImportCommits = useCallback((content: string) => {
         try {
             const imported = JSON.parse(content);
-            if (Array.isArray(imported)) {
+            if (!Array.isArray(imported)) {
+                setErrorMessage('Failed to import commits: Invalid format (not an array)');
+                return;
+            }
+
+            const isValidCommit = (obj: any): obj is TextCommit => {
+                return (
+                    obj &&
+                    typeof obj.id === 'string' &&
+                    typeof obj.commitNumber === 'number' &&
+                    typeof obj.content === 'string' &&
+                    typeof obj.timestamp === 'number'
+                );
+            };
+
+            if (imported.every(isValidCommit)) {
                 setCommits(prev => [...prev, ...imported]);
+            } else {
+                setErrorMessage('Failed to import commits: Invalid format');
             }
         } catch (e) {
             setErrorMessage('Failed to import commits: Invalid JSON');
@@ -238,18 +255,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setMode(ViewMode.DIFF);
     }, [setOriginalText, setModifiedText, originalText, performDiff, setMode]);
 
+    const contextValue = useMemo(() => ({
+        projects, currentProject, loadProject, saveCurrentProject, createNewProject,
+        handleLoadProject, handleCreateProject,
+        handleAccept, handleCommitClick,
+        deleteProject, renameProject,
+        openRepository, createRepository, repositoryPath, getRepoHandle,
+        commits, setCommits, handleCommit, handleDeleteCommit, handleClearAllCommits,
+        handleClearAll, handleExportCommits, handleImportCommits, handleFileOpen, handleNewProject,
+        hasUnsavedChanges, setHasUnsavedChanges,
+        handleRestoreCommit, handleCompareCommit
+    }), [
+        projects, currentProject, loadProject, saveCurrentProject, createNewProject,
+        handleLoadProject, handleCreateProject, handleAccept, handleCommitClick,
+        deleteProject, renameProject, openRepository, createRepository, repositoryPath,
+        getRepoHandle, commits, setCommits, handleCommit, handleDeleteCommit,
+        handleClearAllCommits, handleClearAll, handleExportCommits, handleImportCommits,
+        handleFileOpen, handleNewProject, hasUnsavedChanges, setHasUnsavedChanges,
+        handleRestoreCommit, handleCompareCommit
+    ]);
+
     return (
-        <ProjectContext.Provider value={{
-            projects, currentProject, loadProject, saveCurrentProject, createNewProject,
-            handleLoadProject, handleCreateProject,
-            handleAccept, handleCommitClick,
-            deleteProject, renameProject,
-            openRepository, createRepository, repositoryPath, getRepoHandle,
-            commits, setCommits, handleCommit, handleDeleteCommit, handleClearAllCommits,
-            handleClearAll, handleExportCommits, handleImportCommits, handleFileOpen, handleNewProject,
-            hasUnsavedChanges, setHasUnsavedChanges,
-            handleRestoreCommit, handleCompareCommit
-        }}>
+        <ProjectContext.Provider value={contextValue}>
             {children}
         </ProjectContext.Provider>
     );

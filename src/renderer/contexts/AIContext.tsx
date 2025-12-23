@@ -172,8 +172,6 @@ export function AIProvider({ children }: { children: ReactNode }) {
             return { sourceText: modifiedText, fromRightTab: true };
         } else if (hasLeft) {
             return { sourceText: originalText, fromRightTab: false };
-        } else if (hasRight) {
-            return { sourceText: modifiedText, fromRightTab: true };
         }
         return { sourceText: '', fromRightTab: false };
     }, [previewText, originalText, modifiedText]);
@@ -336,6 +334,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
             if (window.electron && window.electron.logUsage) {
                 await window.electron.logUsage(extractionLog);
                 await window.electron.logUsage(verificationLog);
+            } else {
+                try {
+                    const stored = localStorage.getItem('diff-commit-logs');
+                    const logs: any[] = stored ? JSON.parse(stored) : [];
+                    logs.push(extractionLog, verificationLog);
+                    while (logs.length > 1000) logs.shift();
+                    localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+                } catch (e) {
+                    console.warn('Failed to save log to localStorage:', e);
+                }
             }
             setActiveLogId(verificationLog.id);
         }
@@ -407,14 +415,17 @@ export function AIProvider({ children }: { children: ReactNode }) {
         );
         const durationMs = Date.now() - startTime;
 
-        if (isCancelled) return;
+        if (isCancelled) {
+            setIsPolishing(false);
+            abortControllerRef.current = null;
+            return;
+        }
 
         if (isError) {
             setErrorMessage(aiError || 'AI polish failed.');
             setIsPolishing(false);
             return;
         }
-
         updateCost(usage);
         const taskName = polishMode === 'spelling' ? 'Spelling (Selection)'
             : polishMode === 'grammar' ? 'Grammar (Selection)'

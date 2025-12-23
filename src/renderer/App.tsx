@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { MenuBar } from './components/MenuBar';
 import { AppHeader } from './components/AppHeader';
 import { EditorPanel } from './components/EditorPanel';
+import { AIPromptPanel } from './components/AIPromptPanel';
 import { DiffPanel } from './components/DiffPanel';
 import { AppModals } from './components/AppModals';
 import { useUI, useProject, useAI } from './contexts';
@@ -12,7 +13,8 @@ export default function App() {
   // --- Contexts ---
   const {
     backgroundHue, isDarkMode,
-    topPanelHeight, startResizingVertical,
+    topPanelHeight, leftPanelWidth,
+    startResizing, startResizingVertical,
     setIsShiftHeld
   } = useUI();
 
@@ -79,15 +81,31 @@ export default function App() {
       <AppHeader />
 
       <main className="flex-1 flex overflow-hidden relative">
-        <EditorPanel />
-
-        {/* Horizontal Resizer (between top and bottom panels) */}
+        {/* Left Section (Editor + AI Prompt) */}
         <div
-          className="h-1.5 w-full cursor-row-resize hover:bg-indigo-400/30 active:bg-indigo-500/50 transition-colors z-30 absolute"
-          style={{ top: `${topPanelHeight}%`, transform: 'translateY(-50%)' }}
-          onMouseDown={startResizingVertical}
+          className="flex flex-col overflow-hidden h-full relative"
+          style={{ width: `${leftPanelWidth}%` }}
+        >
+          <EditorPanel />
+
+          {/* Horizontal Resizer (between Editor and AI Prompt) */}
+          <div
+            className="h-1.5 w-full cursor-row-resize hover:bg-indigo-500/20 active:bg-indigo-500/40 transition-colors z-30 flex-none"
+            onMouseDown={startResizingVertical}
+          />
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <AIPromptPanel />
+          </div>
+        </div>
+
+        {/* Vertical Resizer (between Left Section and Diff View) */}
+        <div
+          className="w-1.5 h-full cursor-col-resize hover:bg-indigo-500/20 active:bg-indigo-500/40 transition-colors z-30 flex-none"
+          onMouseDown={startResizing}
         />
 
+        {/* Right Section (Diff View) */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-slate-900/20">
           <DiffPanel />
         </div>

@@ -3,7 +3,46 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply antialiased;
+  :root {
+    /* Base Hue (Dynamic) */
+    --app-hue: 220;
+    
+    /* Light Mode Variables */
+    --bg-app: hsl(var(--app-hue), 30%, 98%);
+    --bg-header: hsl(var(--app-hue), 20%, 99%);
+    --bg-panel: hsl(var(--app-hue), 15%, 97%);
+    --bg-muted: hsl(var(--app-hue), 10%, 95%);
+    --bg-surface: #ffffff;
+    --border-color: hsl(var(--app-hue), 10%, 90%);
+    
+    --selection-bg: hsla(var(--app-hue), 90%, 50%, 0.1);
+    
+    body {
+      @apply antialiased text-gray-900;
+      background-color: var(--bg-app);
+    }
+  }
+
+  .dark {
+    /* Dark Mode Variables */
+    --bg-app: hsl(var(--app-hue), 20%, 8%);
+    --bg-header: hsl(var(--app-hue), 15%, 10%);
+    --bg-panel: hsl(var(--app-hue), 15%, 12%);
+    --bg-muted: hsl(var(--app-hue), 10%, 15%);
+    --bg-surface: hsl(var(--app-hue), 12%, 18%);
+    --border-color: hsl(var(--app-hue), 10%, 25%);
+    
+    --selection-bg: hsla(var(--app-hue), 80%, 60%, 0.2);
+    
+    body {
+      @apply text-slate-200;
+      background-color: var(--bg-app);
+    }
+  }
+}
+
+@layer utilities {
+  .selection-custom {
+    @apply selection:bg-indigo-100 dark:selection:bg-indigo-900/40;
   }
 }
