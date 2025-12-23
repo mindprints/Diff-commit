@@ -7,79 +7,34 @@ import { AIPrompt, TextCommit, PolishMode, FontFamily } from '../types';
 import { PendingOperation } from '../hooks/useAsyncAI';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 
-interface EditorPanelProps {
-    topPanelHeight: number;
-    isSpeaking: boolean;
-    setIsSpeaking: (speaking: boolean) => void;
-    handleReadAloud: () => void;
-    isPolishMenuOpen: boolean;
-    setIsPolishMenuOpen: (open: boolean) => void;
-    isPolishing: boolean;
-    isFactChecking: boolean;
-    cancelAIOperation: () => void;
-    factCheckProgress: string;
-    builtInPrompts: AIPrompt[];
-    handleAIEdit: (id: string | number) => void;
-    customPrompts: AIPrompt[];
-    handleFactCheck: () => void;
-    setShowPromptsModal: (show: boolean) => void;
-    previewText: string;
-    setPreviewText: (text: string) => void;
-    originalText: string;
-    setModifiedText: (text: string) => void;
-    performDiff: (old: string, newVal: string) => void;
-    isAutoCompareEnabled: boolean;
-    setIsAutoCompareEnabled: (enabled: boolean | ((prev: boolean) => boolean)) => void;
-    handleCommitClick: () => void;
-    isShiftHeld: boolean;
-    hasUnsavedChanges: boolean;
-    commits: TextCommit[];
-    previewTextareaRef: React.RefObject<MultiSelectTextAreaRef>;
-    pendingOperations: PendingOperation[];
-    fontFamily: FontFamily;
-    fontSize: FontSize;
-    handleQuickSend: (mode: PolishMode) => void;
-    handleOpenContextMenu: (e: React.MouseEvent) => void;
-    handleScrollSync: (side: 'left' | 'right') => void;
-    skipNextSegmentsSync: React.MutableRefObject<boolean>;
-}
+import { useUI, useProject, useAI, useEditor } from '../contexts';
+import { useState } from 'react';
 
-export function EditorPanel({
-    topPanelHeight,
-    isSpeaking,
-    setIsSpeaking,
-    handleReadAloud,
-    isPolishMenuOpen,
-    setIsPolishMenuOpen,
-    isPolishing,
-    isFactChecking,
-    cancelAIOperation,
-    factCheckProgress,
-    builtInPrompts,
-    handleAIEdit,
-    customPrompts,
-    handleFactCheck,
-    setShowPromptsModal,
-    previewText,
-    setPreviewText,
-    originalText,
-    setModifiedText,
-    performDiff,
-    isAutoCompareEnabled,
-    setIsAutoCompareEnabled,
-    handleCommitClick,
-    isShiftHeld,
-    hasUnsavedChanges,
-    commits,
-    previewTextareaRef,
-    pendingOperations,
-    fontFamily,
-    fontSize,
-    handleQuickSend,
-    handleOpenContextMenu,
-    handleScrollSync,
-    skipNextSegmentsSync
-}: EditorPanelProps) {
+export function EditorPanel() {
+    const {
+        topPanelHeight, isSpeaking, setIsSpeaking,
+        setShowPromptsModal, isShiftHeld, setShowProjectsPanel
+    } = useUI();
+
+    const {
+        handleCommitClick, hasUnsavedChanges, commits, repositoryPath
+    } = useProject();
+
+    const {
+        isPolishing, isFactChecking, cancelAIOperation,
+        factCheckProgress, builtInPrompts, customPrompts,
+        handleAIEdit, handleFactCheck, handleReadAloud,
+        pendingOperations, handleQuickSend
+    } = useAI();
+
+    const {
+        previewText, setPreviewText, originalText, setModifiedText,
+        performDiff, isAutoCompareEnabled, setIsAutoCompareEnabled,
+        previewTextareaRef, fontFamily, fontSize,
+        handleOpenContextMenu, handleScrollSync, skipNextSegmentsSync
+    } = useEditor();
+
+    const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
     return (
         <div className="flex flex-col overflow-hidden" style={{ height: `${topPanelHeight}%` }}>
             <div
@@ -283,18 +238,17 @@ export function EditorPanel({
                         sizeClassName={sizeClasses[fontSize]}
                         spellCheck={false}
                         placeholder="Type or paste your text here. Use AI Edit to polish it."
-                        onContextMenu={handleOpenContextMenu}
+                        onContextMenu={(e) => handleOpenContextMenu(e, previewText)}
                         onScroll={() => handleScrollSync('right')}
                     />
                 </div>
             </div>
 
             <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
-                <button className="flex items-center gap-1.5 hover:text-indigo-500 transition-colors" title="Word Count">
+                <span className="flex items-center gap-1.5" title="Word Count">
                     <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
                     <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
-                </button>
-            </div>
+                </span>            </div>
         </div>
     );
 }

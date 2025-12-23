@@ -11,145 +11,48 @@ import { LogsModal } from './LogsModal';
 import { X, Volume2, Wand2, Shield, Save } from 'lucide-react';
 import { TextCommit, AIPrompt, ViewMode, PolishMode, Project } from '../types';
 
-interface AppModalsProps {
-    // Rating Prompt
-    activeLogId: string | number | null;
-    handleRate: (id: string | number, rating: number, feedback: string) => void;
-    setActiveLogId: (id: string | number | null) => void;
+import { useUI, useProject, useAI, useEditor } from '../contexts';
 
-    // Error Toast
-    errorMessage: string | null;
-    setErrorMessage: (msg: string | null) => void;
+export function AppModals() {
+    const {
+        showHelp, setShowHelp,
+        showLogs, setShowLogs,
+        showProjectsPanel, setShowProjectsPanel,
+        showPromptsModal, setShowPromptsModal,
+        showCommitHistory, setShowCommitHistory,
+        savePromptDialogOpen, setSavePromptDialogOpen,
+        contextMenu, setContextMenu,
+        errorMessage, setErrorMessage,
+        activeLogId, setActiveLogId
+    } = useUI();
 
-    // Commit History
-    showCommitHistory: boolean;
-    setShowCommitHistory: (show: boolean) => void;
-    commits: TextCommit[];
-    handleRestoreCommit: (commit: TextCommit) => void;
-    handleCompareCommit: (commit: TextCommit) => void;
-    handleDeleteCommit: (id: string) => void;
-    handleClearAllCommits: () => void;
-    originalText: string;
+    const {
+        originalText
+    } = useEditor();
 
-    // Context Menu
-    contextMenu: { x: number; y: number; selection?: string } | null;
-    setContextMenu: (menu: { x: number; y: number; selection?: string } | null) => void;
-    handleReadAloud: () => void;
-    handlePolishSelection: (mode: PolishMode) => void;
-    handleFactCheck: () => void;
-    handleSaveAsPrompt: () => void;
+    const {
+        projects, currentProject, deleteProject, renameProject,
+        openRepository, createRepository, repositoryPath,
+        commits, handleDeleteCommit, handleClearAllCommits,
+        handleLoadProject, handleCreateProject,
+        handleRestoreCommit, handleCompareCommit
+    } = useProject();
 
-    // Save Prompt Dialog
-    savePromptDialogOpen: boolean;
-    setSavePromptDialogOpen: (open: boolean) => void;
-    pendingPromptText: string;
-    setPendingPromptText: (text: string) => void;
-    handleSavePromptSubmit: (prompt: AIPrompt) => Promise<void>;
+    const {
+        aiPrompts, createPrompt, updatePrompt, deletePrompt, resetBuiltIn,
+        handleFactCheck, handleReadAloud,
+        handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
+        pendingPromptText, setPendingPromptText
+    } = useAI();
 
-    // Prompts Management
-    showPromptsModal: boolean;
-    setShowPromptsModal: (show: boolean) => void;
-    aiPrompts: AIPrompt[];
-    createPrompt: (data: Partial<AIPrompt>) => Promise<void>;
-    updatePrompt: (id: string, updates: Partial<AIPrompt>) => Promise<void>;
-    deletePrompt: (id: string) => Promise<void>;
-    resetBuiltIn: (id: string) => Promise<void>;
-
-    // Projects Panel
-    showProjectsPanel: boolean;
-    setShowProjectsPanel: (show: boolean) => void;
-    projects: Project[];
-    currentProject: Project | null;
-    loadProject: (id: string) => Promise<Project | null>;
-    setOriginalText: (content: string) => void;
-    setPreviewText: (content: string) => void;
-    setModifiedText: (content: string) => void;
-    resetDiffState: () => void;
-    createNewProject: (name: string, content: string) => Promise<Project>;
-    deleteProjectById: (id: string) => Promise<void>;
-    renameProjectById: (id: string, newName: string) => Promise<Project | null>;
-    openRepository: () => Promise<void>;
-    createRepository: () => Promise<void>;
-    repositoryPath: string | null;
-    getRepoHandle: () => FileSystemDirectoryHandle | null;
-
-    // Help & Logs
-    showHelp: boolean;
-    setShowHelp: (show: boolean) => void;
-    showLogs: boolean;
-    setShowLogs: (show: boolean) => void;
-
-    // Welcome Modal
-    handleCreateRepository: () => Promise<void>;
-    handleOpenRepository: () => Promise<void>;
-}
-
-export function AppModals({
-    activeLogId,
-    handleRate,
-    setActiveLogId,
-    errorMessage,
-    setErrorMessage,
-    showCommitHistory,
-    setShowCommitHistory,
-    commits,
-    handleRestoreCommit,
-    handleCompareCommit,
-    handleDeleteCommit,
-    handleClearAllCommits,
-    originalText,
-    contextMenu,
-    setContextMenu,
-    handleReadAloud,
-    handlePolishSelection,
-    handleFactCheck,
-    handleSaveAsPrompt,
-    savePromptDialogOpen,
-    setSavePromptDialogOpen,
-    pendingPromptText,
-    setPendingPromptText,
-    handleSavePromptSubmit,
-    showPromptsModal,
-    setShowPromptsModal,
-    aiPrompts,
-    createPrompt,
-    updatePrompt,
-    deletePrompt,
-    resetBuiltIn,
-    showProjectsPanel,
-    setShowProjectsPanel,
-    projects,
-    currentProject,
-    loadProject,
-    setOriginalText,
-    setPreviewText,
-    setModifiedText,
-    resetDiffState,
-    createNewProject,
-    deleteProjectById,
-    renameProjectById,
-    openRepository,
-    createRepository,
-    repositoryPath,
-    getRepoHandle,
-    showHelp,
-    setShowHelp,
-    showLogs,
-    setShowLogs,
-    handleCreateRepository,
-    handleOpenRepository
-}: AppModalsProps) {
     return (
         <>
             {/* Rating Prompt Toast */}
             {activeLogId && (
                 <div className="fixed bottom-6 right-6 z-50">
                     <RatingPrompt
-                        logId={activeLogId as string}
-                        onRate={(id, rating, feedback) => {
-                            handleRate(id, rating, feedback);
-                            setActiveLogId(null);
-                        }}
+                        logId={String(activeLogId)}
+                        onRate={handleRate}
                         onDismiss={() => setActiveLogId(null)}
                     />
                 </div>
@@ -266,10 +169,10 @@ export function AppModals({
                 isOpen={showPromptsModal}
                 onClose={() => setShowPromptsModal(false)}
                 prompts={aiPrompts}
-                onCreatePrompt={async (data) => { await createPrompt(data); }}
-                onUpdatePrompt={async (id, updates) => { await updatePrompt(id, updates); }}
-                onDeletePrompt={async (id) => { await deletePrompt(id); }}
-                onResetBuiltIn={async (id) => { await resetBuiltIn(id); }}
+                onCreatePrompt={createPrompt}
+                onUpdatePrompt={(id, updates) => updatePrompt({ ...updates, id })}
+                onDeletePrompt={deletePrompt}
+                onResetBuiltIn={resetBuiltIn}
             />
 
             {/* Projects Panel */}
@@ -278,60 +181,10 @@ export function AppModals({
                 onClose={() => setShowProjectsPanel(false)}
                 projects={projects}
                 currentProject={currentProject}
-                onLoadProject={async (id) => {
-                    const project = await loadProject(id);
-                    if (project) {
-                        let contentToLoad = project.content || '';
-
-                        // If draft content is empty, try to load the latest commit
-                        if (!contentToLoad.trim()) {
-                            // Try Electron first
-                            if (window.electron?.loadProjectCommits && project.path) {
-                                try {
-                                    const commits = await window.electron.loadProjectCommits(project.path);
-                                    if (commits && commits.length > 0) {
-                                        contentToLoad = commits[commits.length - 1].content;
-                                    }
-                                } catch (e) {
-                                    console.warn('Failed to load commits for initial content:', e);
-                                }
-                            } else {
-                                // Try browser file system
-                                const handle = getRepoHandle();
-                                if (handle && project.name) {
-                                    try {
-                                        const { loadProjectCommits } = await import('../services/browserFileSystem');
-                                        const commits = await loadProjectCommits(handle, project.name);
-                                        if (commits && commits.length > 0) {
-                                            contentToLoad = commits[commits.length - 1].content;
-                                        }
-                                    } catch (e) {
-                                        console.warn('Failed to load commits from browser FS:', e);
-                                    }
-                                }
-                            }
-                        }
-
-                        // Load project content into the editor - always reset all panels
-                        setOriginalText(contentToLoad);
-                        setPreviewText(contentToLoad);
-                        setModifiedText('');
-                        resetDiffState();
-                    }
-                    return project;
-                }}
-                onCreateProject={async (name) => {
-                    // Always create with empty content - don't inherit from previous project
-                    const newProject = await createNewProject(name, '');
-                    // Clear editor state for new project
-                    setOriginalText('');
-                    setPreviewText('');
-                    setModifiedText('');
-                    resetDiffState();
-                    return newProject;
-                }}
-                onDeleteProject={deleteProjectById}
-                onRenameProject={renameProjectById}
+                onLoadProject={handleLoadProject}
+                onCreateProject={handleCreateProject}
+                onDeleteProject={deleteProject}
+                onRenameProject={renameProject}
                 onOpenRepository={openRepository}
                 onCreateRepository={createRepository}
                 repositoryPath={repositoryPath}
@@ -344,8 +197,8 @@ export function AppModals({
             {/* Welcome Gate - forces users to select a repository before using the app */}
             <WelcomeModal
                 isOpen={!repositoryPath}
-                onCreateRepository={handleCreateRepository}
-                onOpenRepository={handleOpenRepository}
+                onCreateRepository={createRepository}
+                onOpenRepository={openRepository}
             />
         </>
     );

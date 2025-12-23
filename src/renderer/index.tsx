@@ -1,6 +1,7 @@
 import React from 'react';
 import './index.css';
 import ReactDOM from 'react-dom/client';
+import { CombinedProvider } from './contexts';
 import App from './App';
 
 const rootElement = document.getElementById('root');
@@ -11,6 +12,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <CombinedProvider>
+      <App />
+    </CombinedProvider>
   </React.StrictMode>
 );

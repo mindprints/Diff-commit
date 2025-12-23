@@ -3,51 +3,26 @@ import clsx from 'clsx';
 import { ViewMode } from '../types';
 import { version } from '../../../package.json';
 
-interface MenuBarProps {
-    mode: ViewMode;
-    onFileOpen: (content: string) => void;
-    onSaveFile: () => void; // For browser, this will trigger a download of current text
-    onExportCommits: () => void;
-    onImportCommits: (content: string) => void;
-    onClearAll: () => void;
-    onToggleDark: () => void;
-    onFontSize: (size: 'sm' | 'base' | 'lg' | 'xl') => void;
-    onFontFamily: (family: 'sans' | 'serif' | 'mono') => void;
-    onShowHelp: () => void;
-    onShowLogs: () => void;
-    onShowCommitHistory: () => void;
-    // Tools props (optional since we are adding them)
-    onPolish?: (mode: 'spelling' | 'grammar' | 'polish' | 'spelling_local' | 'spelling_ai') => void;
-    onFactCheck?: () => void;
-    onManagePrompts?: () => void;
-    onManageProjects?: () => void;
-    // Project/Repository props for browser mode
-    onOpenRepository?: () => void;
-    onCreateRepository?: () => void;
-    onNewProject?: () => void;
-}
+import { useUI, useProject, useAI, useEditor } from '../contexts';
 
-export function MenuBar({
-    mode,
-    onFileOpen,
-    onSaveFile,
-    onExportCommits,
-    onImportCommits,
-    onClearAll,
-    onToggleDark,
-    onFontSize,
-    onFontFamily,
-    onShowHelp,
-    onShowLogs,
-    onShowCommitHistory,
-    onPolish,
-    onFactCheck,
-    onManagePrompts,
-    onManageProjects,
-    onOpenRepository,
-    onCreateRepository,
-    onNewProject
-}: MenuBarProps) {
+export function MenuBar() {
+    const {
+        isDarkMode, setIsDarkMode, setShowHelp, setShowLogs,
+        setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel
+    } = useUI();
+
+    const {
+        handleFileOpen, handleWebSave, handleExportCommits, handleImportCommits,
+        handleClearAll, openRepository, createRepository, handleNewProject
+    } = useProject();
+
+    const {
+        handleAIEdit, handleFactCheck
+    } = useAI();
+
+    const {
+        mode, setFontSize, setFontFamily
+    } = useEditor();
     // Only show in browser (not electron)
     if (window.electron) return null;
 
@@ -73,7 +48,7 @@ export function MenuBar({
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target?.result as string;
-            onFileOpen(content);
+            handleFileOpen(content);
         };
         reader.readAsText(file);
         e.target.value = ''; // Reset
@@ -85,7 +60,7 @@ export function MenuBar({
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target?.result as string;
-            onImportCommits(content);
+            handleImportCommits(content);
         };
         reader.readAsText(file);
         e.target.value = ''; // Reset
@@ -163,15 +138,15 @@ export function MenuBar({
 
             {/* File Menu */}
             <MenuButton label="File" id="file">
-                <MenuItem label="Open Repository..." shortcut="Ctrl+Shift+O" onClick={onOpenRepository} />
-                <MenuItem label="Create Repository..." onClick={onCreateRepository} />
+                <MenuItem label="Open Repository..." shortcut="Ctrl+Shift+O" onClick={openRepository} />
+                <MenuItem label="Create Repository..." onClick={createRepository} />
                 <MenuItem separator />
-                <MenuItem label="New Project..." shortcut="Ctrl+N" onClick={onNewProject} />
+                <MenuItem label="New Project..." shortcut="Ctrl+N" onClick={handleNewProject} />
                 <MenuItem separator />
                 <MenuItem label="Import File..." shortcut="Ctrl+O" onClick={() => fileInputRef.current?.click()} />
-                <MenuItem label="Save Preview As..." shortcut="Ctrl+S" onClick={onSaveFile} />
+                <MenuItem label="Save Preview As..." shortcut="Ctrl+S" onClick={handleWebSave} />
                 <MenuItem separator />
-                <MenuItem label="Export Commits..." onClick={onExportCommits} />
+                <MenuItem label="Export Commits..." onClick={handleExportCommits} />
                 <MenuItem label="Import Commits..." onClick={() => importInputRef.current?.click()} />
                 <MenuItem separator />
                 <MenuItem label="Exit" disabled />
@@ -182,38 +157,37 @@ export function MenuBar({
                 <MenuItem label="Undo" shortcut="Ctrl+Z" disabled />
                 <MenuItem label="Redo" shortcut="Ctrl+Shift+Z" disabled />
                 <MenuItem separator />
-                <MenuItem label="Clear All" onClick={onClearAll} />
+                <MenuItem label="Clear All" onClick={handleClearAll} />
             </MenuButton>
 
             {/* View Menu */}
             <MenuButton label="View" id="view">
-                <MenuItem label="Toggle Dark Mode" shortcut="Ctrl+D" onClick={onToggleDark} />
+                <MenuItem label="Toggle Dark Mode" shortcut="Ctrl+D" onClick={() => setIsDarkMode(!isDarkMode)} />
                 <MenuItem separator />
                 {/* Submenus are tricky without more complex logic or a library, let's keep it flattened for simplicity or use the hover trick */}
                 <MenuItem label="Font Size" subItems={[
-                    { label: 'Small', onClick: () => onFontSize('sm') },
-                    { label: 'Medium', onClick: () => onFontSize('base') },
-                    { label: 'Large', onClick: () => onFontSize('lg') },
-                    { label: 'Extra Large', onClick: () => onFontSize('xl') },
+                    { label: 'Small', onClick: () => setFontSize('sm') },
+                    { label: 'Medium', onClick: () => setFontSize('base') },
+                    { label: 'Large', onClick: () => setFontSize('lg') },
+                    { label: 'Extra Large', onClick: () => setFontSize('xl') },
                 ]} />
                 <MenuItem label="Font Family" subItems={[
-                    { label: 'Sans Serif', onClick: () => onFontFamily('sans') },
-                    { label: 'Serif', onClick: () => onFontFamily('serif') },
-                    { label: 'Monounce', onClick: () => onFontFamily('mono') },
+                    { label: 'Sans Serif', onClick: () => setFontFamily('sans') },
+                    { label: 'Serif', onClick: () => setFontFamily('serif') },
+                    { label: 'Monounce', onClick: () => setFontFamily('mono') },
                 ]} />
             </MenuButton>
 
             {/* Tools Menu */}
             <MenuButton label="Tools" id="tools">
-                <MenuItem label="Check Spelling (Local)" onClick={() => onPolish && onPolish('spelling_local')} />
-                <MenuItem label="Check Spelling (AI)" onClick={() => onPolish && onPolish('spelling_ai')} />
-                <MenuItem label="Fix Grammar" onClick={() => onPolish && onPolish('grammar')} />
-                <MenuItem label="Full Polish" onClick={() => onPolish && onPolish('polish')} />
+                <MenuItem label="Check Spelling (Local)" onClick={() => handleAIEdit('spelling_local')} />
+                <MenuItem label="Fix Grammar" onClick={() => handleAIEdit('grammar')} />
+                <MenuItem label="Full Polish" onClick={() => handleAIEdit('polish')} />
                 <MenuItem separator />
-                <MenuItem label="Fact Check" onClick={() => onFactCheck && onFactCheck()} />
+                <MenuItem label="Fact Check" onClick={handleFactCheck} />
                 <MenuItem separator />
-                <MenuItem label="Manage Prompts..." onClick={() => onManagePrompts && onManagePrompts()} />
-                <MenuItem label="Project Manager..." onClick={() => onManageProjects && onManageProjects()} />
+                <MenuItem label="Manage Prompts..." onClick={() => setShowPromptsModal(true)} />
+                <MenuItem label="Project Manager..." onClick={() => setShowProjectsPanel(true)} />
             </MenuButton>
 
             {/* Window Menu */}
@@ -224,9 +198,9 @@ export function MenuBar({
 
             {/* Help Menu */}
             <MenuButton label="Help" id="help">
-                <MenuItem label="Instructions" shortcut="F1" onClick={onShowHelp} />
-                <MenuItem label="View AI Usage Logs" onClick={onShowLogs} />
-                <MenuItem label="Commit History" onClick={onShowCommitHistory} />
+                <MenuItem label="Instructions" shortcut="F1" onClick={() => setShowHelp(true)} />
+                <MenuItem label="View AI Usage Logs" onClick={() => setShowLogs(true)} />
+                <MenuItem label="Commit History" onClick={() => setShowCommitHistory(true)} />
                 <MenuItem separator />
                 <MenuItem label="About" onClick={() => alert(`Diff & Commit AI\nVersion ${version}`)} />
             </MenuButton>

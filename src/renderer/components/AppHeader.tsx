@@ -22,59 +22,29 @@ import headerIcon from '../header_icon_styled.png';
 import { Button } from './Button';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 
-interface AppHeaderProps {
-    repositoryPath: string | null;
-    currentProject: { name: string } | null;
-    onOpenRepository: () => void;
-    setShowProjectsPanel: (show: boolean) => void;
-    backgroundHue: number;
-    setBackgroundHue: (hue: number) => void;
-    sessionCost: number;
-    selectedModel: Model;
-    setSelectedModel: (model: Model) => void;
-    isDarkMode: boolean;
-    setIsDarkMode: (dark: boolean) => void;
-    fontFamily: FontFamily;
-    setFontFamily: (family: FontFamily) => void;
-    fontSize: FontSize;
-    setFontSize: (size: FontSize) => void;
-    setShowLogs: (show: boolean) => void;
-    setShowCommitHistory: (show: boolean) => void;
-    setShowHelp: (show: boolean) => void;
-    commitCount: number;
-    mode: ViewMode;
-    isScrollSyncEnabled: boolean;
-    setIsScrollSyncEnabled: (enabled: boolean) => void;
-    onClearAll: () => void;
-    onCopyFinal: () => void;
-}
+import { useUI, useProject, useAI, useEditor } from '../contexts';
 
-export function AppHeader({
-    repositoryPath,
-    currentProject,
-    onOpenRepository,
-    setShowProjectsPanel,
-    backgroundHue,
-    setBackgroundHue,
-    sessionCost,
-    selectedModel,
-    setSelectedModel,
-    isDarkMode,
-    setIsDarkMode,
-    fontFamily,
-    setFontFamily,
-    fontSize,
-    setFontSize,
-    setShowLogs,
-    setShowCommitHistory,
-    setShowHelp,
-    commitCount,
-    mode,
-    isScrollSyncEnabled,
-    setIsScrollSyncEnabled,
-    onClearAll,
-    onCopyFinal
-}: AppHeaderProps) {
+export function AppHeader() {
+    const {
+        repositoryPath, openRepository, currentProject, projects,
+        handleClearAll, commits
+    } = useProject();
+
+    const {
+        backgroundHue, setBackgroundHue, isDarkMode, setIsDarkMode,
+        setShowLogs, setShowCommitHistory, setShowHelp, setShowProjectsPanel
+    } = useUI();
+
+    const {
+        sessionCost, selectedModel, setSelectedModel
+    } = useAI();
+
+    const {
+        fontFamily, setFontFamily, fontSize, setFontSize,
+        isScrollSyncEnabled, setIsScrollSyncEnabled,
+        mode, handleCopyFinal
+    } = useEditor();
+
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     return (
@@ -102,7 +72,7 @@ export function AppHeader({
                 {repositoryPath && (
                     <div className="ml-4 flex items-center bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-800 backdrop-blur-sm transition-all hover:bg-white dark:hover:bg-slate-800 group">
                         <button
-                            onClick={onOpenRepository}
+                            onClick={openRepository}
                             className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                             title="Change repository"
                         >
@@ -133,14 +103,14 @@ export function AppHeader({
                     <>
                         <Button
                             variant="outline"
-                            onClick={onClearAll}
+                            onClick={handleClearAll}
                             size="sm"
                             icon={<Trash2 className="w-4 h-4" />}
                         >
                             Clear All
                         </Button>
 
-                        <Button variant="primary" size="sm" onClick={onCopyFinal} icon={<Copy className="w-4 h-4" />}>
+                        <Button variant="primary" size="sm" onClick={handleCopyFinal} icon={<Copy className="w-4 h-4" />}>
                             Copy
                         </Button>
                     </>
@@ -212,6 +182,7 @@ export function AppHeader({
                             <Settings className="w-5 h-5" />
                         </button>
 
+                        {isSettingsOpen && <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />}
                         {isSettingsOpen && (
                             <div className="absolute top-full right-0 mt-3 w-72 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-slate-700 py-3 z-50 animate-in fade-in zoom-in-95 duration-200">
                                 <div className="px-4 py-2 border-b border-gray-50 dark:border-slate-700 mb-2">
@@ -287,7 +258,7 @@ export function AppHeader({
                                             <button onClick={() => { setShowCommitHistory(true); setIsSettingsOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-900/50 rounded-lg transition-colors group">
                                                 <History className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors" />
                                                 Version History
-                                                {commitCount > 0 && <span className="ml-auto bg-gray-100 dark:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded-full">{commitCount}</span>}
+                                                {commits.length > 0 && <span className="ml-auto bg-gray-100 dark:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded-full">{commits.length}</span>}
                                             </button>
                                             <button onClick={() => { setShowHelp(true); setIsSettingsOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 text-xs text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-900/50 rounded-lg transition-colors group">
                                                 <HelpCircle className="w-4 h-4 text-gray-400 group-hover:text-amber-500 transition-colors" />
@@ -306,7 +277,6 @@ export function AppHeader({
                                 </div>
                             </div>
                         )}
-                        {isSettingsOpen && <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />}
                     </div>
                 </div>
             </div>

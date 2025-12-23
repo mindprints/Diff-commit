@@ -5,31 +5,16 @@ import { DiffSegment as DiffSegmentComponent } from './DiffSegment';
 import { DiffSegment, FontFamily } from '../types';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 
-interface DiffPanelProps {
-    leftPanelWidth: number;
-    handleAcceptAll: () => void;
-    handleRejectAll: () => void;
-    leftPaneRef: React.RefObject<HTMLDivElement>;
-    handleScrollSync: (side: 'left' | 'right') => void;
-    fontFamily: FontFamily;
-    fontSize: FontSize;
-    segments: DiffSegment[];
-    toggleSegment: (id: string | number) => void;
-    originalText: string;
-}
+import { useUI, useProject, useEditor } from '../contexts';
 
-export function DiffPanel({
-    leftPanelWidth,
-    handleAcceptAll,
-    handleRejectAll,
-    leftPaneRef,
-    handleScrollSync,
-    fontFamily,
-    fontSize,
-    segments,
-    toggleSegment,
-    originalText
-}: DiffPanelProps) {
+export function DiffPanel() {
+    const { leftPanelWidth } = useUI();
+    const {
+        handleAcceptAll, handleRejectAll,
+        leftContainerRef, handleScrollSync,
+        fontFamily, fontSize,
+        segments, toggleSegment, originalText
+    } = useEditor();
     return (
         <div
             className="flex flex-col h-full overflow-hidden"
@@ -41,14 +26,14 @@ export function DiffPanel({
                     Diff View
                 </h2>
                 <div className="flex gap-2 text-xs">
-                    <button onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
-                    <button onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
+                    <button type="button" onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
+                    <button type="button" onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
                 </div>
             </div>
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
                 <div
-                    ref={leftPaneRef}
+                    ref={leftContainerRef}
                     onScroll={() => handleScrollSync('left')}
                     className={clsx(
                         "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 m-4 rounded-xl shadow-sm transition-colors duration-200 whitespace-pre-wrap",
