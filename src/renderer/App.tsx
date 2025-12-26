@@ -86,7 +86,12 @@ export default function App() {
           className="flex flex-col overflow-hidden h-full relative"
           style={{ width: `${leftPanelWidth}%` }}
         >
-          <EditorPanel />
+          <div
+            className="flex-none overflow-hidden"
+            style={{ height: `${topPanelHeight}%` }}
+          >
+            <EditorPanel />
+          </div>
 
           {/* Horizontal Resizer (between Editor and AI Prompt) */}
           <div

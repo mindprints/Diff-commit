@@ -49,7 +49,7 @@ interface EditorContextType {
     handleRejectAll: () => void;
 
     // Helpers
-    handleCopyFinal: () => void;
+    handleCopyFinal: () => Promise<void>;
     handleWebSave: () => void;
 }
 

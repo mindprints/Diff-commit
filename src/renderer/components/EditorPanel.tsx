@@ -36,7 +36,7 @@ export function EditorPanel() {
 
     const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
     return (
-        <div className="flex flex-col overflow-hidden" style={{ height: `${topPanelHeight}%` }}>
+        <div className="flex flex-col h-full overflow-hidden">
             <div
                 id="panel-editor-header"
                 className="flex-none h-14 p-4 flex justify-between items-center relative transition-colors duration-200"
