@@ -42,6 +42,9 @@ interface AIContextType {
     sessionCost: number;
     setSessionCost: (cost: number) => void;
     updateCost: (usage?: { inputTokens: number; outputTokens: number }) => void;
+    activePromptId: string;
+    setActivePromptId: (id: string) => void;
+    activePrompt: any;
 
     // Handlers
     handleAIEdit: (promptId: string) => Promise<void>;
@@ -60,7 +63,7 @@ const AIContext = createContext<AIContextType | undefined>(undefined);
 export function AIProvider({ children }: { children: ReactNode }) {
     const {
         previewText, setPreviewText, originalText, setOriginalText, modifiedText, setModifiedText,
-        performDiff, setMode, originalTextRef, previewTextareaRef
+        performDiff, setMode, originalTextRef, previewTextRef, previewTextareaRef
     } = useEditor();
     const {
         setErrorMessage, setActiveLogId, contextMenu, setSavePromptDialogOpen,
@@ -73,6 +76,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [isFactChecking, setIsFactChecking] = useState(false);
     const [factCheckProgress, setFactCheckProgress] = useState('');
     const [pendingPromptText, setPendingPromptText] = useState('');
+    const [activePromptId, setActivePromptId] = useState('grammar');
 
     const {
         prompts: aiPrompts,
@@ -93,12 +97,14 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setSessionCost(prev => prev + cost);
     }, [selectedModel]);
 
+    const activePrompt = (builtInPrompts.find(p => p.id === activePromptId) || customPrompts.find(p => p.id === activePromptId)) || builtInPrompts[0];
+
     const {
         pendingOperations,
         startOperation,
         cancelAllOperations: cancelAsyncOperations,
     } = useAsyncAI({
-        getText: () => previewText,
+        getText: () => previewTextRef.current,
         setText: setPreviewText,
         getModel: () => selectedModel,
         getPrompt,
@@ -222,15 +228,19 @@ export function AIProvider({ children }: { children: ReactNode }) {
         }
     }, [previewText, previewTextareaRef, setErrorMessage, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
 
-    const handleAIEdit = useCallback(async (promptId: string) => {
-        if (promptId === 'spelling_local') {
+    const handleAIEdit = useCallback(async (promptIdOrInstruction: string) => {
+        if (promptIdOrInstruction === 'spelling_local') {
             return handleLocalSpellCheck();
         }
 
-        const textarea = previewTextareaRef.current?.getTextarea();
+        const isKnownBuiltIn = builtInPrompts.some(p => p.id === promptIdOrInstruction);
+        const isKnownCustom = customPrompts.some(p => p.id === promptIdOrInstruction);
+        const isKnownPrompt = isKnownBuiltIn || isKnownCustom;
+
         let start = 0;
         let end = 0;
         let hasSelection = false;
+        const textarea = previewTextareaRef.current?.getTextarea();
 
         if (textarea) {
             const { selectionStart, selectionEnd } = textarea;
@@ -242,18 +252,38 @@ export function AIProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        if (hasSelection) {
-            startOperation(start, end, promptId);
-        } else {
-            if (!previewText.trim()) {
-                setErrorMessage('Please enter some text first.');
-                return;
+        if (isKnownPrompt) {
+            // Standard prompt or preset - needs text to operate on
+            if (hasSelection) {
+                startOperation(start, end, promptIdOrInstruction);
+            } else {
+                if (!previewText.trim()) {
+                    setErrorMessage('Please enter some text first.');
+                    return;
+                }
+                startOperation(0, previewText.length, promptIdOrInstruction);
             }
-            startOperation(0, previewText.length, promptId);
-        }
-    }, [handleLocalSpellCheck, previewTextareaRef, previewText, startOperation, setErrorMessage]);
+        } else {
+            // Custom instruction from prompt panel
+            const customPrompt: AIPrompt = {
+                id: 'custom_instruction',
+                name: 'Custom Instruction',
+                systemInstruction: "You are an expert editor and creative writer. If the provided text is empty, generate new content based on the instruction. If text is provided, modify it according to the instruction. Return ONLY the final processed text.",
+                promptTask: promptIdOrInstruction,
+                isBuiltIn: false,
+                order: 99
+            };
 
-    const handleQuickSend = useCallback((promptId: string = 'grammar') => {
+            if (hasSelection) {
+                startOperation(start, end, 'custom', customPrompt);
+            } else {
+                startOperation(0, previewText.length, 'custom', customPrompt);
+            }
+        }
+    }, [handleLocalSpellCheck, previewTextareaRef, previewText, startOperation, setErrorMessage, getPrompt]);
+
+    const handleQuickSend = useCallback((promptId?: string) => {
+        const idToUse = promptId || activePromptId;
         const textarea = previewTextareaRef.current?.getTextarea();
         if (!textarea) return;
 
@@ -264,9 +294,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
         );
 
         if (start !== end) {
-            startOperation(start, end, promptId);
+            startOperation(start, end, idToUse);
         }
-    }, [previewText, startOperation, previewTextareaRef]);
+    }, [previewText, startOperation, previewTextareaRef, activePromptId]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();
@@ -519,6 +549,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             pendingOperations, startOperation, cancelAsyncOperations,
             isPolishing, isFactChecking, factCheckProgress, setFactCheckProgress,
             pendingPromptText, setPendingPromptText,
+            activePromptId, setActivePromptId, activePrompt,
             selectedModel, setSelectedModel, sessionCost, setSessionCost, updateCost,
             handleAIEdit, handleFactCheck, handleLocalSpellCheck, handleReadAloud, cancelAIOperation,
             handleQuickSend,

@@ -15,6 +15,7 @@ export interface PendingOperation {
     status: 'pending' | 'completed' | 'error';
     result?: string;         // AI response when completed
     error?: string;          // Error message if failed
+    customPrompt?: AIPrompt; // On-the-fly custom prompt for instructions
 }
 
 interface UseAsyncAIOptions {
@@ -57,7 +58,8 @@ export function useAsyncAI({
     const startOperation = useCallback(async (
         start: number,
         end: number,
-        promptId: string
+        promptId: string,
+        customPrompt?: AIPrompt
     ): Promise<string | null> => {
         const model = getModel();
         if (!model) {
@@ -68,7 +70,7 @@ export function useAsyncAI({
         const text = getText();
         const selectedText = text.substring(start, end);
 
-        if (!selectedText.trim()) {
+        if (!selectedText.trim() && !customPrompt) {
             onError('Please select some text first');
             return null;
         }
@@ -87,6 +89,7 @@ export function useAsyncAI({
             originalEnd: end,
             originalText: selectedText,
             promptId,
+            customPrompt,
             status: 'pending',
         };
 
@@ -113,7 +116,7 @@ export function useAsyncAI({
 
         try {
             // Get the prompt
-            const prompt = getPrompt(operation.promptId);
+            const prompt = operation.customPrompt || getPrompt(operation.promptId);
 
             let results: { id: string; result: string }[];
             let usage: { inputTokens: number; outputTokens: number } | undefined;
@@ -228,19 +231,26 @@ export function useAsyncAI({
      * Adjusts positions based on any completed operations that came before.
      */
     const applyResult = useCallback((opId: string, result: string) => {
+        // We need to calculate the adjusted range based on currently completed ops.
+        // We use the functional update of setPendingOperations to get the latest state,
+        // but we move the side effects (setText) OUT of that updater.
+
+        let adjustedStart = 0;
+        let adjustedEnd = 0;
+        let opSnapshot: PendingOperation | undefined;
+
         setPendingOperations(prev => {
             const op = prev.get(opId);
             if (!op) return prev;
+            opSnapshot = op;
 
-            // Calculate current positions based on completed operations
-            let adjustedStart = op.originalStart;
-            let adjustedEnd = op.originalEnd;
+            adjustedStart = op.originalStart;
+            adjustedEnd = op.originalEnd;
 
             // Adjust for any operations that completed before us and were before our position
             prev.forEach((otherOp, otherId) => {
                 if (otherId !== opId && otherOp.status === 'completed' && otherOp.result !== undefined) {
                     if (otherOp.originalEnd <= op.originalStart) {
-                        // This completed operation was before us - adjust our positions
                         const delta = otherOp.result.length - otherOp.originalText.length;
                         adjustedStart += delta;
                         adjustedEnd += delta;
@@ -248,44 +258,42 @@ export function useAsyncAI({
                 }
             });
 
-            // Get current text
-            const currentText = getText();
-
-            // Preserve trailing newline consistency
-            const originalSlice = currentText.slice(adjustedStart, adjustedEnd);
-            let finalResult = result;
-            if (originalSlice.endsWith('\n') && !finalResult.endsWith('\n')) {
-                finalResult += '\n';
-            } else if (originalSlice.endsWith('\r') && !finalResult.endsWith('\r')) {
-                finalResult += '\r'; // Unlikely single CR, but safely handle
-            }
-
-            // Apply the change
-            const newText = currentText.slice(0, adjustedStart) + finalResult + currentText.slice(adjustedEnd);
-
-            // Update the text
-            setText(newText);
-
-            // Trigger diff update
-            const originalText = currentText; // The text before this edit
-            onDiffUpdate(originalText, newText);
-
-            // Mark this operation as completed
             const next = new Map(prev);
             const completedOp: PendingOperation = { ...op, status: 'completed', result };
             next.set(opId, completedOp);
-
-            // Clean up completed operations after a delay
-            setTimeout(() => {
-                setPendingOperations(current => {
-                    const updated = new Map(current);
-                    updated.delete(opId);
-                    return updated;
-                });
-            }, 2000);
-
             return next;
         });
+
+        // Now perform the side effects outside the state updater
+        const currentText = getText();
+
+        // Preserve trailing newline consistency
+        const originalSlice = currentText.slice(adjustedStart, adjustedEnd);
+        let finalResult = result;
+        if (originalSlice.endsWith('\n') && !finalResult.endsWith('\n')) {
+            finalResult += '\n';
+        } else if (originalSlice.endsWith('\r') && !finalResult.endsWith('\r')) {
+            finalResult += '\r';
+        }
+
+        const newText = currentText.slice(0, adjustedStart) + finalResult + currentText.slice(adjustedEnd);
+
+        // Update the text
+        setText(newText);
+
+        // Defer diff update to next tick to avoid React warning about cross-component updates
+        setTimeout(() => {
+            onDiffUpdate(currentText, newText);
+        }, 0);
+
+        // Clean up completed operations after a delay
+        setTimeout(() => {
+            setPendingOperations(current => {
+                const updated = new Map(current);
+                updated.delete(opId);
+                return updated;
+            });
+        }, 2000);
     }, [getText, setText, onDiffUpdate]);
 
     /**
