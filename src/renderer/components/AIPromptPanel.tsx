@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, Send } from 'lucide-react';
 import { useAI } from '../contexts';
 
@@ -7,18 +7,34 @@ export function AIPromptPanel() {
     const [instruction, setInstruction] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+    const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (statusTimeoutRef.current) {
+                clearTimeout(statusTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleExecute = async () => {
         if (!instruction.trim() || isLoading) return;
 
         setIsLoading(true);
-        setStatus(null);
+        if (statusTimeoutRef.current) {
+            clearTimeout(statusTimeoutRef.current);
+            statusTimeoutRef.current = null;
+        }
+
         try {
             await handleAIEdit(instruction);
             setInstruction('');
             setStatus({ type: 'success', message: 'Command processed successfully.' });
             // Auto-clear success message after 3 seconds
-            setTimeout(() => setStatus(null), 3000);
+            statusTimeoutRef.current = setTimeout(() => {
+                setStatus(null);
+                statusTimeoutRef.current = null;
+            }, 3000);
         } catch (err) {
             console.error('AI instruction failed:', err);
             setStatus({ type: 'error', message: 'Failed to process command. Please try again.' });

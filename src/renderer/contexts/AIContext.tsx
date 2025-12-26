@@ -97,7 +97,14 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setSessionCost(prev => prev + cost);
     }, [selectedModel]);
 
-    const activePrompt = (builtInPrompts.find(p => p.id === activePromptId) || customPrompts.find(p => p.id === activePromptId)) || builtInPrompts[0] || null;
+    const findActivePrompt = useCallback((id: string, builtIn: AIPrompt[], custom: AIPrompt[]): AIPrompt | null => {
+        return custom.find(p => p.id === id) ??
+            builtIn.find(p => p.id === id) ??
+            builtIn[0] ??
+            null;
+    }, []);
+
+    const activePrompt = findActivePrompt(activePromptId, builtInPrompts, customPrompts);
     const {
         pendingOperations,
         startOperation,
@@ -283,7 +290,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 return startOperation(0, previewTextRef.current.length, 'custom', customPrompt);
             }
         }
-    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, getPrompt, builtInPrompts, customPrompts]);
+    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts]);
 
     const handleQuickSend = useCallback((promptId?: string) => {
         const idToUse = promptId || activePromptId;
@@ -414,18 +421,19 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
     const handlePolishSelection = useCallback(async (polishMode: PolishMode) => {
         const textarea = previewTextareaRef.current?.getTextarea();
+        const originalTextAtStart = previewTextRef.current; // Snapshot text before async call
         let start = 0;
-        let end = previewTextRef.current.length;
-        let selectedText = previewTextRef.current;
+        let end = originalTextAtStart.length;
+        let selectedText = originalTextAtStart;
 
         if (textarea) {
             const selStart = textarea.selectionStart;
             const selEnd = textarea.selectionEnd;
             if (selStart !== selEnd) {
-                const expanded = expandToWordBoundaries(selStart, selEnd, previewTextRef.current);
+                const expanded = expandToWordBoundaries(selStart, selEnd, originalTextAtStart);
                 start = expanded.start;
                 end = expanded.end;
-                selectedText = previewTextRef.current.substring(start, end);
+                selectedText = originalTextAtStart.substring(start, end);
             }
         }
 
@@ -499,12 +507,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         if (results.length > 0) {
             const result = results[0].result;
-            const newText = previewTextRef.current.slice(0, start) + result + previewTextRef.current.slice(end);
+            // Use originalTextAtStart snapshot to ensure indices match the text structure
+            const newText = originalTextAtStart.slice(0, start) + result + originalTextAtStart.slice(end);
 
-            setOriginalText(previewTextRef.current);
+            setOriginalText(originalTextAtStart);
             setPreviewText(newText);
             setModifiedText(newText);
-            performDiff(previewTextRef.current, newText);
+            performDiff(originalTextAtStart, newText);
             setMode(ViewMode.DIFF);
         }
 
