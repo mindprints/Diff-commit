@@ -5,18 +5,26 @@ import { useAI } from '../contexts';
 export function AIPromptPanel() {
     const { handleAIEdit } = useAI();
     const [instruction, setInstruction] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
-    const handleExecute = () => {
-        if (!instruction.trim()) return;
-        // For now, we use handleAIEdit with the raw instruction if it's not a known ID,
-        // but the current handleAIEdit takes a promptId.
-        // We might need to update handleAIEdit to support custom instructions,
-        // or create a new handler. 
-        // Let's assume handleAIEdit can take an instruction string for now,
-        // or we'll pass it to a generic polish logic.
-        // Actually, let's look at AIContext again.
-        handleAIEdit(instruction);
-        setInstruction('');
+    const handleExecute = async () => {
+        if (!instruction.trim() || isLoading) return;
+
+        setIsLoading(true);
+        setStatus(null);
+        try {
+            await handleAIEdit(instruction);
+            setInstruction('');
+            setStatus({ type: 'success', message: 'Command processed successfully.' });
+            // Auto-clear success message after 3 seconds
+            setTimeout(() => setStatus(null), 3000);
+        } catch (err) {
+            console.error('AI instruction failed:', err);
+            setStatus({ type: 'error', message: 'Failed to process command. Please try again.' });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -44,8 +52,9 @@ export function AIPromptPanel() {
                         value={instruction}
                         onChange={(e) => setInstruction(e.target.value)}
                         onKeyDown={handleKeyDown}
+                        disabled={isLoading}
                         placeholder="Describe an action you want to carry out on the text..."
-                        className="flex-1 w-full p-4 rounded-xl bg-white dark:bg-slate-800 border-none shadow-sm focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none transition-all"
+                        className="flex-1 w-full p-4 pb-12 rounded-xl bg-white dark:bg-slate-800 border-none shadow-sm focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none transition-all disabled:opacity-50"
                         style={{ border: '1px solid var(--border-color)' }}
                     />
                     <div className="absolute bottom-3 right-3 flex items-center gap-2">
@@ -54,17 +63,26 @@ export function AIPromptPanel() {
                         </span>
                         <button
                             onClick={handleExecute}
-                            disabled={!instruction.trim()}
-                            className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 text-white rounded-lg transition-colors shadow-sm"
+                            disabled={!instruction.trim() || isLoading}
+                            className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 text-white rounded-lg transition-colors shadow-sm flex items-center justify-center min-w-[28px] min-h-[28px]"
                         >
-                            <Send className="w-4 h-4" />
+                            {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <Send className="w-4 h-4" />
+                            )}
                         </button>
                     </div>
                 </div>
 
-                <div className="flex-none text-xs text-gray-400 dark:text-slate-500 italic text-center">
-                    AI Prompt panel content will go here
-                </div>
+                {status && (
+                    <div className={`flex-none text-xs px-3 py-1.5 rounded-lg text-center transition-all ${status.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
+                        : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
+                        }`}>
+                        {status.message}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -22,7 +22,7 @@ Verify claims with real-time web search.
 *   **3-Panel Workflow**: Editor, AI Prompt Library, and Diff View all side-by-side for maximum productivity.
 *   **Visual Diff**: Green (Added) / Red (Removed) highlighting.
 *   **Smart Toggles**: Click any change to Accept or Reject it instantly.
-*   **Linked Segments**: Intelligent handling of replacements.
+*   **Linked Segments**: Intelligently group paired deletions and additions so you can accept or reject entire replacements as a single unit, toggling between the original text and the AI's replacement instantly.
 *   **Editor Panel**: The left-hand panel is always editable. Make manual tweaks, then hit **"Compare"** to see how they differ from the original.
 *   **Auto-Compare Toggle**: Enable real-time diff updates while editing (⚡ icon next to Compare button).
 *   **Adjustable Boundaries**: Drag to resize panels and optimize your workspace.

@@ -12,19 +12,19 @@ import { ViewMode, AILogEntry, PolishMode, AIPrompt } from '../types';
 
 interface AIContextType {
     // usePrompts
-    aiPrompts: any[];
-    builtInPrompts: any[];
-    customPrompts: any[];
-    getPrompt: (id: string) => any;
-    createPrompt: (prompt: any) => Promise<any>;
-    updatePrompt: (prompt: any) => Promise<void>;
+    aiPrompts: AIPrompt[];
+    builtInPrompts: AIPrompt[];
+    customPrompts: AIPrompt[];
+    getPrompt: (id: string) => AIPrompt | undefined;
+    createPrompt: (prompt: Partial<AIPrompt>) => Promise<AIPrompt>;
+    updatePrompt: (prompt: AIPrompt) => Promise<void>;
     deletePrompt: (id: string) => Promise<void>;
     resetBuiltIn: () => void;
     promptsLoading: boolean;
 
     // useAsyncAI
-    pendingOperations: any[]; // Consider using specific PendingOperation type if available
-    startOperation: (start: number, end: number, promptId: string) => Promise<void>;
+    pendingOperations: any[]; // PendingOperation type is defined in useAsyncAI.ts but not exported nicely yet
+    startOperation: (start: number, end: number, promptId: string, customPrompt?: AIPrompt) => Promise<void>;
     cancelAsyncOperations: () => void;
     handleQuickSend: (promptId?: string) => void;
     isPolishing: boolean;
@@ -44,7 +44,7 @@ interface AIContextType {
     updateCost: (usage?: { inputTokens: number; outputTokens: number }) => void;
     activePromptId: string;
     setActivePromptId: (id: string) => void;
-    activePrompt: any;
+    activePrompt: AIPrompt | null;
 
     // Handlers
     handleAIEdit: (promptId: string) => Promise<void>;
@@ -63,7 +63,7 @@ const AIContext = createContext<AIContextType | undefined>(undefined);
 export function AIProvider({ children }: { children: ReactNode }) {
     const {
         previewText, setPreviewText, originalText, setOriginalText, modifiedText, setModifiedText,
-        performDiff, setMode, originalTextRef, previewTextRef, previewTextareaRef
+        performDiff, setMode, originalTextRef, previewTextRef, modifiedTextRef, previewTextareaRef
     } = useEditor();
     const {
         setErrorMessage, setActiveLogId, contextMenu, setSavePromptDialogOpen,
@@ -97,8 +97,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setSessionCost(prev => prev + cost);
     }, [selectedModel]);
 
-    const activePrompt = (builtInPrompts.find(p => p.id === activePromptId) || customPrompts.find(p => p.id === activePromptId)) || builtInPrompts[0];
-
+    const activePrompt = (builtInPrompts.find(p => p.id === activePromptId) || customPrompts.find(p => p.id === activePromptId)) || builtInPrompts[0] || null;
     const {
         pendingOperations,
         startOperation,
@@ -168,27 +167,31 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }, [cancelAsyncOperations]);
 
     const getSourceTextForAI = useCallback(() => {
-        if (previewText.trim()) {
-            return { sourceText: previewText, fromRightTab: true };
+        const pText = previewTextRef.current;
+        const oText = originalTextRef.current;
+        const mText = modifiedTextRef.current;
+
+        if (pText.trim()) {
+            return { sourceText: pText, fromRightTab: true };
         }
-        const hasLeft = originalText.trim().length > 0;
-        const hasRight = modifiedText.trim().length > 0;
+        const hasLeft = oText.trim().length > 0;
+        const hasRight = mText.trim().length > 0;
 
         if (hasRight && !hasLeft) {
-            return { sourceText: modifiedText, fromRightTab: true };
+            return { sourceText: mText, fromRightTab: true };
         } else if (hasLeft) {
-            return { sourceText: originalText, fromRightTab: false };
+            return { sourceText: oText, fromRightTab: false };
         }
         return { sourceText: '', fromRightTab: false };
-    }, [previewText, originalText, modifiedText]);
+    }, [previewTextRef, originalTextRef, modifiedTextRef]);
 
     const handleLocalSpellCheck = useCallback(async () => {
         try {
             const textarea = previewTextareaRef.current?.getTextarea();
             if (textarea && textarea.selectionStart !== textarea.selectionEnd) {
                 const { selectionStart, selectionEnd } = textarea;
-                const expanded = expandToWordBoundaries(selectionStart, selectionEnd, previewText);
-                const sourceText = previewText.substring(expanded.start, expanded.end);
+                const expanded = expandToWordBoundaries(selectionStart, selectionEnd, previewTextRef.current);
+                const sourceText = previewTextRef.current.substring(expanded.start, expanded.end);
 
                 if (!sourceText.trim()) return;
 
@@ -198,11 +201,11 @@ export function AIProvider({ children }: { children: ReactNode }) {
                     return;
                 }
 
-                const newText = previewText.substring(0, expanded.start) + result.text + previewText.substring(expanded.end);
-                setOriginalText(previewText);
+                const newText = previewTextRef.current.substring(0, expanded.start) + result.text + previewTextRef.current.substring(expanded.end);
+                setOriginalText(previewTextRef.current);
                 setPreviewText(newText);
                 setModifiedText(newText);
-                performDiff(previewText, newText);
+                performDiff(previewTextRef.current, newText);
                 setMode(ViewMode.DIFF);
             } else {
                 const { sourceText } = getSourceTextForAI();
@@ -226,7 +229,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             console.error(e);
             setErrorMessage('Failed to run spell check');
         }
-    }, [previewText, previewTextareaRef, setErrorMessage, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
+    }, [previewTextRef, previewTextareaRef, setErrorMessage, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
 
     const handleAIEdit = useCallback(async (promptIdOrInstruction: string) => {
         if (promptIdOrInstruction === 'spelling_local') {
@@ -245,7 +248,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         if (textarea) {
             const { selectionStart, selectionEnd } = textarea;
             if (selectionStart !== selectionEnd) {
-                const expanded = expandToWordBoundaries(selectionStart, selectionEnd, previewText);
+                const expanded = expandToWordBoundaries(selectionStart, selectionEnd, previewTextRef.current);
                 start = expanded.start;
                 end = expanded.end;
                 hasSelection = true;
@@ -255,13 +258,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
         if (isKnownPrompt) {
             // Standard prompt or preset - needs text to operate on
             if (hasSelection) {
-                startOperation(start, end, promptIdOrInstruction);
+                return startOperation(start, end, promptIdOrInstruction);
             } else {
-                if (!previewText.trim()) {
+                if (!previewTextRef.current.trim()) {
                     setErrorMessage('Please enter some text first.');
                     return;
                 }
-                startOperation(0, previewText.length, promptIdOrInstruction);
+                return startOperation(0, previewTextRef.current.length, promptIdOrInstruction);
             }
         } else {
             // Custom instruction from prompt panel
@@ -275,12 +278,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
             };
 
             if (hasSelection) {
-                startOperation(start, end, 'custom', customPrompt);
+                return startOperation(start, end, 'custom', customPrompt);
             } else {
-                startOperation(0, previewText.length, 'custom', customPrompt);
+                return startOperation(0, previewTextRef.current.length, 'custom', customPrompt);
             }
         }
-    }, [handleLocalSpellCheck, previewTextareaRef, previewText, startOperation, setErrorMessage, getPrompt]);
+    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, getPrompt, builtInPrompts, customPrompts]);
 
     const handleQuickSend = useCallback((promptId?: string) => {
         const idToUse = promptId || activePromptId;
@@ -290,13 +293,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
         const { start, end } = expandToWordBoundaries(
             textarea.selectionStart,
             textarea.selectionEnd,
-            previewText
+            previewTextRef.current
         );
 
         if (start !== end) {
             startOperation(start, end, idToUse);
         }
-    }, [previewText, startOperation, previewTextareaRef, activePromptId]);
+    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();
@@ -390,13 +393,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        let textToSpeak = previewText;
+        let textToSpeak = previewTextRef.current;
         const textarea = previewTextareaRef.current?.getTextarea();
         if (textarea) {
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
             if (start !== end) {
-                textToSpeak = previewText.substring(start, end);
+                textToSpeak = previewTextRef.current.substring(start, end);
             }
         }
 
@@ -407,22 +410,22 @@ export function AIProvider({ children }: { children: ReactNode }) {
         utterance.onend = () => setIsSpeaking(false);
         utterance.onerror = () => setIsSpeaking(false);
         window.speechSynthesis.speak(utterance);
-    }, [isSpeaking, previewText, previewTextareaRef, setIsSpeaking]);
+    }, [isSpeaking, previewTextRef, previewTextareaRef, setIsSpeaking]);
 
     const handlePolishSelection = useCallback(async (polishMode: PolishMode) => {
         const textarea = previewTextareaRef.current?.getTextarea();
         let start = 0;
-        let end = previewText.length;
-        let selectedText = previewText;
+        let end = previewTextRef.current.length;
+        let selectedText = previewTextRef.current;
 
         if (textarea) {
             const selStart = textarea.selectionStart;
             const selEnd = textarea.selectionEnd;
             if (selStart !== selEnd) {
-                const expanded = expandToWordBoundaries(selStart, selEnd, previewText);
+                const expanded = expandToWordBoundaries(selStart, selEnd, previewTextRef.current);
                 start = expanded.start;
                 end = expanded.end;
-                selectedText = previewText.substring(start, end);
+                selectedText = previewTextRef.current.substring(start, end);
             }
         }
 
@@ -496,18 +499,18 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         if (results.length > 0) {
             const result = results[0].result;
-            const newText = previewText.slice(0, start) + result + previewText.slice(end);
+            const newText = previewTextRef.current.slice(0, start) + result + previewTextRef.current.slice(end);
 
-            setOriginalText(previewText);
+            setOriginalText(previewTextRef.current);
             setPreviewText(newText);
             setModifiedText(newText);
-            performDiff(previewText, newText);
+            performDiff(previewTextRef.current, newText);
             setMode(ViewMode.DIFF);
         }
 
         setIsPolishing(false);
         abortControllerRef.current = null;
-    }, [previewTextareaRef, previewText, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, setErrorMessage]);
+    }, [previewTextareaRef, previewTextRef, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, setErrorMessage]);
 
     const handleSaveAsPrompt = useCallback(() => {
         if (contextMenu?.selection) {

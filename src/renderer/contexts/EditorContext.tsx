@@ -41,6 +41,7 @@ interface EditorContextType {
     // Refs
     originalTextRef: React.MutableRefObject<string>;
     previewTextRef: React.MutableRefObject<string>;
+    modifiedTextRef: React.MutableRefObject<string>;
     skipNextSegmentsSync: React.MutableRefObject<boolean>;
 
     // Handlers
@@ -78,6 +79,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         previewTextRef.current = previewText;
     }, [previewText]);
+
+    const modifiedTextRef = useRef('');
+    useEffect(() => {
+        modifiedTextRef.current = modifiedText;
+    }, [modifiedText]);
 
     const {
         segments,
@@ -234,7 +240,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
             isScrollSyncEnabled, setIsScrollSyncEnabled,
             fontFamily, setFontFamily, fontSize, setFontSize,
             mode, setMode,
-            originalTextRef, previewTextRef, skipNextSegmentsSync,
+            originalTextRef, previewTextRef, modifiedTextRef, skipNextSegmentsSync,
             handleAcceptAll, handleRejectAll, handleCopyFinal, handleWebSave
         }}>
             {children}

@@ -49,7 +49,7 @@ export function useAsyncAI({
     const [pendingOperations, setPendingOperations] = useState<Map<string, PendingOperation>>(new Map());
     const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
-    let operationCounter = useRef(0);
+    const operationCounter = useRef(0);
 
     /**
      * Start a new AI operation on a text range.
@@ -237,12 +237,10 @@ export function useAsyncAI({
 
         let adjustedStart = 0;
         let adjustedEnd = 0;
-        let opSnapshot: PendingOperation | undefined;
 
         setPendingOperations(prev => {
             const op = prev.get(opId);
             if (!op) return prev;
-            opSnapshot = op;
 
             adjustedStart = op.originalStart;
             adjustedEnd = op.originalEnd;
