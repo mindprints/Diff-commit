@@ -137,6 +137,22 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         initializeHistory(initialSegments);
     }, [initializeHistory]);
 
+    // Auto-compare effect: triggers diff when enabled and previewText changes
+    useEffect(() => {
+        if (!isAutoCompareEnabled) return;
+
+        // Debounce to prevent excessive diffing while typing
+        const timeoutId = setTimeout(() => {
+            if (originalText && previewText && originalText !== previewText) {
+                skipNextSegmentsSync.current = true;
+                setModifiedText(previewText);
+                performDiff(originalText, previewText);
+            }
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [isAutoCompareEnabled, previewText, originalText, performDiff, setModifiedText]);
+
     const toggleSegment = useCallback((id: string) => {
         const segmentIndex = segments.findIndex(s => s.id === id);
         if (segmentIndex === -1) return;
