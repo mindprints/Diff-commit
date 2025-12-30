@@ -562,6 +562,83 @@ app.whenReady().then(() => {
         }
     });
 
+    // Rename Project (rename folder on disk)
+    ipcMain.handle('rename-project', async (event, projectPath: string, newName: string) => {
+        if (!projectPath || !newName) return null;
+
+        // Helper to check if path exists
+        const pathExists = async (p: string): Promise<boolean> => {
+            try {
+                await fs.promises.access(p);
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        // Validate that projectPath exists and is a directory
+        if (!(await pathExists(projectPath))) {
+            throw new Error('Project folder does not exist');
+        }
+
+        const stats = await fs.promises.stat(projectPath);
+        if (!stats.isDirectory()) {
+            throw new Error('Project path is not a directory');
+        }
+
+        // Validate this is actually a project folder by checking for project markers
+        const [hasHierarchyMeta, hasDiffCommit, hasContentFile] = await Promise.all([
+            pathExists(path.join(projectPath, '.hierarchy-meta.json')),
+            pathExists(path.join(projectPath, '.diff-commit')),
+            pathExists(path.join(projectPath, 'content.md'))
+        ]);
+
+        if (!hasHierarchyMeta && !hasDiffCommit && !hasContentFile) {
+            throw new Error('Invalid project folder: missing project markers (.hierarchy-meta.json, .diff-commit, or content.md)');
+        }
+
+        const trimmedName = newName.trim();
+        if (!trimmedName) return null;
+
+        const parentPath = path.dirname(projectPath);
+        const newPath = path.join(parentPath, trimmedName);
+
+        // Check if new name already exists
+        // Allow case-only rename on Windows/Mac (case-insensitive FS)
+        const isSamePath = projectPath.toLowerCase() === newPath.toLowerCase();
+
+        if (!isSamePath && (await pathExists(newPath))) {
+            throw new Error(`A project named "${trimmedName}" already exists`);
+        }
+
+        try {
+            // Rename the folder (async)
+            await fs.promises.rename(projectPath, newPath);
+
+            // Update hierarchy metadata with new name
+            const metaPath = path.join(newPath, '.hierarchy-meta.json');
+            if (await pathExists(metaPath)) {
+                const metaContent = await fs.promises.readFile(metaPath, 'utf-8');
+                const meta = JSON.parse(metaContent);
+                meta.name = trimmedName;
+                await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+            }
+
+            console.log('[Project] Renamed project:', projectPath, '->', newPath);
+
+            return {
+                id: trimmedName,
+                name: trimmedName,
+                path: newPath,
+                repositoryPath: parentPath,
+                updatedAt: Date.now()
+            };
+        } catch (e) {
+            console.error('Failed to rename project:', e);
+            throw e;
+        }
+    });
+
     // Save Project Content (write to content.md in project folder)
     ipcMain.handle('save-project-content', async (event, projectPath, content) => {
         if (!projectPath) return false;
