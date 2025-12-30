@@ -41,7 +41,13 @@ export interface IElectronAPI {
     loadProjectCommits: (path: string) => Promise<TextCommit[]>;
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
-    renameProject: (projectPath: string, newName: string) => Promise<Project | null>;
+    renameProject: (projectPath: string, newName: string) => Promise<{
+        id: string;
+        name: string;
+        path: string;
+        repositoryPath: string;
+        updatedAt: number;
+    } | null>;
 
     // Hierarchy Enforcement System
     hierarchy: {

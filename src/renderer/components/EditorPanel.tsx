@@ -12,7 +12,7 @@ import { useState } from 'react';
 
 export function EditorPanel() {
     const {
-        topPanelHeight, isSpeaking, setIsSpeaking,
+        isSpeaking, setIsSpeaking,
         setShowPromptsModal, isShiftHeld, setShowProjectsPanel
     } = useUI();
 
@@ -23,6 +23,7 @@ export function EditorPanel() {
     const {
         isPolishing, isFactChecking, cancelAIOperation,
         factCheckProgress, builtInPrompts, customPrompts,
+        activePromptId, setActivePromptId, activePrompt,
         handleAIEdit, handleFactCheck, handleReadAloud,
         pendingOperations, handleQuickSend
     } = useAI();
@@ -66,13 +67,27 @@ export function EditorPanel() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
+                            onClick={() => handleAIEdit(activePromptId)}
                             isLoading={isPolishing || isFactChecking}
                             disabled={isPolishing || isFactChecking}
                             icon={<Wand2 className="w-3 h-3" />}
-                            className={clsx(isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700")}
+                            className="rounded-r-none border-r-0"
                         >
-                            {isFactChecking ? 'Checking...' : 'AI Edit...'}
+                            {isFactChecking ? 'Checking...' : (activePrompt?.name || 'AI Edit')}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
+                            disabled={isPolishing || isFactChecking}
+                            className={clsx(
+                                "rounded-l-none px-1 min-w-[1.5rem]",
+                                isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700"
+                            )}
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
                         </Button>
                         {(isPolishing || isFactChecking) && (
                             <button
@@ -98,18 +113,19 @@ export function EditorPanel() {
                                 {builtInPrompts.map(prompt => (
                                     <button
                                         key={prompt.id}
-                                        onClick={() => {
-                                            handleAIEdit(prompt.id);
-                                            setIsPolishMenuOpen(false);
-                                        }}
-                                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
+                                        onClick={() => { setActivePromptId(prompt.id); setIsPolishMenuOpen(false); }}
+                                        className={clsx(
+                                            "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2",
+                                            activePromptId === prompt.id
+                                                ? "bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium"
+                                                : "text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                        )}
                                     >
                                         <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
                                         {prompt.name}
                                     </button>
                                 ))}
 
-                                {/* Custom Prompts */}
                                 {customPrompts.length > 0 && (
                                     <>
                                         <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
@@ -119,11 +135,13 @@ export function EditorPanel() {
                                         {customPrompts.map(prompt => (
                                             <button
                                                 key={prompt.id}
-                                                onClick={() => {
-                                                    handleAIEdit(prompt.id);
-                                                    setIsPolishMenuOpen(false);
-                                                }}
-                                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
+                                                onClick={() => { setActivePromptId(prompt.id); setIsPolishMenuOpen(false); }}
+                                                className={clsx(
+                                                    "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2",
+                                                    activePromptId === prompt.id
+                                                        ? "bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium"
+                                                        : "text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                )}
                                             >
                                                 <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
                                                 {prompt.name}
@@ -240,7 +258,7 @@ export function EditorPanel() {
                         onClick={(e) => {
                             if (e.ctrlKey) {
                                 e.preventDefault();
-                                handleQuickSend('grammar');
+                                handleQuickSend();
                             }
                         }}
                         className={clsx(

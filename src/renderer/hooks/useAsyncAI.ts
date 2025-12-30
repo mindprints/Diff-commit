@@ -15,6 +15,7 @@ export interface PendingOperation {
     status: 'pending' | 'completed' | 'error';
     result?: string;         // AI response when completed
     error?: string;          // Error message if failed
+    customPrompt?: AIPrompt; // On-the-fly custom prompt for instructions
 }
 
 interface UseAsyncAIOptions {
@@ -49,7 +50,7 @@ export function useAsyncAI({
     const pendingOperationsRef = useRef<Map<string, PendingOperation>>(new Map());
     const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
-    let operationCounter = useRef(0);
+    const operationCounter = useRef(0);
 
     /**
      * Start a new AI operation on a text range.
@@ -58,7 +59,8 @@ export function useAsyncAI({
     const startOperation = useCallback(async (
         start: number,
         end: number,
-        promptId: string
+        promptId: string,
+        customPrompt?: AIPrompt
     ): Promise<string | null> => {
         const model = getModel();
         if (!model) {
@@ -69,7 +71,7 @@ export function useAsyncAI({
         const text = getText();
         const selectedText = text.substring(start, end);
 
-        if (!selectedText.trim()) {
+        if (!selectedText.trim() && !customPrompt) {
             onError('Please select some text first');
             return null;
         }
@@ -88,6 +90,7 @@ export function useAsyncAI({
             originalEnd: end,
             originalText: selectedText,
             promptId,
+            customPrompt,
             status: 'pending',
         };
 
@@ -118,7 +121,7 @@ export function useAsyncAI({
 
         try {
             // Get the prompt
-            const prompt = getPrompt(operation.promptId);
+            const prompt = operation.customPrompt || getPrompt(operation.promptId);
 
             let results: { id: string; result: string }[];
             let usage: { inputTokens: number; outputTokens: number } | undefined;
@@ -274,14 +277,18 @@ export function useAsyncAI({
 
         // Perform side-effects outside of state updater
         setText(newText);
-        onDiffUpdate(currentText, newText);
+
+        // Defer diff update to next tick to avoid React warning about cross-component updates
+        setTimeout(() => {
+            onDiffUpdate(currentText, newText);
+        }, 0);
 
         // Mark this operation as completed in state
         setPendingOperations(current => {
             const next = new Map(current);
             const opToUpdate = next.get(opId);
             if (opToUpdate) {
-                next.set(opId, { ...opToUpdate, status: 'completed', result });
+                next.set(opId, { ...(opToUpdate as PendingOperation), status: 'completed' as const, result });
             }
             pendingOperationsRef.current = next;
             return next;
@@ -290,10 +297,10 @@ export function useAsyncAI({
         // Schedule cleanup
         setTimeout(() => {
             setPendingOperations(current => {
-                const next = new Map(current);
-                next.delete(opId);
-                pendingOperationsRef.current = next;
-                return next;
+                const updated = new Map(current);
+                updated.delete(opId);
+                pendingOperationsRef.current = updated;
+                return updated;
             });
         }, 2000);
     }, [getText, setText, onDiffUpdate]);

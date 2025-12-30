@@ -267,7 +267,12 @@ export function useProjects() {
         }
 
         if (updated) {
-            setProjects(prev => prev.map(p => p.id === id ? updated! : p));
+            // The project ID changes to the new name, so we need to filter out the old one
+            // and insert the updated project
+            setProjects(prev => {
+                const filtered = prev.filter(p => p.id !== id);
+                return [...filtered, updated!];
+            });
             if (currentProject?.id === id) {
                 setCurrentProject(updated);
             }

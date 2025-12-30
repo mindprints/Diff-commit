@@ -8,11 +8,9 @@ Unlike generic chat interfaces, this tool is built for *merging*: it visualizes 
 
 ### ⚡ Local & AI Hybrid Editing
 *   **Local Spell Checker**: Instant, offline spell checking using Hunspell dictionaries (`en_US`). Zero latency, zero cost.
-*   **AI Polish**: Access top-tier models (DeepSeek, Claude, GPT-4, Gemini) via OpenRouter for complex tasks:
-    *   **Grammar Fix**: Strict syntax correction.
-    *   **Full Polish**: Flow, tone, and clarity improvements.
-    *   **Spelling (AI)**: Context-aware spelling for technical terms.
-    *   **Prompt Expansion**: Turn rough notes into detailed LLM prompts.
+*   **Active Prompt System**: Centralized prompt selection and execution. Select a prompt from the header dropdown to make it "Active".
+*   **Split-Button Execution**: A dual-action button in the header allows you to either select a new active prompt or immediately execute the current one.
+*   **Integrated Prompt Panel**: Direct content generation and modification via custom instructions in the side panel.
 
 ### 🛡️ Fact Checker (Perplexity)
 Verify claims with real-time web search.
@@ -20,12 +18,14 @@ Verify claims with real-time web search.
 *   **Verification**: Checks each claim against live web sources using Perplexity Sonar Pro.
 *   **Categorization**: Tags claims (e.g., 'Medical', 'Political', 'Statistical').
 
-### 🔍 Interactive Diff & Merge
+### 🔍 Multi-Panel Layout & Merge
+*   **3-Panel Workflow**: Editor, AI Prompt Library, and Diff View all side-by-side for maximum productivity.
 *   **Visual Diff**: Green (Added) / Red (Removed) highlighting.
 *   **Smart Toggles**: Click any change to Accept or Reject it instantly.
-*   **Linked Segments**: Intelligent handling of replacements (swapping words toggles both the removal and addition).
+*   **Linked Segments**: Intelligently group paired deletions and additions so you can accept or reject entire replacements as a single unit, toggling between the original text and the AI's replacement instantly.
 *   **Editor Panel**: The left-hand panel is always editable. Make manual tweaks, then hit **"Compare"** to see how they differ from the original.
 *   **Auto-Compare Toggle**: Enable real-time diff updates while editing (⚡ icon next to Compare button).
+*   **Adjustable Boundaries**: Drag to resize panels and optimize your workspace.
 
 ### 💾 Git-Style Commit System
 *   **Commit History**: Save "snapshots" of your text as you work.
@@ -47,6 +47,15 @@ Verify claims with real-time web search.
 ### 🖱️ Advanced Selection (Ctrl+Drag)
 *   **Multi-Selection**: Hold `Ctrl` to select multiple, non-contiguous pieces of text.
 *   **Batch Processing**: Run AI operations (like "Fix Grammar") on *only* the selected headers or paragraphs at once.
+
+### 📝 Prompt Library (CRUD)
+*   **Custom AI Prompts**: Create, edit, and delete your own AI instruction sets.
+*   **Organization**: Organize prompts with custom names and colors.
+*   **Quick Access**: Seamlessly switch between built-in presets and your own custom library.
+
+### 🎨 Theme & Personalization
+*   **Dynamic Hue Slider**: Adjust the application's accent color in real-time with a compact hue slider (0-360°).
+*   **Adaptive Dark Mode**: Full support for both light and dark system preferences.
 
 ---
 
@@ -138,9 +147,48 @@ To avoid confusion during development:
 *   **Original**: The immutable baseline text you are comparing against.
 *   **Commit**: Saving the current state to history and making it the new baseline.
 *   **Diff Mode**: The primary view showing the comparison between Original and your edits.
-*   **Prompt**: A saved instruction set for the AI (e.g., "Grammar Fix"). Can be **Local** (TypeScript logic) or **AI** (LLM prompt).
+*   **Active Prompt**: The currently selected instruction set for the AI (e.g., "Grammar Fix"). Once selected, it can be triggered via the header button or Ctrl+Click.
 *   **Repository**: A folder on your computer that contains project folders.
 *   **Project**: A folder within a repository containing `content.md` and `.diff-commit/`.
+
+---
+
+## 📝 Changelog (v1.4.0)
+
+### New Features
+*   **Consolidated Prompt System**: centralizes AI execution around a single "Active Prompt" workflow.
+*   **Active Prompt Dropdown**: Transform the AI header menu into a selector for the global active prompt.
+*   **Split AI Edit Button**: New primary header action to execute the active prompt with one click.
+*   **Prompt Panel Execution**: Type raw instructions in the Prompt Panel and press `Enter` to modify text or generate new content from scratch.
+*   **Unified Ctrl+Click**: `Ctrl+Click` on any word now consistently triggers the currently active prompt for rapid iteration.
+
+### Stability & Performance
+*   **Async Operation Safety**: Resolved React lifecycle crashes during parallel AI operations.
+*   **Staleness Prevention**: Implemented `previewTextRef` to ensure async operations always utilize the absolute latest document state.
+*   **Empty Editor Support**: Enabled content generation from an empty editor via the Prompt Panel.
+
+### UI/UX Refinement
+*   **Context Menu Restoration**: Restored default right-click behavior by removing redundant AI polishing options.
+*   **Active Prompt HUD**: The main header button now dynamically reflects the name of the selected active prompt.
+
+---
+
+## 📝 Changelog (v1.3.0)
+
+### New Features
+*   **3-Panel UI Refactor**: Fully restored and optimized the side-by-side layout (Editor, AI Prompt Library, Diff View).
+*   **Prompt Management System**: Full CRUD for AI prompts with persistent storage (Electron Store/LocalStorage).
+*   **Theme Customization**: Real-time hue slider for personalized app aesthetics.
+*   **Adaptive Sidebar**: Collapsible/Resizable panels for a more flexible document editing experience.
+
+### Developer Experience
+*   **Tailwind CSS Linting**: Added workspace settings to suppress unknown at-rule warnings.
+*   **Architecture Refactor**: Extracted complex logic into focused custom hooks (`useElectronMenu`, `useProjects`, `usePrompts`, etc.).
+*   **Upgraded Dependencies**: React 19, Vite 6, and Electron 39 support.
+
+### Bug Fixes
+*   **Fixed Project Residue**: Resolved issues where old content would persist when creating or switching projects.
+*   **Fixed Scroll Sync**: Improved robustness of scroll synchronization between panels.
 
 ---
 

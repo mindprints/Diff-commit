@@ -596,7 +596,6 @@ app.whenReady().then(() => {
         if (!hasHierarchyMeta && !hasDiffCommit && !hasContentFile) {
             throw new Error('Invalid project folder: missing project markers (.hierarchy-meta.json, .diff-commit, or content.md)');
         }
-
         const trimmedName = newName.trim();
         if (!trimmedName) return null;
 

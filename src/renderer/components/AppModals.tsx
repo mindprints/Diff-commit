@@ -101,48 +101,15 @@ export function AppModals() {
                         label: 'Read Selected',
                         icon: <Volume2 className="w-4 h-4" />,
                         onClick: handleReadAloud,
-                        disabled: !contextMenu?.selection
-                    },
-                    {
-                        label: 'Spelling Only',
-                        icon: <Wand2 className="w-4 h-4 text-blue-500" />,
-                        onClick: () => handlePolishSelection('spelling'),
                         disabled: !contextMenu?.selection,
                         divider: true
-                    },
-                    {
-                        label: 'Grammar & Spelling',
-                        icon: <Wand2 className="w-4 h-4 text-emerald-500" />,
-                        onClick: () => handlePolishSelection('grammar'),
-                        disabled: !contextMenu?.selection
-                    },
-                    {
-                        label: 'Full Polish',
-                        icon: <Wand2 className="w-4 h-4 text-purple-500" />,
-                        onClick: () => handlePolishSelection('polish'),
-                        disabled: !contextMenu?.selection,
-                        subLabel: '$$'
-                    },
-                    {
-                        label: 'Prompt Expansion',
-                        icon: <Wand2 className="w-4 h-4 text-amber-500" />,
-                        onClick: () => handlePolishSelection('prompt'),
-                        disabled: !contextMenu?.selection,
-                        divider: true
-                    },
-                    {
-                        label: 'Execute Prompt',
-                        icon: <Wand2 className="w-4 h-4 text-rose-500" />,
-                        onClick: () => handlePolishSelection('execute'),
-                        disabled: !contextMenu?.selection
                     },
                     {
                         label: 'Fact Check',
                         icon: <Shield className="w-4 h-4 text-cyan-500" />,
                         onClick: handleFactCheck,
                         disabled: !contextMenu?.selection,
-                        subLabel: '$$$$',
-                        divider: true
+                        subLabel: '$$$$'
                     },
                     {
                         label: 'Save as Prompt',
