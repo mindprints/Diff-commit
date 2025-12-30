@@ -37,6 +37,7 @@ export function ProjectsPanel({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+    const [renameError, setRenameError] = useState<string | null>(null);
     const [showProjectDropdown, setShowProjectDropdown] = useState(false);
     const [showCreateNodeDialog, setShowCreateNodeDialog] = useState(false);
     const [repoType, setRepoType] = useState<'root' | 'repository' | 'project'>('root');
@@ -70,14 +71,24 @@ export function ProjectsPanel({
     const handleStartRename = (project: Project) => {
         setEditingId(project.id);
         setEditingName(project.name);
+        setRenameError(null);
     };
 
     const handleRename = async () => {
         if (editingId && editingName.trim()) {
-            await onRenameProject(editingId, editingName.trim());
+            try {
+                setRenameError(null);
+                await onRenameProject(editingId, editingName.trim());
+                setEditingId(null);
+                setEditingName('');
+            } catch (e: any) {
+                console.error('Rename failed:', e);
+                setRenameError(e.message || 'Failed to rename project');
+            }
+        } else {
+            setEditingId(null);
+            setEditingName('');
         }
-        setEditingId(null);
-        setEditingName('');
     };
 
     const handleDelete = async (id: string) => {
@@ -278,24 +289,43 @@ export function ProjectsPanel({
                                     }}
                                 >
                                     {editingId === project.id ? (
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={editingName}
-                                                onChange={(e) => setEditingName(e.target.value)}
-                                                className="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-slate-100"
-                                                autoFocus
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handleRename();
-                                                    if (e.key === 'Escape') setEditingId(null);
-                                                }}
-                                            />
-                                            <button
-                                                onClick={handleRename}
-                                                className="p-1 text-green-500 hover:text-green-700"
-                                            >
-                                                <Check className="w-4 h-4" />
-                                            </button>
+                                        <div className="flex flex-col gap-1 w-full">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={editingName}
+                                                    onChange={(e) => setEditingName(e.target.value)}
+                                                    className={clsx(
+                                                        "flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-800 border rounded focus:outline-none focus:ring-2 text-gray-900 dark:text-slate-100",
+                                                        renameError
+                                                            ? "border-red-300 dark:border-red-700 focus:ring-red-500"
+                                                            : "border-gray-200 dark:border-slate-700 focus:ring-indigo-500"
+                                                    )}
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleRename();
+                                                        if (e.key === 'Escape') {
+                                                            setEditingId(null);
+                                                            setRenameError(null);
+                                                        }
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRename();
+                                                    }}
+                                                    className="p-1 text-green-500 hover:text-green-700"
+                                                >
+                                                    <Check className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            {renameError && (
+                                                <p className="text-xs text-red-500 dark:text-red-400">
+                                                    {renameError}
+                                                </p>
+                                            )}
                                         </div>
                                     ) : deleteConfirmId === project.id ? (
                                         <div className="flex items-center justify-between">
@@ -306,7 +336,10 @@ export function ProjectsPanel({
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => handleDelete(project.id)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDelete(project.id);
+                                                    }}
                                                     className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                                                 >
                                                     Delete
@@ -314,7 +347,10 @@ export function ProjectsPanel({
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => setDeleteConfirmId(null)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDeleteConfirmId(null);
+                                                    }}
                                                 >
                                                     Cancel
                                                 </Button>

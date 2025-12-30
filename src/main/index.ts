@@ -562,6 +562,51 @@ app.whenReady().then(() => {
         }
     });
 
+    // Rename Project (rename folder on disk)
+    ipcMain.handle('rename-project', async (event, projectPath: string, newName: string) => {
+        if (!projectPath || !newName) return null;
+
+        const trimmedName = newName.trim();
+        if (!trimmedName) return null;
+
+        const parentPath = path.dirname(projectPath);
+        const newPath = path.join(parentPath, trimmedName);
+
+        // Check if new name already exists
+        // Allow case-only rename on Windows/Mac (case-insensitive FS)
+        const isSamePath = projectPath.toLowerCase() === newPath.toLowerCase();
+
+        if (!isSamePath && fs.existsSync(newPath)) {
+            throw new Error(`A project named "${trimmedName}" already exists`);
+        }
+
+        try {
+            // Rename the folder
+            fs.renameSync(projectPath, newPath);
+
+            // Update hierarchy metadata with new name
+            const metaPath = path.join(newPath, '.hierarchy-meta.json');
+            if (fs.existsSync(metaPath)) {
+                const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+                meta.name = trimmedName;
+                fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+            }
+
+            console.log('[Project] Renamed project:', projectPath, '->', newPath);
+
+            return {
+                id: trimmedName,
+                name: trimmedName,
+                path: newPath,
+                repositoryPath: parentPath,
+                updatedAt: Date.now()
+            };
+        } catch (e) {
+            console.error('Failed to rename project:', e);
+            throw e;
+        }
+    });
+
     // Save Project Content (write to content.md in project folder)
     ipcMain.handle('save-project-content', async (event, projectPath, content) => {
         if (!projectPath) return false;

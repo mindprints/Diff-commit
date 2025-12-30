@@ -7,7 +7,7 @@ export function AIPromptPanel() {
     const [instruction, setInstruction] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-    const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         return () => {
@@ -38,6 +38,11 @@ export function AIPromptPanel() {
         } catch (err) {
             console.error('AI instruction failed:', err);
             setStatus({ type: 'error', message: 'Failed to process command. Please try again.' });
+            // Auto-clear error message after 6 seconds (longer than success)
+            statusTimeoutRef.current = setTimeout(() => {
+                setStatus(null);
+                statusTimeoutRef.current = null;
+            }, 6000);
         } finally {
             setIsLoading(false);
         }

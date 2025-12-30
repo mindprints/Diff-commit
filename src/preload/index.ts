@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('electron', {
     loadProjectCommits: (path) => ipcRenderer.invoke('load-project-commits', path),
     saveProjectCommits: (path, commits) => ipcRenderer.invoke('save-project-commits', path, commits),
     saveProjectBundle: (projectPath) => ipcRenderer.invoke('save-project-bundle', projectPath),
+    renameProject: (projectPath, newName) => ipcRenderer.invoke('rename-project', projectPath, newName),
 
     // Hierarchy Enforcement System
     hierarchy: {

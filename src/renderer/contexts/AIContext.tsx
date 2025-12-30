@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
 import { useAsyncAI } from '../hooks/useAsyncAI';
 import { useEditor } from './EditorContext';
@@ -104,7 +104,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
             null;
     }, []);
 
-    const activePrompt = findActivePrompt(activePromptId, builtInPrompts, customPrompts);
+    const activePrompt = useMemo(
+        () => findActivePrompt(activePromptId, builtInPrompts, customPrompts),
+        [findActivePrompt, activePromptId, builtInPrompts, customPrompts]
+    );
     const {
         pendingOperations,
         startOperation,
