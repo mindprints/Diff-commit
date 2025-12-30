@@ -183,6 +183,7 @@ export function ProjectsPanel({
                                                 className="w-full text-left px-3 py-1.5 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center gap-1"
                                                 onClick={() => {
                                                     setShowProjectDropdown(false);
+                                                    setEditingId(null); // Clear renaming state
                                                     setIsCreating(true);
                                                 }}
                                             >
@@ -199,7 +200,10 @@ export function ProjectsPanel({
                         <Button
                             variant="primary"
                             size="sm"
-                            onClick={() => setIsCreating(true)}
+                            onClick={() => {
+                                setEditingId(null); // Clear renaming state
+                                setIsCreating(true);
+                            }}
                             icon={<Plus className="w-4 h-4" />}
                             disabled={!repositoryPath}
                             title={!repositoryPath ? 'Open or create a repository first' : 'Create new project'}

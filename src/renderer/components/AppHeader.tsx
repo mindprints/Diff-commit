@@ -98,21 +98,19 @@ export function AppHeader() {
             </div>
 
             <div className="flex items-center gap-3">
-                {mode === ViewMode.DIFF && (
-                    <>
-                        <Button
-                            variant="outline"
-                            onClick={handleClearAll}
-                            size="sm"
-                            icon={<Trash2 className="w-4 h-4" />}
-                        >
-                            Clear All
-                        </Button>
+                <Button
+                    variant="outline"
+                    onClick={handleClearAll}
+                    size="sm"
+                    icon={<Trash2 className="w-4 h-4" />}
+                >
+                    Clear All
+                </Button>
 
-                        <Button variant="primary" size="sm" onClick={handleCopyFinal} icon={<Copy className="w-4 h-4" />}>
-                            Copy
-                        </Button>
-                    </>
+                {mode === ViewMode.DIFF && (
+                    <Button variant="primary" size="sm" onClick={handleCopyFinal} icon={<Copy className="w-4 h-4" />}>
+                        Copy
+                    </Button>
                 )}
             </div>
 

@@ -123,14 +123,6 @@ const electronAPI: ElectronAPI = {
     // Repository & Project System
     openRepository: () => ipcRenderer.invoke('open-repository'),
     createRepository: () => ipcRenderer.invoke('create-repository'),
-<<<<<<< Updated upstream
-    createProject: (repoPath, name, content) => ipcRenderer.invoke('create-project', repoPath, name, content),
-    saveProjectContent: (path, content) => ipcRenderer.invoke('save-project-content', path, content),
-    loadProjectContent: (path) => ipcRenderer.invoke('load-project-content', path),
-    loadProjectCommits: (path) => ipcRenderer.invoke('load-project-commits', path),
-    saveProjectCommits: (path, commits) => ipcRenderer.invoke('save-project-commits', path, commits),
-    saveProjectBundle: (projectPath) => ipcRenderer.invoke('save-project-bundle', projectPath),
-=======
     createProject: (repoPath: string, name: string, content?: string) => ipcRenderer.invoke('create-project', repoPath, name, content),
     saveProjectContent: (path: string, content: string) => ipcRenderer.invoke('save-project-content', path, content),
     loadProjectContent: (path: string) => ipcRenderer.invoke('load-project-content', path),
@@ -138,7 +130,6 @@ const electronAPI: ElectronAPI = {
     saveProjectCommits: (path: string, commits: TextCommit[]) => ipcRenderer.invoke('save-project-commits', path, commits),
     saveProjectBundle: (projectPath: string) => ipcRenderer.invoke('save-project-bundle', projectPath),
     renameProject: (projectPath: string, newName: string) => ipcRenderer.invoke('rename-project', projectPath, newName),
->>>>>>> Stashed changes
 
     // Hierarchy Enforcement System
     hierarchy: {

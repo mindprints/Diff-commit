@@ -41,10 +41,7 @@ export interface IElectronAPI {
     loadProjectCommits: (path: string) => Promise<TextCommit[]>;
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
-<<<<<<< Updated upstream
-=======
     renameProject: (projectPath: string, newName: string) => Promise<Project | null>;
->>>>>>> Stashed changes
 
     // Hierarchy Enforcement System
     hierarchy: {

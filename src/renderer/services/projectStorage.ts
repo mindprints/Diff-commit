@@ -197,7 +197,12 @@ export async function deleteProject(id: string): Promise<void> {
 /**
  * Rename a project.
  */
-export async function renameProject(id: string, newName: string): Promise<Project | null> {
+export async function renameProject(id: string, newName: string, projectPath?: string): Promise<Project | null> {
+    // Electron FS Mode
+    if (hasElectronProjectAPI() && projectPath && window.electron.renameProject) {
+        return await window.electron.renameProject(projectPath, newName);
+    }
+
     // FS renaming is complex (move folder), deferring.
     // Browser fallback:
     const projects = await getProjects();

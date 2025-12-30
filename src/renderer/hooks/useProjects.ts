@@ -263,7 +263,7 @@ export function useProjects() {
             updated = await browserFS.renameProjectFolder(repoHandleRef.current, project.name, newName);
         } else {
             // Electron or localStorage
-            updated = await projectStorage.renameProject(id, newName);
+            updated = await projectStorage.renameProject(id, newName, project.path);
         }
 
         if (updated) {

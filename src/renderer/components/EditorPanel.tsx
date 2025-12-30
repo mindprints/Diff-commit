@@ -98,7 +98,10 @@ export function EditorPanel() {
                                 {builtInPrompts.map(prompt => (
                                     <button
                                         key={prompt.id}
-                                        onClick={() => handleAIEdit(prompt.id)}
+                                        onClick={() => {
+                                            handleAIEdit(prompt.id);
+                                            setIsPolishMenuOpen(false);
+                                        }}
                                         className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
                                     >
                                         <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
@@ -116,7 +119,10 @@ export function EditorPanel() {
                                         {customPrompts.map(prompt => (
                                             <button
                                                 key={prompt.id}
-                                                onClick={() => handleAIEdit(prompt.id)}
+                                                onClick={() => {
+                                                    handleAIEdit(prompt.id);
+                                                    setIsPolishMenuOpen(false);
+                                                }}
                                                 className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
                                             >
                                                 <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
@@ -131,7 +137,13 @@ export function EditorPanel() {
                                 <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
                                     Verification
                                 </div>
-                                <button onClick={handleFactCheck} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        handleFactCheck();
+                                        setIsPolishMenuOpen(false);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2"
+                                >
                                     <Shield className="w-4 h-4 text-cyan-500" />
                                     Fact Check
                                     <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>

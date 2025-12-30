@@ -46,6 +46,7 @@ export function useAsyncAI({
     onDiffUpdate,
 }: UseAsyncAIOptions) {
     const [pendingOperations, setPendingOperations] = useState<Map<string, PendingOperation>>(new Map());
+    const pendingOperationsRef = useRef<Map<string, PendingOperation>>(new Map());
     const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
     let operationCounter = useRef(0);
@@ -90,7 +91,11 @@ export function useAsyncAI({
             status: 'pending',
         };
 
-        setPendingOperations(prev => new Map(prev).set(opId, operation));
+        setPendingOperations(prev => {
+            const next = new Map(prev).set(opId, operation);
+            pendingOperationsRef.current = next;
+            return next;
+        });
 
         // Fire the request (don't await - let it run in background)
         processOperation(opId, operation, abortController.signal);
@@ -157,6 +162,7 @@ export function useAsyncAI({
                 setPendingOperations(prev => {
                     const next = new Map(prev);
                     next.delete(opId);
+                    pendingOperationsRef.current = next;
                     return next;
                 });
                 return;
@@ -177,6 +183,7 @@ export function useAsyncAI({
                             status: 'error' as const,
                             error: errorMessage,
                         });
+                        pendingOperationsRef.current = next;
                     }
                     return next;
                 });
@@ -212,6 +219,7 @@ export function useAsyncAI({
                             status: 'error' as const,
                             error: (err as Error).message,
                         });
+                        pendingOperationsRef.current = next;
                     }
                     return next;
                 });
@@ -228,64 +236,66 @@ export function useAsyncAI({
      * Adjusts positions based on any completed operations that came before.
      */
     const applyResult = useCallback((opId: string, result: string) => {
-        setPendingOperations(prev => {
-            const op = prev.get(opId);
-            if (!op) return prev;
+        // Calculate adjustments outside of the state updater to avoid side-effect warnings
+        const prev = pendingOperationsRef.current;
+        const op = prev.get(opId);
+        if (!op) return;
 
-            // Calculate current positions based on completed operations
-            let adjustedStart = op.originalStart;
-            let adjustedEnd = op.originalEnd;
+        // Calculate current positions based on completed operations
+        let adjustedStart = op.originalStart;
+        let adjustedEnd = op.originalEnd;
 
-            // Adjust for any operations that completed before us and were before our position
-            prev.forEach((otherOp, otherId) => {
-                if (otherId !== opId && otherOp.status === 'completed' && otherOp.result !== undefined) {
-                    if (otherOp.originalEnd <= op.originalStart) {
-                        // This completed operation was before us - adjust our positions
-                        const delta = otherOp.result.length - otherOp.originalText.length;
-                        adjustedStart += delta;
-                        adjustedEnd += delta;
-                    }
+        // Adjust for any operations that completed before us and were before our position
+        prev.forEach((otherOp, otherId) => {
+            if (otherId !== opId && otherOp.status === 'completed' && otherOp.result !== undefined) {
+                if (otherOp.originalEnd <= op.originalStart) {
+                    // This completed operation was before us - adjust our positions
+                    const delta = otherOp.result.length - otherOp.originalText.length;
+                    adjustedStart += delta;
+                    adjustedEnd += delta;
                 }
-            });
-
-            // Get current text
-            const currentText = getText();
-
-            // Preserve trailing newline consistency
-            const originalSlice = currentText.slice(adjustedStart, adjustedEnd);
-            let finalResult = result;
-            if (originalSlice.endsWith('\n') && !finalResult.endsWith('\n')) {
-                finalResult += '\n';
-            } else if (originalSlice.endsWith('\r') && !finalResult.endsWith('\r')) {
-                finalResult += '\r'; // Unlikely single CR, but safely handle
             }
+        });
 
-            // Apply the change
-            const newText = currentText.slice(0, adjustedStart) + finalResult + currentText.slice(adjustedEnd);
+        // Get current text
+        const currentText = getText();
 
-            // Update the text
-            setText(newText);
+        // Preserve trailing newline consistency
+        const originalSlice = currentText.slice(adjustedStart, adjustedEnd);
+        let finalResult = result;
+        if (originalSlice.endsWith('\n') && !finalResult.endsWith('\n')) {
+            finalResult += '\n';
+        } else if (originalSlice.endsWith('\r') && !finalResult.endsWith('\r')) {
+            finalResult += '\r';
+        }
 
-            // Trigger diff update
-            const originalText = currentText; // The text before this edit
-            onDiffUpdate(originalText, newText);
+        // Apply the change
+        const newText = currentText.slice(0, adjustedStart) + finalResult + currentText.slice(adjustedEnd);
 
-            // Mark this operation as completed
-            const next = new Map(prev);
-            const completedOp: PendingOperation = { ...op, status: 'completed', result };
-            next.set(opId, completedOp);
+        // Perform side-effects outside of state updater
+        setText(newText);
+        onDiffUpdate(currentText, newText);
 
-            // Clean up completed operations after a delay
-            setTimeout(() => {
-                setPendingOperations(current => {
-                    const updated = new Map(current);
-                    updated.delete(opId);
-                    return updated;
-                });
-            }, 2000);
-
+        // Mark this operation as completed in state
+        setPendingOperations(current => {
+            const next = new Map(current);
+            const opToUpdate = next.get(opId);
+            if (opToUpdate) {
+                next.set(opId, { ...opToUpdate, status: 'completed', result });
+            }
+            pendingOperationsRef.current = next;
             return next;
         });
+
+        // Schedule cleanup
+        setTimeout(() => {
+            setPendingOperations(current => {
+                const next = new Map(current);
+                next.delete(opId);
+                pendingOperationsRef.current = next;
+                return next;
+            });
+        }, 2000);
     }, [getText, setText, onDiffUpdate]);
 
     /**
@@ -299,6 +309,7 @@ export function useAsyncAI({
         setPendingOperations(prev => {
             const next = new Map(prev);
             next.delete(opId);
+            pendingOperationsRef.current = next;
             return next;
         });
     }, []);
@@ -310,6 +321,7 @@ export function useAsyncAI({
         abortControllersRef.current.forEach(controller => controller.abort());
         abortControllersRef.current.clear();
         setPendingOperations(new Map());
+        pendingOperationsRef.current = new Map();
     }, []);
 
     /**
