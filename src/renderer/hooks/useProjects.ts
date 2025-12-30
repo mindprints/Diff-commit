@@ -100,7 +100,13 @@ export function useProjects() {
 
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
-                    setCurrentProject(null);
+
+                    // Auto-load the first project (usually "Untitled Project")
+                    if (result.projects.length > 0) {
+                        setCurrentProject(result.projects[0]);
+                    } else {
+                        setCurrentProject(null);
+                    }
                 }
                 return result;
             } else if (browserFS.isFileSystemAccessSupported()) {

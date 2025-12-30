@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import Store from 'electron-store';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import * as hierarchyService from './hierarchyService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -501,6 +502,21 @@ app.whenReady().then(() => {
     ipcMain.handle('create-project', async (event, repoPath, projectName, initialContent = '') => {
         if (!repoPath || !projectName) return null;
 
+        // HIERARCHY VALIDATION: Check if repoPath is actually a repository
+        const parentType = hierarchyService.getNodeType(repoPath);
+
+        if (parentType === 'root') {
+            // Cannot create a project at root level
+            console.error('[Hierarchy] Blocked: Cannot create project at root level:', repoPath);
+            throw new Error('Cannot create a project here. Please open or create a Repository first.');
+        }
+
+        if (parentType === 'project') {
+            // Cannot create a project inside another project
+            console.error('[Hierarchy] Blocked: Cannot create project inside project:', repoPath);
+            throw new Error('Cannot create a project inside another project. Projects must be inside a Repository.');
+        }
+
         const now = Date.now();
         const projectPath = path.join(repoPath, projectName);
         const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
@@ -510,6 +526,13 @@ app.whenReady().then(() => {
         try {
             // Create project folder
             fs.mkdirSync(projectPath, { recursive: true });
+
+            // Write hierarchy metadata to mark this as a project
+            hierarchyService.writeHierarchyMeta(projectPath, {
+                type: 'project',
+                createdAt: now,
+                name: projectName
+            });
 
             // Create .diff-commit folder
             fs.mkdirSync(diffCommitPath, { recursive: true });
@@ -523,6 +546,7 @@ app.whenReady().then(() => {
             // Create metadata.json with createdAt
             writeProjectMetadata(diffCommitPath, { createdAt: now });
 
+            console.log('[Hierarchy] Created project with metadata:', projectPath);
             return {
                 id: projectName,
                 name: projectName,
@@ -603,6 +627,67 @@ app.whenReady().then(() => {
         }
     });
 
+    // ========================================
+    // Hierarchy Enforcement System IPC Handlers
+    // ========================================
+
+    // Get the type of a directory node (root, repository, or project)
+    ipcMain.handle('hierarchy-get-node-type', async (event, dirPath: string) => {
+        if (!dirPath) return 'root';
+        try {
+            return hierarchyService.getNodeType(dirPath);
+        } catch (e) {
+            console.error('[Hierarchy] Failed to get node type:', e);
+            return 'root';
+        }
+    });
+
+    // Validate if a node can be created
+    ipcMain.handle('hierarchy-validate-create', async (event, parentPath: string, name: string, childType: string) => {
+        if (!parentPath || !name || !childType) {
+            return { valid: false, error: 'Missing required parameters' };
+        }
+        try {
+            return hierarchyService.validateCreate(parentPath, name, childType as any);
+        } catch (e) {
+            console.error('[Hierarchy] Failed to validate create:', e);
+            return { valid: false, error: String(e) };
+        }
+    });
+
+    // Create a new node (repository or project) with hierarchy metadata
+    ipcMain.handle('hierarchy-create-node', async (event, parentPath: string, name: string, nodeType: string) => {
+        if (!parentPath || !name || !nodeType) {
+            throw new Error('Missing required parameters');
+        }
+        try {
+            const result = hierarchyService.createNode(parentPath, name, nodeType as any);
+            if (!result) throw new Error('Failed to create node');
+
+            // Return the created node info
+            return {
+                path: result.path,
+                type: result.meta.type,
+                name: result.meta.name,
+                createdAt: result.meta.createdAt
+            };
+        } catch (e) {
+            console.error('[Hierarchy] Failed to create node:', e);
+            throw e;
+        }
+    });
+
+    // Get hierarchy information for a directory
+    ipcMain.handle('hierarchy-get-info', async (event, dirPath: string) => {
+        if (!dirPath) return null;
+        try {
+            return hierarchyService.getHierarchyInfo(dirPath);
+        } catch (e) {
+            console.error('[Hierarchy] Failed to get info:', e);
+            return null;
+        }
+    });
+
     // Create Repository (Create a new folder on disk)
     ipcMain.handle('create-repository', async () => {
         const docsPath = app.getPath('documents');
@@ -622,10 +707,90 @@ app.whenReady().then(() => {
         const repoPath = result.filePath;
 
         try {
+            // HIERARCHY VALIDATION: Check if ANY ancestor is a repo or project
+            // This catches cases where user types nested paths like "newFolder\subFolder\repo"
+            const hierarchyCheck = hierarchyService.isInsideHierarchyNode(repoPath);
+
+            if (hierarchyCheck.isInside) {
+                const ancestorType = hierarchyCheck.ancestorType;
+                const ancestorName = path.basename(hierarchyCheck.ancestorPath || '');
+
+                if (ancestorType === 'repository') {
+                    dialog.showErrorBox(
+                        'Invalid Location',
+                        `Cannot create a repository inside the repository "${ancestorName}".\n\n` +
+                        'Repositories can only contain Projects. Please choose a location outside of any existing repository.'
+                    );
+                    console.log('[Hierarchy] Blocked: Path is inside repository:', hierarchyCheck.ancestorPath);
+                    return null;
+                }
+
+                if (ancestorType === 'project') {
+                    dialog.showErrorBox(
+                        'Invalid Location',
+                        `Cannot create a repository inside the project "${ancestorName}".\n\n` +
+                        'Projects can only contain commits. Please choose a location outside of any existing project.'
+                    );
+                    console.log('[Hierarchy] Blocked: Path is inside project:', hierarchyCheck.ancestorPath);
+                    return null;
+                }
+            }
+
             // Create the repository folder
             fs.mkdirSync(repoPath, { recursive: true });
 
-            return { path: repoPath, projects: [] };
+            // Write hierarchy metadata to mark this as a repository
+            const now = Date.now();
+            hierarchyService.writeHierarchyMeta(repoPath, {
+                type: 'repository',
+                createdAt: now,
+                name: path.basename(repoPath)
+            });
+
+            console.log('[Hierarchy] Created repository with metadata:', repoPath);
+
+            // AUTO-CREATE "Untitled Project" so user can start working immediately
+            const defaultProjectName = 'Untitled Project';
+            const projectPath = path.join(repoPath, defaultProjectName);
+            const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+            const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
+            const commitsPath = path.join(diffCommitPath, COMMITS_FILE);
+
+            // Create project folder
+            fs.mkdirSync(projectPath, { recursive: true });
+
+            // Write hierarchy metadata for the project
+            hierarchyService.writeHierarchyMeta(projectPath, {
+                type: 'project',
+                createdAt: now,
+                name: defaultProjectName
+            });
+
+            // Create .diff-commit folder
+            fs.mkdirSync(diffCommitPath, { recursive: true });
+
+            // Create empty content.md
+            fs.writeFileSync(contentPath, '', 'utf-8');
+
+            // Create empty commits.json
+            fs.writeFileSync(commitsPath, '[]', 'utf-8');
+
+            // Create metadata.json
+            writeProjectMetadata(diffCommitPath, { createdAt: now });
+
+            console.log('[Hierarchy] Auto-created default project:', projectPath);
+
+            const defaultProject = {
+                id: defaultProjectName,
+                name: defaultProjectName,
+                content: '',
+                createdAt: now,
+                updatedAt: now,
+                path: projectPath,
+                repositoryPath: repoPath
+            };
+
+            return { path: repoPath, projects: [defaultProject] };
         } catch (e) {
             console.error('Failed to create repository:', e);
             throw e;

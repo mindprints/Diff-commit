@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { X, FolderOpen, Plus, Trash2, Edit2, Check, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, FolderOpen, Plus, Trash2, Edit2, Check, FileText, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import { Project } from '../types';
+import { CreateNodeDialog } from './CreateNodeDialog';
 
 interface ProjectsPanelProps {
     isOpen: boolean;
@@ -37,6 +38,19 @@ export function ProjectsPanel({
     const [editingName, setEditingName] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+    const [showCreateNodeDialog, setShowCreateNodeDialog] = useState(false);
+    const [repoType, setRepoType] = useState<'root' | 'repository' | 'project'>('root');
+
+    // Get hierarchy type when repository path changes
+    useEffect(() => {
+        if (repositoryPath && window.electron?.hierarchy) {
+            window.electron.hierarchy.getNodeType(repositoryPath)
+                .then((type) => setRepoType(type))
+                .catch(() => setRepoType('root'));
+        } else {
+            setRepoType('root');
+        }
+    }, [repositoryPath]);
 
     if (!isOpen) return null;
 
@@ -101,6 +115,17 @@ export function ProjectsPanel({
                                 </span>
                             ) : (
                                 <span className="text-xs text-gray-400 dark:text-slate-500 italic">No Repo</span>
+                            )}
+                            {/* Hierarchy type badge */}
+                            {repositoryPath && (
+                                <span className={clsx(
+                                    "text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase",
+                                    repoType === 'repository' && "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400",
+                                    repoType === 'project' && "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400",
+                                    repoType === 'root' && "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-400"
+                                )}>
+                                    {repoType}
+                                </span>
                             )}
                             {!repositoryPath && (
                                 <div className="flex gap-1">
@@ -347,6 +372,23 @@ export function ProjectsPanel({
                     </p>
                 </div>
             </div>
+
+            {/* CreateNodeDialog for hierarchy-aware creation */}
+            {repositoryPath && (
+                <CreateNodeDialog
+                    isOpen={showCreateNodeDialog}
+                    onClose={() => setShowCreateNodeDialog(false)}
+                    parentPath={repositoryPath}
+                    parentType={repoType}
+                    onNodeCreated={async (node) => {
+                        // If a project was created, load it
+                        if (node.type === 'project') {
+                            await onLoadProject(node.name);
+                        }
+                        setShowCreateNodeDialog(false);
+                    }}
+                />
+            )}
         </div>
     );
 }
