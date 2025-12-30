@@ -89,25 +89,54 @@ export function useProjects() {
     const createRepository = useCallback(async () => {
         setIsLoading(true);
         try {
-            const result = await projectStorage.createRepository();
-            if (result) {
-                // Clear legacy localStorage data to prevent conflicts
-                localStorage.removeItem('diff-commit-projects');
-                localStorage.removeItem('diff-commit-repository');
-                localStorage.removeItem('diff-commit-commits');
+            if (isElectron) {
+                // Electron mode - use IPC to show save dialog
+                const result = await projectStorage.createRepository();
+                if (result) {
+                    // Clear legacy localStorage data to prevent conflicts
+                    localStorage.removeItem('diff-commit-projects');
+                    localStorage.removeItem('diff-commit-repository');
+                    localStorage.removeItem('diff-commit-commits');
 
-                setRepositoryPath(result.path);
-                setProjects(result.projects);
-                setCurrentProject(null);
+                    setRepositoryPath(result.path);
+                    setProjects(result.projects);
+
+                    // Auto-load the first project (usually "Untitled Project")
+                    if (result.projects.length > 0) {
+                        setCurrentProject(result.projects[0]);
+                    } else {
+                        setCurrentProject(null);
+                    }
+                }
+                return result;
+            } else if (browserFS.isFileSystemAccessSupported()) {
+                // Browser mode - use File System Access API (same as open, user picks a folder)
+                const result = await browserFS.openBrowserDirectory();
+                if (result) {
+                    repoHandleRef.current = result.handle;
+                    setRepositoryPath(result.path);
+                    setProjects(result.projects);
+                    setCurrentProject(null);
+                    return { path: result.path, projects: result.projects };
+                }
+            } else {
+                // Fallback to localStorage-based virtual repository
+                const result = await projectStorage.createRepository();
+                if (result) {
+                    setRepositoryPath(result.path);
+                    setProjects(result.projects);
+                    setCurrentProject(null);
+                }
+                return result;
             }
-            return result;
+            return null;
         } catch (error) {
             console.error('Failed to create repository:', error);
             return null;
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [isElectron]);
 
     // Load a specific project - ALWAYS re-read content from disk
     const loadProject = useCallback(async (id: string) => {

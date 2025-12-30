@@ -1,0 +1,89 @@
+/**
+ * CreateNodeDialog Styles
+ */
+
+.create-node-dialog {
+    /* Animations handled by tailwind utilities in the component */
+}
+
+/* Type selection buttons */
+.create-node-dialog .type-btn {
+    transition: all 0.2s ease;
+}
+
+.create-node-dialog .type-btn:hover {
+    transform: translateY(-1px);
+}
+
+.create-node-dialog .type-btn.selected {
+    box-shadow: 0 0 0 2px var(--color-indigo-500);
+}
+
+/* Input validation states */
+.create-node-dialog input:focus {
+    outline: none;
+}
+
+.create-node-dialog input.valid {
+    border-color: #10b981;
+}
+
+.create-node-dialog input.invalid {
+    border-color: #ef4444;
+}
+
+/* Hierarchy info styling */
+.create-node-dialog .hierarchy-info {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.create-node-dialog .hierarchy-info strong {
+    font-weight: 600;
+}
+
+/* Animation for validation icons */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.create-node-dialog .validation-icon {
+    animation: fadeIn 0.15s ease-out;
+}
+
+/* Loading spinner */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.create-node-dialog .animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Node type badges */
+.create-node-dialog .node-badge {
+    font-size: 10px;
+    letter-spacing: 0.05em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .create-node-dialog {
+        margin: 1rem;
+    }
+
+    .create-node-dialog .px-6 {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}

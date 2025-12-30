@@ -21,7 +21,6 @@ import { MODELS, Model, getCostTier } from '../constants/models';
 import headerIcon from '../header_icon_styled.png';
 import { Button } from './Button';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
-
 import { useUI, useProject, useAI, useEditor } from '../contexts';
 
 export function AppHeader() {

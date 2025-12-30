@@ -34,6 +34,14 @@ contextBridge.exposeInMainWorld('electron', {
     saveProjectCommits: (path, commits) => ipcRenderer.invoke('save-project-commits', path, commits),
     saveProjectBundle: (projectPath) => ipcRenderer.invoke('save-project-bundle', projectPath),
 
+    // Hierarchy Enforcement System
+    hierarchy: {
+        getNodeType: (dirPath) => ipcRenderer.invoke('hierarchy-get-node-type', dirPath),
+        validateCreate: (parentPath, name, childType) => ipcRenderer.invoke('hierarchy-validate-create', parentPath, name, childType),
+        createNode: (parentPath, name, nodeType) => ipcRenderer.invoke('hierarchy-create-node', parentPath, name, nodeType),
+        getInfo: (dirPath) => ipcRenderer.invoke('hierarchy-get-info', dirPath),
+    },
+
     // AI Prompts CRUD
     getPrompts: () => ipcRenderer.invoke('get-prompts'),
     savePrompts: (prompts) => ipcRenderer.invoke('save-prompts', prompts),

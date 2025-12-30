@@ -29,7 +29,7 @@ export function EditorPanel() {
     } = useAI();
 
     const {
-        previewText, setPreviewText, originalText, setModifiedText,
+        previewText, setPreviewText, originalText, setOriginalText, setModifiedText,
         performDiff, isAutoCompareEnabled, setIsAutoCompareEnabled,
         previewTextareaRef, fontFamily, fontSize,
         handleOpenContextMenu, handleScrollSync, skipNextSegmentsSync
@@ -178,15 +178,17 @@ export function EditorPanel() {
                     <Button
                         variant="outline"
                         onClick={() => {
-                            // Re-compare: use current previewText as the new modified text
-                            // Set flag to prevent the segments effect from overwriting previewText
-                            skipNextSegmentsSync.current = true;
+                            // Establish current text as the baseline for future comparisons
+                            // This sets originalText so auto-compare can detect subsequent changes
+                            setOriginalText(previewText);
                             setModifiedText(previewText);
-                            performDiff(originalText, previewText);
+                            // Reset diff state since we just established a new baseline
+                            skipNextSegmentsSync.current = true;
+                            performDiff(previewText, previewText);
                         }}
                         size="sm"
                         icon={<RefreshCw className="w-3 h-3" />}
-                        title="Re-compare after editing"
+                        title="Set current text as baseline for comparison"
                         disabled={isAutoCompareEnabled}
                         className={clsx(isAutoCompareEnabled && "opacity-50")}
                     >

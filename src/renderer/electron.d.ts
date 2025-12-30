@@ -42,6 +42,20 @@ export interface IElectronAPI {
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
 
+    // Hierarchy Enforcement System
+    hierarchy: {
+        getNodeType: (dirPath: string) => Promise<'root' | 'repository' | 'project'>;
+        validateCreate: (parentPath: string, name: string, childType: string) => Promise<{ valid: boolean; error?: string }>;
+        createNode: (parentPath: string, name: string, nodeType: string) => Promise<{ path: string; type: string; name: string; createdAt: number }>;
+        getInfo: (dirPath: string) => Promise<{
+            path: string;
+            type: 'root' | 'repository' | 'project';
+            name: string;
+            allowedChildTypes: string[];
+            parentPath: string | null;
+        } | null>;
+    };
+
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => void;
     onRequestSave: (callback: () => void) => void;
