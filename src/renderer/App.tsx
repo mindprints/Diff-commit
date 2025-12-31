@@ -15,7 +15,7 @@ export default function App() {
     backgroundHue, isDarkMode,
     topPanelHeight, leftPanelWidth,
     startResizing, startResizingVertical,
-    setIsShiftHeld
+    setIsShiftHeld, isPromptPanelVisible
   } = useUI();
 
   const {
@@ -88,20 +88,24 @@ export default function App() {
         >
           <div
             className="flex-none overflow-hidden"
-            style={{ height: `${topPanelHeight}%` }}
+            style={{ height: `${isPromptPanelVisible ? topPanelHeight : 100}%` }}
           >
             <EditorPanel />
           </div>
 
           {/* Horizontal Resizer (between Editor and AI Prompt) */}
-          <div
-            className="h-1.5 w-full cursor-row-resize hover:bg-indigo-500/20 active:bg-indigo-500/40 transition-colors z-30 flex-none"
-            onMouseDown={startResizingVertical}
-          />
+          {isPromptPanelVisible && (
+            <>
+              <div
+                className="h-1.5 w-full cursor-row-resize hover:bg-indigo-500/20 active:bg-indigo-500/40 transition-colors z-30 flex-none"
+                onMouseDown={startResizingVertical}
+              />
 
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <AIPromptPanel />
-          </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <AIPromptPanel />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Vertical Resizer (between Left Section and Diff View) */}

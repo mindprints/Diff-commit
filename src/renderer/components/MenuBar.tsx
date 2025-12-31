@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { PanelTopClose, PanelTopOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { ViewMode } from '../types';
 import { version } from '../../../package.json';
@@ -8,7 +9,8 @@ import { useUI, useProject, useAI, useEditor } from '../contexts';
 export function MenuBar() {
     const {
         isDarkMode, setIsDarkMode, setShowHelp, setShowLogs,
-        setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel
+        setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel,
+        isHeaderVisible, setIsHeaderVisible
     } = useUI();
 
     const {
@@ -203,6 +205,17 @@ export function MenuBar() {
                 <MenuItem separator />
                 <MenuItem label="About" onClick={() => alert(`Diff & Commit AI\nVersion ${version}`)} />
             </MenuButton>
-        </div>
+
+
+            <div className="flex-1"></div>
+
+            <button
+                onClick={() => setIsHeaderVisible(!isHeaderVisible)}
+                className="p-1 text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded transition-colors"
+                title={isHeaderVisible ? "Hide Header" : "Show Header"}
+            >
+                {isHeaderVisible ? <PanelTopClose className="w-4 h-4" /> : <PanelTopOpen className="w-4 h-4" />}
+            </button>
+        </div >
     );
 }

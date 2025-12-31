@@ -13,12 +13,14 @@ import {
     Link2,
     BarChart3,
     History,
-    HelpCircle
+    HelpCircle,
+    PanelTopClose,
+    PanelTopOpen
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ViewMode, FontFamily } from '../types';
 import { MODELS, Model, getCostTier } from '../constants/models';
-import headerIcon from '../header_icon_styled.png';
+// Logo import removed
 import { Button } from './Button';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 import { useUI, useProject, useAI, useEditor } from '../contexts';
@@ -31,7 +33,8 @@ export function AppHeader() {
 
     const {
         backgroundHue, setBackgroundHue, isDarkMode, setIsDarkMode,
-        setShowLogs, setShowCommitHistory, setShowHelp, setShowProjectsPanel
+        setShowLogs, setShowCommitHistory, setShowHelp, setShowProjectsPanel,
+        isHeaderVisible, setIsHeaderVisible
     } = useUI();
 
     const {
@@ -45,28 +48,32 @@ export function AppHeader() {
     } = useEditor();
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const isElectron = !!window.electron;
+
+    // In Electron, we need a persistent toggle since MenuBar is hidden
+    if (!isHeaderVisible) {
+        if (isElectron) {
+            return (
+                <div className="absolute top-2 right-2 z-50">
+                    <button
+                        onClick={() => setIsHeaderVisible(true)}
+                        className="p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-gray-200 dark:border-slate-700 rounded-lg text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-slate-700 shadow-sm transition-all"
+                        title="Show Header"
+                    >
+                        <PanelTopOpen className="w-4 h-4" />
+                    </button>
+                </div>
+            );
+        }
+        return null;
+    }
 
     return (
         <header
-            className="flex-none h-16 px-4 flex items-center justify-between z-30 transition-colors duration-200 select-none shadow-sm"
+            className="flex-none h-12 px-4 flex items-center justify-between z-30 transition-colors duration-200 select-none shadow-sm"
             style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}
         >
             <div className="flex items-center gap-4 flex-1">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 overflow-hidden border-2 border-white/10">
-                        <img src={headerIcon} alt="Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex flex-col">
-                        <h1 className="text-lg font-bold tracking-tight text-gray-900 dark:text-white leading-tight">
-                            Diff & Commit <span className="text-indigo-500 dark:text-indigo-400">AI</span>
-                        </h1>
-                        <div className="flex items-center text-[10px] font-medium text-gray-500 dark:text-slate-400">
-                            <span className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded mr-1.5 uppercase tracking-wider">v2.0</span>
-                            Professional Text Editor
-                        </div>
-                    </div>
-                </div>
-
                 {/* Dynamic Breadcrumbs for Repository and Project */}
                 {repositoryPath && (
                     <div className="ml-4 flex items-center bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-800 backdrop-blur-sm transition-all hover:bg-white dark:hover:bg-slate-800 group">
@@ -102,22 +109,23 @@ export function AppHeader() {
                     variant="outline"
                     onClick={handleClearAll}
                     size="sm"
-                    icon={<Trash2 className="w-4 h-4" />}
+                    className="h-7 text-xs px-2"
+                    icon={<Trash2 className="w-3.5 h-3.5" />}
                 >
                     Clear All
                 </Button>
 
                 {mode === ViewMode.DIFF && (
-                    <Button variant="primary" size="sm" onClick={handleCopyFinal} icon={<Copy className="w-4 h-4" />}>
+                    <Button variant="primary" size="sm" onClick={handleCopyFinal} icon={<Copy className="w-3.5 h-3.5" />} className="h-7 text-xs px-2">
                         Copy
                     </Button>
                 )}
             </div>
 
-            <div id="header-controls" className="flex items-center gap-3 ml-4">
-                <div className="flex items-center gap-3 mr-2">
+            <div id="header-controls" className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2 mr-2">
                     {/* Background Hue Slider + Model Selector & Cost */}
-                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-1 rounded-lg border border-gray-200 dark:border-slate-800">
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-0.5 rounded-lg border border-gray-200 dark:border-slate-800">
                         {/* Compact Hue Slider */}
                         <input
                             type="range"
@@ -125,7 +133,7 @@ export function AppHeader() {
                             max="360"
                             value={backgroundHue}
                             onChange={(e) => setBackgroundHue(Number(e.target.value))}
-                            className="w-16 h-4 cursor-pointer appearance-none rounded"
+                            className="w-12 h-3 cursor-pointer appearance-none rounded ml-1"
                             style={{
                                 background: `linear-gradient(to right, 
                   hsl(0, 70%, ${isDarkMode ? '15%' : '95%'}),
@@ -139,11 +147,11 @@ export function AppHeader() {
                             }}
                             title={`Background Hue: ${backgroundHue}°`}
                         />
-                        <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-medium ml-1 mr-1 min-w-[3rem] text-right">
+                        <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-medium ml-1 mr-1 min-w-[2.5rem] text-right">
                             ${sessionCost.toFixed(4)}
                         </span>
                         <select
-                            className="text-xs bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-2 py-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[14rem] truncate"
+                            className="text-[10px] py-0.5 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[10rem] truncate h-6"
                             value={selectedModel.id}
                             onChange={(e) => {
                                 const model = MODELS.find(m => m.id === e.target.value);
@@ -158,25 +166,25 @@ export function AppHeader() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 border-l border-gray-200 dark:border-slate-800 pl-3">
+                <div className="flex items-center gap-1 border-l border-gray-200 dark:border-slate-800 pl-2">
                     <button
                         onClick={() => setIsDarkMode(!isDarkMode)}
-                        className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all hover:scale-105"
+                        className="p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all hover:scale-105"
                         title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
                     >
-                        {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                        {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                     </button>
 
                     <div className="relative">
                         <button
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
                             className={clsx(
-                                "p-2 rounded-lg transition-all hover:scale-105",
+                                "p-1.5 rounded-lg transition-all hover:scale-105",
                                 isSettingsOpen ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400" : "text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
                             )}
                             title="Appearance & Settings"
                         >
-                            <Settings className="w-5 h-5" />
+                            <Settings className="w-4 h-4" />
                         </button>
 
                         {isSettingsOpen && <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />}
@@ -276,6 +284,18 @@ export function AppHeader() {
                         )}
                     </div>
                 </div>
+
+                {isElectron && (
+                    <div className="pl-2 border-l border-gray-200 dark:border-slate-800">
+                        <button
+                            onClick={() => setIsHeaderVisible(false)}
+                            className="p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
+                            title="Hide Header"
+                        >
+                            <PanelTopClose className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
             </div>
         </header>
     );

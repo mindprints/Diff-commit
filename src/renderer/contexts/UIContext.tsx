@@ -35,6 +35,10 @@ interface UIContextType {
     startResizing: () => void;
     startResizingVertical: () => void;
     handleOpenContextMenu: (e: React.MouseEvent<HTMLTextAreaElement>, previewText: string) => void;
+    isPromptPanelVisible: boolean;
+    setIsPromptPanelVisible: (visible: boolean) => void;
+    isHeaderVisible: boolean;
+    setIsHeaderVisible: (visible: boolean) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -55,6 +59,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [topPanelHeight, setTopPanelHeight] = useState(60);
     const [leftPanelWidth, setLeftPanelWidth] = useState(50);
+    const [isPromptPanelVisible, setIsPromptPanelVisible] = useState(true);
+    const [isHeaderVisible, setIsHeaderVisible] = useState(true);
 
     const isResizingLeftRight = useRef(false);
     const isResizingTopBottom = useRef(false);
@@ -133,7 +139,9 @@ export function UIProvider({ children }: { children: ReactNode }) {
             topPanelHeight, setTopPanelHeight,
             leftPanelWidth, setLeftPanelWidth,
             startResizing, startResizingVertical,
-            handleOpenContextMenu
+            handleOpenContextMenu,
+            isPromptPanelVisible, setIsPromptPanelVisible,
+            isHeaderVisible, setIsHeaderVisible
         }}>
             {children}
         </UIContext.Provider>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit3, Volume2, Square, Wand2, X, Shield, Settings, RefreshCw, Zap, GitBranch } from 'lucide-react';
+import { Edit3, Volume2, Square, Wand2, X, Shield, Settings, RefreshCw, Zap, GitBranch, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './MultiSelectTextArea';
@@ -13,7 +13,8 @@ import { useState } from 'react';
 export function EditorPanel() {
     const {
         isSpeaking, setIsSpeaking,
-        setShowPromptsModal, isShiftHeld, setShowProjectsPanel
+        setShowPromptsModal, isShiftHeld, setShowProjectsPanel,
+        isPromptPanelVisible, setIsPromptPanelVisible
     } = useUI();
 
     const {
@@ -67,9 +68,13 @@ export function EditorPanel() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleAIEdit(activePromptId)}
+                            onClick={() => {
+                                if (activePromptId != null) {
+                                    handleAIEdit(activePromptId);
+                                }
+                            }}
                             isLoading={isPolishing || isFactChecking}
-                            disabled={isPolishing || isFactChecking}
+                            disabled={isPolishing || isFactChecking || activePromptId == null}
                             icon={<Wand2 className="w-3 h-3" />}
                             className="rounded-r-none border-r-0"
                         >
@@ -276,11 +281,22 @@ export function EditorPanel() {
                 </div>
             </div>
 
-            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex justify-center gap-4 transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
-                <span className="flex items-center gap-1.5" title="Word Count">
-                    <span className="w-2.5 h-2.5 bg-gray-300 dark:bg-slate-600 rounded-sm"></span>
-                    <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
-                </span>            </div>
+            <div className="p-3 text-xs text-gray-500 dark:text-slate-400 flex items-center justify-between transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
+                <div className="flex items-center gap-4 flex-1 justify-center">
+                    <span className="flex items-center gap-1.5" title="Word Count">
+                        <span className="w-2.5 h-2.5 bg-indigo-200 dark:bg-indigo-500/50 border border-indigo-400 dark:border-indigo-400/50 rounded-sm"></span>
+                        <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
+                    </span>
+                </div>
+
+                <button
+                    onClick={() => setIsPromptPanelVisible(!isPromptPanelVisible)}
+                    className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300"
+                    title={isPromptPanelVisible ? "Hide Prompt Panel" : "Show Prompt Panel"}
+                >
+                    {isPromptPanelVisible ? <PanelBottomClose className="w-4 h-4" /> : <PanelBottomOpen className="w-4 h-4" />}
+                </button>
+            </div>
         </div>
     );
 }
