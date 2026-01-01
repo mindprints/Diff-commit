@@ -50,6 +50,9 @@ export function useAsyncAI({
     const pendingOperationsRef = useRef<Map<string, PendingOperation>>(new Map());
     const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
+    // Virtual text buffer to track cumulative AI changes without updating the live editor immediately
+    const virtualTextRef = useRef<string | null>(null);
+
     const operationCounter = useRef(0);
 
     /**
@@ -66,6 +69,11 @@ export function useAsyncAI({
         if (!model) {
             onError('No AI model selected');
             return null;
+        }
+
+        // Initialize virtual text if this is the first operation in a batch
+        if (pendingOperationsRef.current.size === 0) {
+            virtualTextRef.current = getText();
         }
 
         const text = getText();
@@ -260,8 +268,13 @@ export function useAsyncAI({
             }
         });
 
-        // Get current text
-        const currentText = getText();
+        // Get current text base - use virtualText if initialized, else getText()
+        const currentText = virtualTextRef.current ?? getText();
+
+        // Ensure virtualText is initialized for subsequent ops
+        if (virtualTextRef.current === null) {
+            virtualTextRef.current = currentText;
+        }
 
         // Preserve trailing newline consistency
         const originalSlice = currentText.slice(adjustedStart, adjustedEnd);
@@ -272,15 +285,21 @@ export function useAsyncAI({
             finalResult += '\r';
         }
 
-        // Apply the change
+        // Apply the change to generate the NEW virtual text
         const newText = currentText.slice(0, adjustedStart) + finalResult + currentText.slice(adjustedEnd);
 
-        // Perform side-effects outside of state updater
+        // Update the virtual text reference
+        virtualTextRef.current = newText;
+
+        // Pass the NEW virtual text to setText (this will be setModifiedText in context)
+        // We DO NOT update the editor directly. The context handles routing this to 'modifiedText'
         setText(newText);
 
         // Defer diff update to next tick to avoid React warning about cross-component updates
+        // We compare the ORIGINAL text (getText() at start) vs the NEW VIRTUAL text
+        const originalBase = getText();
         setTimeout(() => {
-            onDiffUpdate(currentText, newText);
+            onDiffUpdate(originalBase, newText);
         }, 0);
 
         // Mark this operation as completed in state
@@ -300,6 +319,10 @@ export function useAsyncAI({
                 const updated = new Map(current);
                 updated.delete(opId);
                 pendingOperationsRef.current = updated;
+                // If all ops are gone, we clear the ref content on next startOperation if empty
+                if (updated.size === 0) {
+                    virtualTextRef.current = null;
+                }
                 return updated;
             });
         }, 2000);

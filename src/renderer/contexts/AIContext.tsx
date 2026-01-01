@@ -113,8 +113,8 @@ export function AIProvider({ children }: { children: ReactNode }) {
         startOperation,
         cancelAllOperations: cancelAsyncOperations,
     } = useAsyncAI({
-        getText: () => previewTextRef.current,
-        setText: setPreviewText,
+        getText: () => originalTextRef.current || previewTextRef.current,
+        setText: setModifiedText,
         getModel: () => selectedModel,
         getPrompt,
         onCostUpdate: updateCost,
@@ -150,12 +150,11 @@ export function AIProvider({ children }: { children: ReactNode }) {
             setActiveLogId(logEntry.id);
         },
         onError: setErrorMessage,
-        onDiffUpdate: (prev, modified) => {
-            const currentOriginalText = originalTextRef.current;
-            const baseline = currentOriginalText.trim() ? currentOriginalText : prev;
+        onDiffUpdate: (original, modified) => {
+            const baseline = originalTextRef.current || original;
 
-            if (!currentOriginalText.trim()) {
-                setOriginalText(prev);
+            if (!originalTextRef.current) {
+                setOriginalText(baseline);
             }
             setModifiedText(modified);
             performDiff(baseline, modified);
@@ -212,8 +211,8 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 }
 
                 const newText = previewTextRef.current.substring(0, expanded.start) + result.text + previewTextRef.current.substring(expanded.end);
+
                 setOriginalText(previewTextRef.current);
-                setPreviewText(newText);
                 setModifiedText(newText);
                 performDiff(previewTextRef.current, newText);
                 setMode(ViewMode.DIFF);
@@ -239,7 +238,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             console.error(e);
             setErrorMessage('Failed to run spell check');
         }
-    }, [previewTextRef, previewTextareaRef, setErrorMessage, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
+    }, [previewTextRef, previewTextareaRef, setErrorMessage, setOriginalText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
 
     const handleAIEdit = useCallback(async (promptIdOrInstruction: string) => {
         if (promptIdOrInstruction === 'spelling_local') {
@@ -514,7 +513,6 @@ export function AIProvider({ children }: { children: ReactNode }) {
             const newText = originalTextAtStart.slice(0, start) + result + originalTextAtStart.slice(end);
 
             setOriginalText(originalTextAtStart);
-            setPreviewText(newText);
             setModifiedText(newText);
             performDiff(originalTextAtStart, newText);
             setMode(ViewMode.DIFF);
@@ -522,7 +520,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         setIsPolishing(false);
         abortControllerRef.current = null;
-    }, [previewTextareaRef, previewTextRef, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setPreviewText, setModifiedText, performDiff, setMode, setErrorMessage]);
+    }, [previewTextareaRef, previewTextRef, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setModifiedText, performDiff, setMode, setErrorMessage]);
 
     const handleSaveAsPrompt = useCallback(() => {
         if (contextMenu?.selection) {

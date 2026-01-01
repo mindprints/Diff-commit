@@ -165,6 +165,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         return () => clearTimeout(timeoutId);
     }, [isAutoCompareEnabled, previewText, originalText, performDiff, setModifiedText]);
 
+    const constructTextFromSegments = useCallback((currentSegments: DiffSegment[]) => {
+        return currentSegments
+            .filter(s => s.isIncluded)
+            .map(s => s.value)
+            .join('');
+    }, []);
+
     const toggleSegment = useCallback((id: string) => {
         const segmentIndex = segments.findIndex(s => s.id === id);
         if (segmentIndex === -1) return;
@@ -184,25 +191,35 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         }
 
         addToHistory(newSegments);
-    }, [segments, addToHistory]);
+
+        // Update the editor preview to reflect the choice immediately
+        const newText = constructTextFromSegments(newSegments);
+        setPreviewText(newText);
+    }, [segments, addToHistory, constructTextFromSegments, setPreviewText]);
 
     const handleAcceptAll = useCallback(() => {
         const newSegments = segments.map(s => {
             if (s.type === 'added') return { ...s, isIncluded: true };
             if (s.type === 'removed') return { ...s, isIncluded: false };
-            return s;
+            return { ...s, isIncluded: true };
         });
         addToHistory(newSegments);
-    }, [segments, addToHistory]);
+
+        const newText = constructTextFromSegments(newSegments);
+        setPreviewText(newText);
+    }, [segments, addToHistory, constructTextFromSegments, setPreviewText]);
 
     const handleRejectAll = useCallback(() => {
         const newSegments = segments.map(s => {
             if (s.type === 'added') return { ...s, isIncluded: false };
             if (s.type === 'removed') return { ...s, isIncluded: true };
-            return s;
+            return { ...s, isIncluded: true };
         });
         addToHistory(newSegments);
-    }, [segments, addToHistory]);
+
+        const newText = constructTextFromSegments(newSegments);
+        setPreviewText(newText);
+    }, [segments, addToHistory, constructTextFromSegments, setPreviewText]);
 
     const handleCopyFinal = useCallback(async () => {
         if (!previewText) return;
