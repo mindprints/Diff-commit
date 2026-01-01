@@ -313,20 +313,22 @@ export function useAsyncAI({
             return next;
         });
 
-        // Schedule cleanup
-        setTimeout(() => {
-            setPendingOperations(current => {
-                const updated = new Map(current);
-                updated.delete(opId);
-                pendingOperationsRef.current = updated;
-                // If all ops are gone, we clear the ref content on next startOperation if empty
-                if (updated.size === 0) {
-                    virtualTextRef.current = null;
-                }
-                return updated;
-            });
-        }, 2000);
+        // We DO NOT auto-cleanup completed operations anymore.
+        // We need to keep the history of edits to correctly calculate coordinate shifts 
+        // for subsequent operations in the same session (until commit/reset).
     }, [getText, setText, onDiffUpdate]);
+
+    /**
+     * Manually reset the session state. 
+     * Call this when the changes are committed or discarded.
+     */
+    const resetSession = useCallback(() => {
+        setPendingOperations(new Map());
+        pendingOperationsRef.current = new Map();
+        abortControllersRef.current.forEach(c => c.abort());
+        abortControllersRef.current.clear();
+        virtualTextRef.current = null;
+    }, []);
 
     /**
      * Cancel a specific pending operation.
@@ -388,5 +390,7 @@ export function useAsyncAI({
         cancelAllOperations,
         isPositionLocked,
         hasPendingOperations,
+        resetSession,
     };
 }
+

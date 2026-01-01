@@ -61,6 +61,7 @@ export function ProjectsPanel({
         await onCreateProject(newProjectName.trim(), '');
         setNewProjectName('');
         setIsCreating(false);
+        onClose(); // Close the panel after creating and switching to the new project
     };
 
     const handleLoad = async (id: string) => {

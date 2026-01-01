@@ -2,10 +2,6 @@
  * CreateNodeDialog Styles
  */
 
-.create-node-dialog {
-    /* Animations handled by tailwind utilities in the component */
-}
-
 /* Type selection buttons */
 .create-node-dialog .type-btn {
     transition: all 0.2s ease;

@@ -150,13 +150,24 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     }, [initializeHistory]);
 
     // Auto-compare effect: triggers diff when enabled and previewText changes
+    // Auto-compare effect: triggers diff when enabled and previewText changes
     useEffect(() => {
         if (!isAutoCompareEnabled) return;
 
-        // Debounce to prevent excessive diffing while typing
+        // Run diff on any change to previewText (or originalText update) if auto-compare is on.
+        // Even if they are equal, we might want to update the UI to show "No Changes".
+        // The check (originalText && previewText) ensures we have content to diff.
+        // We removed the (originalText !== previewText) check to ensure it runs on load/paste
+        // where state might need synchronization even if technically equal or just changed.
+
         const timeoutId = setTimeout(() => {
-            if (originalText && previewText && originalText !== previewText) {
-                skipNextSegmentsSync.current = true;
+            if (originalText !== undefined && previewText !== undefined) {
+                // Determine if we should skip this sync (controlled by other operations)
+                if (skipNextSegmentsSync.current) {
+                    skipNextSegmentsSync.current = false;
+                    return;
+                }
+
                 setModifiedText(previewText);
                 performDiff(originalText, previewText);
             }
@@ -192,6 +203,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
         addToHistory(newSegments);
 
+        // Prevent auto-compare from resetting the diff view (which controls the toggle state)
+        skipNextSegmentsSync.current = true;
+
         // Update the editor preview to reflect the choice immediately
         const newText = constructTextFromSegments(newSegments);
         setPreviewText(newText);
@@ -205,6 +219,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         });
         addToHistory(newSegments);
 
+        skipNextSegmentsSync.current = true;
         const newText = constructTextFromSegments(newSegments);
         setPreviewText(newText);
     }, [segments, addToHistory, constructTextFromSegments, setPreviewText]);
@@ -217,6 +232,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         });
         addToHistory(newSegments);
 
+        skipNextSegmentsSync.current = true;
         const newText = constructTextFromSegments(newSegments);
         setPreviewText(newText);
     }, [segments, addToHistory, constructTextFromSegments, setPreviewText]);

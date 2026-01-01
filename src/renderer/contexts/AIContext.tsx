@@ -112,6 +112,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         pendingOperations,
         startOperation,
         cancelAllOperations: cancelAsyncOperations,
+        resetSession,
     } = useAsyncAI({
         getText: () => originalTextRef.current || previewTextRef.current,
         setText: setModifiedText,
@@ -161,6 +162,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
             setMode(ViewMode.DIFF);
         },
     });
+
+    // Reset the AI session (history of edits) whenever the baseline text changes (commit/load)
+    // This ensures we don't try to shift coordinates based on edits from a previous file/version
+    React.useEffect(() => {
+        resetSession();
+    }, [originalText, resetSession]);
 
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -299,9 +306,19 @@ export function AIProvider({ children }: { children: ReactNode }) {
         const textarea = previewTextareaRef.current?.getTextarea();
         if (!textarea) return;
 
+        const { selectionStart, selectionEnd } = textarea;
+
+        // If no text is selected, operate on the FULL TEXT as requested
+        if (selectionStart === selectionEnd) {
+            if (previewTextRef.current) {
+                startOperation(0, previewTextRef.current.length, idToUse);
+            }
+            return;
+        }
+
         const { start, end } = expandToWordBoundaries(
-            textarea.selectionStart,
-            textarea.selectionEnd,
+            selectionStart,
+            selectionEnd,
             previewTextRef.current
         );
 

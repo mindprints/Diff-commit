@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit3, Volume2, Square, Wand2, X, Shield, Settings, RefreshCw, Zap, GitBranch, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
+import { Edit3, Volume2, Square, Wand2, X, Shield, Settings, RefreshCw, Zap, GitBranch, PanelBottomClose, PanelBottomOpen, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './MultiSelectTextArea';
@@ -65,32 +65,21 @@ export function EditorPanel() {
                         {isPolishMenuOpen && (
                             <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
                         )}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                if (activePromptId != null) {
-                                    handleAIEdit(activePromptId);
-                                }
-                            }}
-                            isLoading={isPolishing || isFactChecking}
-                            disabled={isPolishing || isFactChecking || activePromptId == null}
-                            icon={<Wand2 className="w-3 h-3" />}
-                            className="rounded-r-none border-r-0"
-                        >
-                            {isFactChecking ? 'Checking...' : (activePrompt?.name || 'AI Edit')}
-                        </Button>
+                        {/* Wand Button Removed - Dropdown now acts as Selector, Ctrl+Click or Panel executes */}
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
                             disabled={isPolishing || isFactChecking}
                             className={clsx(
-                                "rounded-l-none px-1 min-w-[1.5rem]",
+                                "gap-2 min-w-[8rem] justify-between", // Ensure width and spacing
                                 isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700"
                             )}
                         >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <span className="truncate max-w-[120px]">
+                                {isFactChecking ? 'Checking...' : (activePrompt?.name || 'Select Prompt')}
+                            </span>
+                            <svg className="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
                         </Button>
@@ -188,21 +177,18 @@ export function EditorPanel() {
                     <Button
                         variant="outline"
                         onClick={() => {
-                            // Establish current text as the baseline for future comparisons
-                            // This sets originalText so auto-compare can detect subsequent changes
-                            setOriginalText(previewText);
+                            // Manual Diff Trigger: Compare current Editor (preview) against Original
                             setModifiedText(previewText);
-                            // Reset diff state since we just established a new baseline
-                            skipNextSegmentsSync.current = true;
-                            performDiff(previewText, previewText);
+                            performDiff(originalText, previewText);
+                            // Do NOT setOriginalText(previewText) - that resets the baseline.
                         }}
                         size="sm"
-                        icon={<RefreshCw className="w-3 h-3" />}
-                        title="Set current text as baseline for comparison"
+                        icon={<ArrowRight className="w-4 h-4" />}
+                        title="Sync Editor to Diff View (Manual Compare)"
                         disabled={isAutoCompareEnabled}
                         className={clsx(isAutoCompareEnabled && "opacity-50")}
                     >
-                        Compare
+                        {/* No text, just icon as requested */}
                     </Button>
 
                     <button
