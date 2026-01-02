@@ -108,15 +108,44 @@ export function AIProvider({ children }: { children: ReactNode }) {
         () => findActivePrompt(activePromptId, builtInPrompts, customPrompts),
         [findActivePrompt, activePromptId, builtInPrompts, customPrompts]
     );
+
+    /**
+     * Canonical source selector for AI operations.
+     * Priority: previewText (editor content) > modifiedText > originalText
+     * This ensures AI always operates on what the user sees/expects.
+     */
+    const getSourceTextForAI = useCallback((): { sourceText: string; fromRightTab: boolean } => {
+        const pText = previewTextRef.current;
+        const oText = originalTextRef.current;
+        const mText = modifiedTextRef.current;
+
+        // Priority 1: previewText (editor content) - what user is actively editing
+        if (pText && pText.trim()) {
+            return { sourceText: pText, fromRightTab: true };
+        }
+
+        // Priority 2: modifiedText - AI-modified content awaiting review
+        if (mText && mText.trim()) {
+            return { sourceText: mText, fromRightTab: true };
+        }
+
+        // Priority 3: originalText - baseline/committed content
+        if (oText && oText.trim()) {
+            return { sourceText: oText, fromRightTab: false };
+        }
+
+        // No content available
+        return { sourceText: '', fromRightTab: false };
+    }, [previewTextRef, originalTextRef, modifiedTextRef]);
+
     const {
         pendingOperations,
         startOperation,
         cancelAllOperations: cancelAsyncOperations,
         resetSession,
     } = useAsyncAI({
-        // IMPORTANT: Use previewText (editor content) so AI always operates on what user sees,
-        // not the diff baseline (originalText)
-        getText: () => previewTextRef.current,
+        // Use canonical source selector for consistent text source across all AI operations
+        getText: () => getSourceTextForAI().sourceText,
         setText: setModifiedText,
         getModel: () => selectedModel,
         getPrompt,
@@ -183,25 +212,6 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setIsFactChecking(false);
         setFactCheckProgress('');
     }, [cancelAsyncOperations]);
-
-    const getSourceTextForAI = useCallback(() => {
-        const pText = previewTextRef.current;
-        const oText = originalTextRef.current;
-        const mText = modifiedTextRef.current;
-
-        if (pText.trim()) {
-            return { sourceText: pText, fromRightTab: true };
-        }
-        const hasLeft = oText.trim().length > 0;
-        const hasRight = mText.trim().length > 0;
-
-        if (hasRight && !hasLeft) {
-            return { sourceText: mText, fromRightTab: true };
-        } else if (hasLeft) {
-            return { sourceText: oText, fromRightTab: false };
-        }
-        return { sourceText: '', fromRightTab: false };
-    }, [previewTextRef, originalTextRef, modifiedTextRef]);
 
     const handleLocalSpellCheck = useCallback(async () => {
         try {

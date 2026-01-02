@@ -206,11 +206,12 @@ export async function renameProject(id: string, newName: string, projectPath?: s
         try {
             const result = await window.electron.renameProject(projectPath, newName);
             if (result) {
+                // IPC now returns complete project data including content
                 return {
                     id: result.id,
                     name: result.name,
-                    content: '', // Content not returned from IPC
-                    createdAt: Date.now(), // Will be refreshed from metadata
+                    content: result.content,
+                    createdAt: result.createdAt,
                     updatedAt: result.updatedAt,
                     path: result.path,
                     repositoryPath: result.repositoryPath,

@@ -616,21 +616,33 @@ app.whenReady().then(() => {
 
             // Update hierarchy metadata with new name
             const metaPath = path.join(newPath, '.hierarchy-meta.json');
+            let createdAt = Date.now();
             if (await pathExists(metaPath)) {
                 const metaContent = await fs.promises.readFile(metaPath, 'utf-8');
                 const meta = JSON.parse(metaContent);
+                createdAt = meta.createdAt || createdAt;
                 meta.name = trimmedName;
                 await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
             }
 
+            // Read project content from content.md
+            const contentPath = path.join(newPath, PROJECT_CONTENT_FILE);
+            let content = '';
+            if (await pathExists(contentPath)) {
+                content = await fs.promises.readFile(contentPath, 'utf-8');
+            }
+
             console.log('[Project] Renamed project:', projectPath, '->', newPath);
 
+            // Return complete project object
             return {
                 id: trimmedName,
                 name: trimmedName,
+                content,
+                createdAt,
+                updatedAt: Date.now(),
                 path: newPath,
-                repositoryPath: parentPath,
-                updatedAt: Date.now()
+                repositoryPath: parentPath
             };
         } catch (e) {
             console.error('Failed to rename project:', e);

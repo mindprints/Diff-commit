@@ -39,14 +39,19 @@ export function EditorPanel() {
     const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
     const [justSaved, setJustSaved] = useState(false);
 
-    // Wrap handleCommitClick to add blue flash animation on save
+    // Wrap handleCommitClick to add blue flash animation on successful save
     const handleCommitWithFlash = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
         const shiftPressed = e?.shiftKey;
         if (shiftPressed) {
-            setJustSaved(true);
-            await handleCommitClick(e);
-            // Clear the flash after 600ms
-            setTimeout(() => setJustSaved(false), 600);
+            try {
+                await handleCommitClick(e);
+                // Only flash on successful commit
+                setJustSaved(true);
+                setTimeout(() => setJustSaved(false), 600);
+            } catch (error) {
+                // Don't flash on error - error handling is done by handleCommitClick
+                console.error('Commit failed:', error);
+            }
         } else {
             handleCommitClick(e);
         }

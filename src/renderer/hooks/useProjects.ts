@@ -261,9 +261,12 @@ export function useProjects() {
         if (repoHandleRef.current) {
             // Browser file system mode
             updated = await browserFS.renameProjectFolder(repoHandleRef.current, project.name, newName);
-        } else {
-            // Electron or localStorage
+        } else if (project.path) {
+            // Electron mode - project has a path on disk
             updated = await projectStorage.renameProject(id, newName, project.path);
+        } else {
+            // localStorage mode - no path, use id-based rename
+            updated = await projectStorage.renameProject(id, newName);
         }
 
         if (updated) {

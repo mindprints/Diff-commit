@@ -44,9 +44,11 @@ export interface IElectronAPI {
     renameProject: (projectPath: string, newName: string) => Promise<{
         id: string;
         name: string;
+        content: string;
+        createdAt: number;
+        updatedAt: number;
         path: string;
         repositoryPath: string;
-        updatedAt: number;
     } | null>;
 
     // Hierarchy Enforcement System
