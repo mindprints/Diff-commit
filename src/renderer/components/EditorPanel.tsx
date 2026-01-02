@@ -8,7 +8,7 @@ import { PendingOperation } from '../hooks/useAsyncAI';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export function EditorPanel() {
     const {
@@ -37,6 +37,20 @@ export function EditorPanel() {
     } = useEditor();
 
     const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
+    const [justSaved, setJustSaved] = useState(false);
+
+    // Wrap handleCommitClick to add blue flash animation on save
+    const handleCommitWithFlash = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
+        const shiftPressed = e?.shiftKey;
+        if (shiftPressed) {
+            setJustSaved(true);
+            await handleCommitClick(e);
+            // Clear the flash after 600ms
+            setTimeout(() => setJustSaved(false), 600);
+        } else {
+            handleCommitClick(e);
+        }
+    }, [handleCommitClick]);
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <div
@@ -207,15 +221,15 @@ export function EditorPanel() {
                     <Button
                         variant="primary"
                         size="sm"
-                        onClick={handleCommitClick}
+                        onClick={handleCommitWithFlash}
                         disabled={!previewText.trim()}
                         className={clsx(
                             "relative transition-all min-w-[6rem]",
-                            isShiftHeld
-                                ? "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                            justSaved
+                                ? "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 animate-pulse"
                                 : hasUnsavedChanges
                                     ? "bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
-                                    : "bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                                    : "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                         )}
                         icon={<GitBranch className="w-3 h-3" />}
                         title={isShiftHeld

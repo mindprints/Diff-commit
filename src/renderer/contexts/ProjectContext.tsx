@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { useProjects } from '../hooks/useProjects';
 import { useCommitHistory } from '../hooks/useCommitHistory';
 import { useEditor } from './EditorContext';
@@ -26,7 +26,7 @@ interface ProjectContextType {
     setCommits: React.Dispatch<React.SetStateAction<TextCommit[]>>;
     handleCommit: (summary?: string) => Promise<string | undefined>;
     handleAccept: () => void;
-    handleCommitClick: () => Promise<void>;
+    handleCommitClick: (e?: React.MouseEvent) => Promise<void>;
     handleDeleteCommit: (id: string) => Promise<void>;
     handleClearAllCommits: () => Promise<void>;
     handleClearAll: () => void;
@@ -66,8 +66,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     } = useProjects();
 
     const getCommitText = useCallback(() => {
-        return mode === ViewMode.DIFF ? previewText : originalText;
-    }, [mode, previewText, originalText]);
+        // Always commit the preview text (what user sees in the editor)
+        // In DIFF mode, previewText still contains the editor content
+        return previewText;
+    }, [previewText]);
 
     const onAfterCommit = useCallback(async (committedText: string) => {
         setOriginalText(committedText);
@@ -132,14 +134,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         resetDiffState();
     }, [previewText, setOriginalText, setModifiedText, resetDiffState]);
 
-    const handleCommitClick = useCallback(async () => {
-        if (isShiftHeld) {
+    const handleCommitClick = useCallback(async (e?: React.MouseEvent) => {
+        // Check shiftKey directly from event for reliable first-click detection
+        const shiftPressed = e?.shiftKey ?? isShiftHeld;
+        if (shiftPressed) {
             await handleCommit();
             setHasUnsavedChanges(false);
         } else {
             handleAccept();
         }
     }, [isShiftHeld, handleCommit, handleAccept, setHasUnsavedChanges]);
+
+    // Track unsaved changes: set hasUnsavedChanges when previewText differs from last commit
+    useEffect(() => {
+        const lastCommit = commits[commits.length - 1];
+        const baseContent = lastCommit?.content || originalText;
+        const hasChanges = previewText.trim() !== '' && previewText !== baseContent;
+        setHasUnsavedChanges(hasChanges);
+    }, [previewText, commits, originalText, setHasUnsavedChanges]);
 
     const handleLoadProject = useCallback(async (id: string) => {
         const project = await loadProject(id);

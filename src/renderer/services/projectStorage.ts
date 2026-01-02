@@ -196,34 +196,38 @@ export async function deleteProject(id: string): Promise<void> {
 
 /**
  * Rename a project.
+ * @param id - Project ID
+ * @param newName - New project name
+ * @param projectPath - Optional project path (required for Electron mode)
  */
-export async function renameProject(id: string, newName: string): Promise<Project | null> {
-    const projects = await getProjects();
-    const project = projects.find(p => p.id === id);
-
-    if (!project) return null;
-
-    // Electron mode - rename folder on disk
-    if (window.electron?.renameProject && project.path) {
+export async function renameProject(id: string, newName: string, projectPath?: string): Promise<Project | null> {
+    // Electron mode - rename folder on disk using provided path
+    if (window.electron?.renameProject && projectPath) {
         try {
-            const result = await window.electron.renameProject(project.path, newName);
+            const result = await window.electron.renameProject(projectPath, newName);
             if (result) {
                 return {
-                    ...project,
                     id: result.id,
                     name: result.name,
+                    content: '', // Content not returned from IPC
+                    createdAt: Date.now(), // Will be refreshed from metadata
+                    updatedAt: result.updatedAt,
                     path: result.path,
                     repositoryPath: result.repositoryPath,
-                    updatedAt: result.updatedAt,
                 };
             }
         } catch (e) {
             console.error('Failed to rename project via IPC:', e);
             throw e;
         }
+        return null;
     }
 
     // Browser/localStorage fallback
+    const projects = await getProjects();
+    const project = projects.find(p => p.id === id);
+    if (!project) return null;
+
     const updatedProject = {
         ...project,
         name: newName.trim() || project.name,

@@ -114,7 +114,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
         cancelAllOperations: cancelAsyncOperations,
         resetSession,
     } = useAsyncAI({
-        getText: () => originalTextRef.current || previewTextRef.current,
+        // IMPORTANT: Use previewText (editor content) so AI always operates on what user sees,
+        // not the diff baseline (originalText)
+        getText: () => previewTextRef.current,
         setText: setModifiedText,
         getModel: () => selectedModel,
         getPrompt,

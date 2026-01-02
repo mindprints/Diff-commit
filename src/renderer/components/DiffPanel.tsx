@@ -36,7 +36,7 @@ export function DiffPanel() {
                     ref={leftContainerRef}
                     onScroll={() => handleScrollSync('left')}
                     className={clsx(
-                        "flex-1 overflow-y-auto p-8 text-gray-800 dark:text-slate-200 m-4 rounded-xl shadow-sm transition-colors duration-200 whitespace-pre-wrap",
+                        "flex-1 overflow-y-auto p-4 text-gray-800 dark:text-slate-200 m-4 rounded-xl shadow-sm transition-colors duration-200 whitespace-pre-wrap",
                         fontClasses[fontFamily],
                         sizeClasses[fontSize]
                     )}

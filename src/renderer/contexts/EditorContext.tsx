@@ -111,27 +111,30 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         let uniqueIdCounter = 0;
         let groupCounter = 0;
 
-        const initialSegments: DiffSegment[] = diffResult.map(part => {
-            const id = `seg-${uniqueIdCounter++}`;
-            let type: 'added' | 'removed' | 'unchanged' = 'unchanged';
-            let isIncluded = true;
+        // Filter out empty parts to prevent extra rows in the diff view
+        const initialSegments: DiffSegment[] = diffResult
+            .filter(part => part.value.length > 0)
+            .map(part => {
+                const id = `seg-${uniqueIdCounter++}`;
+                let type: 'added' | 'removed' | 'unchanged' = 'unchanged';
+                let isIncluded = true;
 
-            if (part.added) {
-                type = 'added';
-                isIncluded = true;
-            }
-            if (part.removed) {
-                type = 'removed';
-                isIncluded = false;
-            }
+                if (part.added) {
+                    type = 'added';
+                    isIncluded = true;
+                }
+                if (part.removed) {
+                    type = 'removed';
+                    isIncluded = false;
+                }
 
-            return {
-                id,
-                value: part.value,
-                type,
-                isIncluded
-            };
-        });
+                return {
+                    id,
+                    value: part.value,
+                    type,
+                    isIncluded
+                };
+            });
 
         for (let i = 0; i < initialSegments.length - 1; i++) {
             const current = initialSegments[i];

@@ -323,11 +323,19 @@ export function useAsyncAI({
      * Call this when the changes are committed or discarded.
      */
     const resetSession = useCallback(() => {
-        setPendingOperations(new Map());
-        pendingOperationsRef.current = new Map();
+        // Abort in-flight operations first
         abortControllersRef.current.forEach(c => c.abort());
         abortControllersRef.current.clear();
+
+        // Clear state
+        setPendingOperations(new Map());
+        pendingOperationsRef.current = new Map();
         virtualTextRef.current = null;
+
+        // NOTE: We intentionally do NOT call onDiffUpdate here.
+        // The AIContext's useEffect that calls resetSession depends on originalText,
+        // and onDiffUpdate triggers setOriginalText, which would create an infinite loop.
+        // Diff view reset should be handled by the component that changes the baseline text.
     }, []);
 
     /**
