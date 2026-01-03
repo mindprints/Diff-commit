@@ -57,7 +57,7 @@ export function EditorPanel() {
         }
     }, [handleCommitClick]);
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--bg-panel)' }}>
             <div
                 id="panel-editor-header"
                 className="flex-none h-14 p-4 flex justify-between items-center relative transition-colors duration-200"

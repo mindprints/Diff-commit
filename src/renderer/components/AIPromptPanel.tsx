@@ -67,8 +67,8 @@ export function AIPromptPanel() {
                         onKeyDown={handleKeyDown}
                         disabled={isLoading}
                         placeholder="Describe an action you want to carry out on the text..."
-                        className="flex-1 w-full p-4 pb-12 rounded-xl bg-white dark:bg-slate-800 border-none shadow-sm focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none transition-all disabled:opacity-50"
-                        style={{ border: '1px solid var(--border-color)' }}
+                        className="flex-1 w-full p-4 pb-12 rounded-xl border-none shadow-sm focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none transition-all disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}
                     />
                     <div className="absolute bottom-3 right-3 flex items-center gap-2">
                         <span className="text-[10px] text-gray-400 dark:text-slate-500 font-medium">

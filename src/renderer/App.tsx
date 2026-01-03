@@ -73,6 +73,27 @@ export default function App() {
       )}
       style={{
         '--app-hue': backgroundHue,
+        // Dynamic color variables based on mode and hue
+        // Light mode: outer areas neutral, panels colored
+        // Dark mode: all areas subtly colored
+        '--bg-app': isDarkMode
+          ? `hsl(${backgroundHue}, 20%, 8%)`
+          : `hsl(0, 0%, 96%)`, // Neutral gray for outer margins
+        '--bg-header': isDarkMode
+          ? `hsl(${backgroundHue}, 15%, 10%)`
+          : `hsl(${backgroundHue}, 40%, 95%)`, // Panels respond to hue
+        '--bg-panel': isDarkMode
+          ? `hsl(${backgroundHue}, 15%, 12%)`
+          : `hsl(${backgroundHue}, 45%, 93%)`, // Panels respond to hue
+        '--bg-muted': isDarkMode
+          ? `hsl(${backgroundHue}, 10%, 15%)`
+          : `hsl(0, 0%, 94%)`, // Neutral gray for outer areas
+        '--bg-surface': isDarkMode
+          ? `hsl(${backgroundHue}, 12%, 18%)`
+          : `hsl(${backgroundHue}, 35%, 98%)`, // Inner panel surfaces respond to hue
+        '--border-color': isDarkMode
+          ? `hsl(${backgroundHue}, 10%, 25%)`
+          : `hsl(${backgroundHue}, 20%, 85%)`,
         backgroundColor: 'var(--bg-app)',
       } as React.CSSProperties}
     >
@@ -115,7 +136,7 @@ export default function App() {
         />
 
         {/* Right Section (Diff View) */}
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-gray-50 dark:bg-slate-900/20">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0" style={{ backgroundColor: 'var(--bg-panel)' }}>
           <DiffPanel />
         </div>
       </main>

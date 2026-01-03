@@ -126,24 +126,26 @@ export function AppHeader() {
                 <div className="flex items-center gap-2 mr-2">
                     {/* Background Hue Slider + Model Selector & Cost */}
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-0.5 rounded-lg border border-gray-200 dark:border-slate-800">
-                        {/* Compact Hue Slider */}
+                        {/* Color Indicator Button */}
+                        <div
+                            className="w-5 h-5 rounded-full ml-1 border-2 border-white dark:border-slate-500 shadow-sm flex-shrink-0 cursor-pointer"
+                            style={{
+                                backgroundColor: `hsl(${backgroundHue}, ${isDarkMode ? '35%' : '50%'}, ${isDarkMode ? '25%' : '75%'})`
+                            }}
+                            title={`Background Hue: ${backgroundHue}°`}
+                        />
+                        {/* Minimal Hue Slider with thin white/gray track */}
                         <input
                             type="range"
                             min="0"
                             max="360"
                             value={backgroundHue}
                             onChange={(e) => setBackgroundHue(Number(e.target.value))}
-                            className="w-12 h-3 cursor-pointer appearance-none rounded ml-1"
+                            className="w-12 h-1 cursor-pointer appearance-none rounded-full"
                             style={{
-                                background: `linear-gradient(to right, 
-                  hsl(0, 70%, ${isDarkMode ? '15%' : '95%'}),
-                  hsl(60, 70%, ${isDarkMode ? '15%' : '95%'}),
-                  hsl(120, 70%, ${isDarkMode ? '15%' : '95%'}),
-                  hsl(180, 70%, ${isDarkMode ? '15%' : '95%'}),
-                  hsl(240, 70%, ${isDarkMode ? '15%' : '95%'}),
-                  hsl(300, 70%, ${isDarkMode ? '15%' : '95%'}),
-                  hsl(360, 70%, ${isDarkMode ? '15%' : '95%'})
-                )`
+                                background: isDarkMode
+                                    ? 'rgba(255, 255, 255, 0.3)'
+                                    : 'rgba(0, 0, 0, 0.15)'
                             }}
                             title={`Background Hue: ${backgroundHue}°`}
                         />
