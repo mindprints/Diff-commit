@@ -59,16 +59,15 @@ export function AIPromptPanel() {
         <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--bg-panel)' }}>
 
 
-            <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
-                <div className="flex-1 relative flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
+                <div className="flex-1 m-4 relative flex flex-col rounded-xl shadow-sm overflow-hidden transition-colors duration-200" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
                     <textarea
                         value={instruction}
                         onChange={(e) => setInstruction(e.target.value)}
                         onKeyDown={handleKeyDown}
                         disabled={isLoading}
                         placeholder="Describe an action you want to carry out on the text..."
-                        className="flex-1 w-full p-4 pb-12 rounded-xl border-none shadow-sm focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none transition-all disabled:opacity-50"
-                        style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}
+                        className="flex-1 w-full p-4 pb-12 focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none border-none bg-transparent transition-all disabled:opacity-50"
                     />
                     <div className="absolute bottom-3 right-3 flex items-center gap-2">
                         <span className="text-[10px] text-gray-400 dark:text-slate-500 font-medium">
@@ -89,7 +88,7 @@ export function AIPromptPanel() {
                 </div>
 
                 {status && (
-                    <div className={`flex-none text-xs px-3 py-1.5 rounded-lg text-center transition-all ${status.type === 'success'
+                    <div className={`flex-none mx-4 mb-4 text-xs px-3 py-1.5 rounded-lg text-center transition-all ${status.type === 'success'
                         ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
                         : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
                         }`}>

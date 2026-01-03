@@ -81,19 +81,19 @@ export default function App() {
           : `hsl(0, 0%, 96%)`, // Neutral gray for outer margins
         '--bg-header': isDarkMode
           ? `hsl(${backgroundHue}, 15%, 10%)`
-          : `hsl(${backgroundHue}, 40%, 95%)`, // Panels respond to hue
+          : `hsl(0, 0%, 98%)`, // Neutral gray for headers in light mode
         '--bg-panel': isDarkMode
           ? `hsl(${backgroundHue}, 15%, 12%)`
-          : `hsl(${backgroundHue}, 45%, 93%)`, // Panels respond to hue
+          : `hsl(${backgroundHue}, 40%, 84%)`, // Subtle hue for panel containers
         '--bg-muted': isDarkMode
           ? `hsl(${backgroundHue}, 10%, 15%)`
-          : `hsl(0, 0%, 94%)`, // Neutral gray for outer areas
+          : `hsl(${backgroundHue}, 30%, 86%)`, // Content area background follows hue
         '--bg-surface': isDarkMode
           ? `hsl(${backgroundHue}, 12%, 18%)`
-          : `hsl(${backgroundHue}, 35%, 98%)`, // Inner panel surfaces respond to hue
+          : `hsl(${backgroundHue}, 35%, 89%)`, // Inner surface very subtle hue
         '--border-color': isDarkMode
           ? `hsl(${backgroundHue}, 10%, 25%)`
-          : `hsl(${backgroundHue}, 20%, 85%)`,
+          : `hsl(${backgroundHue}, 25%, 78%)`, // Borders slightly more saturated
         backgroundColor: 'var(--bg-app)',
       } as React.CSSProperties}
     >
