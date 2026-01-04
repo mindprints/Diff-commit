@@ -295,17 +295,23 @@ export function AIProvider({ children }: { children: ReactNode }) {
         if (isKnownPrompt) {
             // Standard prompt or preset - needs text to operate on
             if (hasSelection) {
-                const res = await startOperation(start, end, promptIdOrInstruction);
-                if (res) setFrozenSelection(null);
-                return res;
+                try {
+                    await startOperation(start, end, promptIdOrInstruction);
+                    setFrozenSelection(null);
+                } catch (e) {
+                    console.error('Failed to start standard AI operation:', e);
+                }
             } else {
                 if (!previewTextRef.current.trim()) {
                     setErrorMessage('Please enter some text first.');
                     return;
                 }
-                const res = await startOperation(0, previewTextRef.current.length, promptIdOrInstruction);
-                if (res) setFrozenSelection(null);
-                return res;
+                try {
+                    await startOperation(0, previewTextRef.current.length, promptIdOrInstruction);
+                    setFrozenSelection(null);
+                } catch (e) {
+                    console.error('Failed to start full-text AI operation:', e);
+                }
             }
         } else {
             // Custom instruction from prompt panel - fallback to full text if no selection
@@ -321,11 +327,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 order: 99
             };
 
-            // Auto-save this custom instruction if it's not already specialized
-            // We use the instruction itself as the name for now
-            const isExecutionSuccess = await startOperation(finalStart, finalEnd, 'custom', customPrompt);
-            if (isExecutionSuccess) {
+            try {
+                // Auto-save this custom instruction if it's not already specialized
+                // We use the instruction itself as the name for now
+                await startOperation(finalStart, finalEnd, 'custom', customPrompt);
                 setFrozenSelection(null);
+
                 // Proactively add to custom prompts for reuse
                 createPrompt({
                     name: promptIdOrInstruction.length > 30 ? promptIdOrInstruction.substring(0, 27) + "..." : promptIdOrInstruction,
@@ -333,8 +340,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
                     promptTask: promptIdOrInstruction,
                     color: 'bg-indigo-400'
                 }).catch(e => console.warn('Failed to auto-save custom prompt:', e));
+            } catch (e) {
+                console.error('Failed to start custom AI instruction:', e);
             }
-            return isExecutionSuccess;
         }
     }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt]);
 
@@ -349,11 +357,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
         // If no text is selected, check for frozen selection
         if (selectionStart === selectionEnd) {
             if (frozenSelection) {
-                startOperation(frozenSelection.start, frozenSelection.end, idToUse);
-                setFrozenSelection(null);
+                startOperation(frozenSelection.start, frozenSelection.end, idToUse)
+                    .then(() => setFrozenSelection(null))
+                    .catch(e => console.error('Failed to start frozen selection operation:', e));
                 return;
             } else if (previewTextRef.current) {
-                startOperation(0, previewTextRef.current.length, idToUse);
+                startOperation(0, previewTextRef.current.length, idToUse)
+                    .catch(e => console.error('Failed to start full-text quick send:', e));
                 return;
             }
             return;
@@ -366,8 +376,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
         );
 
         if (start !== end) {
-            startOperation(start, end, idToUse);
-            setFrozenSelection(null);
+            startOperation(start, end, idToUse)
+                .then(() => setFrozenSelection(null))
+                .catch(e => console.error('Failed to start selection quick send:', e));
         }
     }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection]);
 

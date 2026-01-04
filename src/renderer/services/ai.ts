@@ -67,7 +67,7 @@ async function callOpenRouter(
             }
 
             if (response.status === 400) {
-                if (detailedMessage.includes("JSON")) {
+                if (detailedMessage.toLowerCase().includes("json")) {
                     return {
                         text: `Model ${model.name} does not support JSON mode. Please try a different model or check your settings.`,
                         isError: true
@@ -78,7 +78,6 @@ async function callOpenRouter(
                     isError: true
                 };
             }
-
             if (response.status === 429) {
                 return { text: "Rate limit exceeded. Please wait a moment before trying again.", isError: true };
             }

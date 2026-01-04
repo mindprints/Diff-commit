@@ -64,11 +64,12 @@ export function useAsyncAI({
         end: number,
         promptId: string,
         customPrompt?: AIPrompt
-    ): Promise<string | null> => {
+    ): Promise<void> => {
         const model = getModel();
         if (!model) {
-            onError('No AI model selected');
-            return null;
+            const msg = 'No AI model selected';
+            onError(msg);
+            throw new Error(msg);
         }
 
         // Initialize virtual text if this is the first operation in a batch
@@ -80,8 +81,9 @@ export function useAsyncAI({
         const selectedText = text.substring(start, end);
 
         if (!selectedText.trim() && !customPrompt) {
-            onError('Please select some text first');
-            return null;
+            const msg = 'Please select some text first';
+            onError(msg);
+            throw new Error(msg);
         }
 
         // Generate unique operation ID
@@ -110,8 +112,6 @@ export function useAsyncAI({
 
         // Fire the request (don't await - let it run in background)
         processOperation(opId, operation, abortController.signal);
-
-        return opId;
     }, [getText, getModel, onError]);
 
     /**
