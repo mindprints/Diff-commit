@@ -19,7 +19,6 @@ interface EditorContextType {
     setIsAutoCompareEnabled: (enabled: boolean) => void;
     frozenSelection: { start: number, end: number, text: string } | null;
     setFrozenSelection: (selection: { start: number, end: number, text: string } | null) => void;
-
     // Hooks state
     segments: DiffSegment[];
     setSegments: (segments: DiffSegment[]) => void;

@@ -261,6 +261,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }, [previewTextRef, previewTextareaRef, setErrorMessage, setOriginalText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
 
     const handleAIEdit = useCallback(async (promptIdOrInstruction: string) => {
+        setErrorMessage(null);
         if (promptIdOrInstruction === 'spelling_local') {
             return handleLocalSpellCheck();
         }
@@ -294,7 +295,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
         if (isKnownPrompt) {
             // Standard prompt or preset - needs text to operate on
             if (hasSelection) {
-                return startOperation(start, end, promptIdOrInstruction);
+                const res = await startOperation(start, end, promptIdOrInstruction);
+                if (res) setFrozenSelection(null);
+                return res;
             } else {
                 if (!previewTextRef.current.trim()) {
                     setErrorMessage('Please enter some text first.');
@@ -305,7 +308,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 return res;
             }
         } else {
-            // Custom instruction from prompt panel
+            // Custom instruction from prompt panel - fallback to full text if no selection
+            const finalStart = hasSelection ? start : 0;
+            const finalEnd = hasSelection ? end : previewTextRef.current.length;
+
             const customPrompt: AIPrompt = {
                 id: 'custom_instruction',
                 name: 'Custom Instruction',
@@ -315,13 +321,25 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 order: 99
             };
 
-            const res = await startOperation(start, end, 'custom', customPrompt);
-            if (res) setFrozenSelection(null);
-            return res;
+            // Auto-save this custom instruction if it's not already specialized
+            // We use the instruction itself as the name for now
+            const isExecutionSuccess = await startOperation(finalStart, finalEnd, 'custom', customPrompt);
+            if (isExecutionSuccess) {
+                setFrozenSelection(null);
+                // Proactively add to custom prompts for reuse
+                createPrompt({
+                    name: promptIdOrInstruction.length > 30 ? promptIdOrInstruction.substring(0, 27) + "..." : promptIdOrInstruction,
+                    systemInstruction: customPrompt.systemInstruction,
+                    promptTask: promptIdOrInstruction,
+                    color: 'bg-indigo-400'
+                }).catch(e => console.warn('Failed to auto-save custom prompt:', e));
+            }
+            return isExecutionSuccess;
         }
-    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts]);
+    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt]);
 
     const handleQuickSend = useCallback((promptId?: string) => {
+        setErrorMessage(null);
         const idToUse = promptId || activePromptId;
         const textarea = previewTextareaRef.current?.getTextarea();
         if (!textarea) return;
@@ -351,7 +369,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             startOperation(start, end, idToUse);
             setFrozenSelection(null);
         }
-    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, setFrozenSelection]);
+    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();
@@ -366,7 +384,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setFactCheckProgress('Starting fact check...');
         setErrorMessage(null);
 
-        const { session, usage, isError, isCancelled, errorMessage } = await runFactCheck(
+        const { usage, isError, isCancelled, errorMessage } = await runFactCheck(
             sourceText,
             (stage) => setFactCheckProgress(stage),
             abortControllerRef.current.signal
@@ -573,7 +591,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         }
     }, [contextMenu, setPendingPromptText, setSavePromptDialogOpen, setContextMenu]);
 
-    const handleSavePromptSubmit = useCallback(async (prompt: AIPrompt) => {
+    const handleSavePromptSubmit = useCallback(async (prompt: Partial<AIPrompt>) => {
         try {
             await createPrompt({
                 name: prompt.name,

@@ -52,11 +52,38 @@ async function callOpenRouter(
             const errorText = await response.text();
             console.error("OpenRouter API Error:", response.status, errorText);
 
-            if (response.status === 400 || response.status === 404) {
-                return { text: "Your selected model is not currently available.", isError: true };
+            // Try to extract a useful error message from the JSON response
+            let detailedMessage = "";
+            try {
+                const errorData = JSON.parse(errorText);
+                detailedMessage = errorData.error?.message || "";
+            } catch (e) { }
+
+            if (response.status === 404) {
+                return {
+                    text: `Model not found: ${model.name}. It might be temporarily offline or deprecated on OpenRouter.`,
+                    isError: true
+                };
             }
 
-            return { text: `Error: ${response.status} - ${response.statusText}`, isError: true };
+            if (response.status === 400) {
+                if (detailedMessage.includes("JSON")) {
+                    return {
+                        text: `Model ${model.name} does not support JSON mode. Please try a different model or check your settings.`,
+                        isError: true
+                    };
+                }
+                return {
+                    text: detailedMessage || "The AI model rejected the request (400). This can happen if the prompt is too long or the model has specific restrictions.",
+                    isError: true
+                };
+            }
+
+            if (response.status === 429) {
+                return { text: "Rate limit exceeded. Please wait a moment before trying again.", isError: true };
+            }
+
+            return { text: detailedMessage || `Error: ${response.status} - ${response.statusText}`, isError: true };
         }
 
         const data = await response.json();
