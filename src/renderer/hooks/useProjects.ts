@@ -101,7 +101,7 @@ export function useProjects() {
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
 
-                    // Auto-load the first project (usually "Untitled Project")
+                    // Auto-load the first project (usually timestamped)
                     if (result.projects.length > 0) {
                         setCurrentProject(result.projects[0]);
                     } else {

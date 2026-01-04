@@ -12,6 +12,20 @@ function hasElectronProjectAPI(): boolean {
 }
 
 /**
+ * Generate a dynamic project name based on current timestamp
+ * Format: 'MMM DD HH.mm' (e.g., 'Jan 13 14.30')
+ */
+function getFormattedTimestamp(): string {
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[now.getMonth()];
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${month} ${day} ${hours}.${minutes}`;
+}
+
+/**
  * Browser repository storage for virtual repos in localStorage.
  */
 interface BrowserRepository {
@@ -147,7 +161,7 @@ export async function createProject(name: string, content: string = '', repoPath
     const projects = await getProjects();
     const newProject: Project = {
         id: crypto.randomUUID(),
-        name: name.trim() || 'Untitled Project',
+        name: name.trim() || getFormattedTimestamp(),
         content,
         createdAt: Date.now(),
         updatedAt: Date.now(),

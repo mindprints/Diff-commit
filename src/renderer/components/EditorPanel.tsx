@@ -33,7 +33,8 @@ export function EditorPanel() {
         previewText, setPreviewText, originalText, setOriginalText, setModifiedText,
         performDiff, isAutoCompareEnabled, setIsAutoCompareEnabled,
         previewTextareaRef, fontFamily, fontSize,
-        handleOpenContextMenu, handleScrollSync, skipNextSegmentsSync
+        handleOpenContextMenu, handleScrollSync, skipNextSegmentsSync,
+        frozenSelection, setFrozenSelection
     } = useEditor();
 
     const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
@@ -282,6 +283,26 @@ export function EditorPanel() {
                         placeholder="Type or paste your text here. Use AI Edit to polish it."
                         onContextMenu={(e) => handleOpenContextMenu(e, previewText)}
                         onScroll={() => handleScrollSync('right')}
+                        frozenSelection={frozenSelection}
+                        onFocus={() => {
+                            // Clear frozen selection when editor is focused
+                            setFrozenSelection(null);
+                        }}
+                        onBlur={(e) => {
+                            // If focus is moving out of the editor, potentially "freeze" the selection
+                            // We only do this if there's an actual selection
+                            const textarea = e.currentTarget;
+                            const start = textarea.selectionStart;
+                            const end = textarea.selectionEnd;
+
+                            if (start !== end) {
+                                setFrozenSelection({
+                                    start,
+                                    end,
+                                    text: textarea.value.substring(start, end)
+                                });
+                            }
+                        }}
                     />
                 </div>
             </div>

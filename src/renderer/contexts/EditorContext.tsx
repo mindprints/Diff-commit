@@ -17,6 +17,8 @@ interface EditorContextType {
     setMode: (mode: ViewMode) => void;
     isAutoCompareEnabled: boolean;
     setIsAutoCompareEnabled: (enabled: boolean) => void;
+    frozenSelection: { start: number, end: number, text: string } | null;
+    setFrozenSelection: (selection: { start: number, end: number, text: string } | null) => void;
 
     // Hooks state
     segments: DiffSegment[];
@@ -65,6 +67,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     const [fontSize, setFontSize] = useState<FontSize>('base');
     const [mode, setMode] = useState<ViewMode>(ViewMode.INPUT);
     const [isAutoCompareEnabled, setIsAutoCompareEnabled] = useState(false);
+    const [frozenSelection, setFrozenSelection] = useState<{ start: number, end: number, text: string } | null>(null);
 
     const { setErrorMessage } = useUI();
 
@@ -293,7 +296,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
             fontFamily, setFontFamily, fontSize, setFontSize,
             mode, setMode,
             originalTextRef, previewTextRef, modifiedTextRef, skipNextSegmentsSync,
-            handleAcceptAll, handleRejectAll, handleCopyFinal, handleWebSave
+            handleAcceptAll, handleRejectAll, handleCopyFinal, handleWebSave,
+            frozenSelection, setFrozenSelection
         }}>
             {children}
         </EditorContext.Provider>

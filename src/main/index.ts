@@ -433,6 +433,21 @@ app.whenReady().then(() => {
     }
 
     /**
+     * Generate a dynamic project name based on current timestamp
+     * Format: 'MMM DD HH.mm' (e.g., 'Jan 13 14.30')
+     * Using '.' instead of ':' for Windows filename compatibility
+     */
+    function getFormattedTimestamp(): string {
+        const now = new Date();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = months[now.getMonth()];
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        return `${month} ${day} ${hours}.${minutes}`;
+    }
+
+    /**
      * Check if a directory is a valid project folder.
      * A project folder contains a .diff-commit directory.
      */
@@ -837,8 +852,8 @@ app.whenReady().then(() => {
 
             console.log('[Hierarchy] Created repository with metadata:', repoPath);
 
-            // AUTO-CREATE "Untitled Project" so user can start working immediately
-            const defaultProjectName = 'Untitled Project';
+            // AUTO-CREATE dynamic project so user can start working immediately
+            const defaultProjectName = getFormattedTimestamp();
             const projectPath = path.join(repoPath, defaultProjectName);
             const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
             const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);

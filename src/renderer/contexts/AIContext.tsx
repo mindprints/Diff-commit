@@ -63,7 +63,8 @@ const AIContext = createContext<AIContextType | undefined>(undefined);
 export function AIProvider({ children }: { children: ReactNode }) {
     const {
         previewText, setPreviewText, originalText, setOriginalText, modifiedText, setModifiedText,
-        performDiff, setMode, originalTextRef, previewTextRef, modifiedTextRef, previewTextareaRef
+        performDiff, setMode, originalTextRef, previewTextRef, modifiedTextRef, previewTextareaRef,
+        frozenSelection, setFrozenSelection
     } = useEditor();
     const {
         setErrorMessage, setActiveLogId, contextMenu, setSavePromptDialogOpen,
@@ -283,6 +284,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
             }
         }
 
+        // If no active selection, check for frozen selection
+        if (!hasSelection && frozenSelection) {
+            start = frozenSelection.start;
+            end = frozenSelection.end;
+            hasSelection = true;
+        }
+
         if (isKnownPrompt) {
             // Standard prompt or preset - needs text to operate on
             if (hasSelection) {
@@ -292,7 +300,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
                     setErrorMessage('Please enter some text first.');
                     return;
                 }
-                return startOperation(0, previewTextRef.current.length, promptIdOrInstruction);
+                const res = await startOperation(0, previewTextRef.current.length, promptIdOrInstruction);
+                if (res) setFrozenSelection(null);
+                return res;
             }
         } else {
             // Custom instruction from prompt panel
@@ -305,11 +315,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 order: 99
             };
 
-            if (hasSelection) {
-                return startOperation(start, end, 'custom', customPrompt);
-            } else {
-                return startOperation(0, previewTextRef.current.length, 'custom', customPrompt);
-            }
+            const res = await startOperation(start, end, 'custom', customPrompt);
+            if (res) setFrozenSelection(null);
+            return res;
         }
     }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts]);
 
@@ -320,10 +328,15 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         const { selectionStart, selectionEnd } = textarea;
 
-        // If no text is selected, operate on the FULL TEXT as requested
+        // If no text is selected, check for frozen selection
         if (selectionStart === selectionEnd) {
-            if (previewTextRef.current) {
+            if (frozenSelection) {
+                startOperation(frozenSelection.start, frozenSelection.end, idToUse);
+                setFrozenSelection(null);
+                return;
+            } else if (previewTextRef.current) {
                 startOperation(0, previewTextRef.current.length, idToUse);
+                return;
             }
             return;
         }
@@ -336,8 +349,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         if (start !== end) {
             startOperation(start, end, idToUse);
+            setFrozenSelection(null);
         }
-    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId]);
+    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, setFrozenSelection]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();
