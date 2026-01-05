@@ -10,6 +10,8 @@ interface UIContextType {
     setShowProjectsPanel: (show: boolean) => void;
     showPromptsModal: boolean;
     setShowPromptsModal: (show: boolean) => void;
+    showModelsModal: boolean;
+    setShowModelsModal: (show: boolean) => void;
     showCommitHistory: boolean;
     setShowCommitHistory: (show: boolean) => void;
     savePromptDialogOpen: boolean;
@@ -48,6 +50,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [showLogs, setShowLogs] = useState(false);
     const [showProjectsPanel, setShowProjectsPanel] = useState(false);
     const [showPromptsModal, setShowPromptsModal] = useState(false);
+    const [showModelsModal, setShowModelsModal] = useState(false);
     const [showCommitHistory, setShowCommitHistory] = useState(false);
     const [savePromptDialogOpen, setSavePromptDialogOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
@@ -127,6 +130,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
             showLogs, setShowLogs,
             showProjectsPanel, setShowProjectsPanel,
             showPromptsModal, setShowPromptsModal,
+            showModelsModal, setShowModelsModal,
             showCommitHistory, setShowCommitHistory,
             savePromptDialogOpen, setSavePromptDialogOpen,
             contextMenu, setContextMenu,

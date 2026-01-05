@@ -4,6 +4,7 @@ import { CommitHistoryModal } from './CommitHistoryModal';
 import { ContextMenu } from './ContextMenu';
 import { SavePromptDialog } from './SavePromptDialog';
 import { PromptsModal } from './PromptsModal';
+import { ModelsModal } from './ModelsModal';
 import { ProjectsPanel } from './ProjectsPanel';
 import { WelcomeModal } from './WelcomeModal';
 import { HelpModal } from './HelpModal';
@@ -19,6 +20,7 @@ export function AppModals() {
         showLogs, setShowLogs,
         showProjectsPanel, setShowProjectsPanel,
         showPromptsModal, setShowPromptsModal,
+        showModelsModal, setShowModelsModal,
         showCommitHistory, setShowCommitHistory,
         savePromptDialogOpen, setSavePromptDialogOpen,
         contextMenu, setContextMenu,
@@ -42,7 +44,8 @@ export function AppModals() {
         aiPrompts, createPrompt, updatePrompt, deletePrompt, resetBuiltIn,
         handleFactCheck, handleReadAloud,
         handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
-        pendingPromptText, setPendingPromptText
+        pendingPromptText, setPendingPromptText,
+        selectedModel, setDefaultModel
     } = useAI();
 
     return (
@@ -140,6 +143,15 @@ export function AppModals() {
                 onUpdatePrompt={(id, updates) => updatePrompt({ ...updates, id })}
                 onDeletePrompt={deletePrompt}
                 onResetBuiltIn={resetBuiltIn}
+            />
+
+            {/* Models Manager Modal */}
+            <ModelsModal
+                isOpen={showModelsModal}
+                onClose={() => setShowModelsModal(false)}
+                selectedModel={selectedModel}
+                onSetDefault={setDefaultModel}
+                apiKey={import.meta.env.VITE_OPENROUTER_API_KEY || ''}
             />
 
             {/* Projects Panel */}

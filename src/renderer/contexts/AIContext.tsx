@@ -39,6 +39,7 @@ interface AIContextType {
     // Operational state
     selectedModel: Model;
     setSelectedModel: (model: Model) => void;
+    setDefaultModel: (model: Model) => void;
     sessionCost: number;
     setSessionCost: (cost: number) => void;
     updateCost: (usage?: { inputTokens: number; outputTokens: number }) => void;
@@ -71,7 +72,21 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setContextMenu, setIsSpeaking, isSpeaking, setShowPromptsModal
     } = useUI();
 
-    const [selectedModel, setSelectedModel] = useState<Model>(MODELS[0]);
+    // Initialize model from localStorage or fallback to first model
+    const getInitialModel = (): Model => {
+        try {
+            const stored = localStorage.getItem('diff-commit-default-model');
+            if (stored) {
+                const found = MODELS.find(m => m.id === stored);
+                if (found) return found;
+            }
+        } catch (e) {
+            console.warn('Failed to read default model from localStorage:', e);
+        }
+        return MODELS[0];
+    };
+
+    const [selectedModel, setSelectedModel] = useState<Model>(getInitialModel);
     const [sessionCost, setSessionCost] = useState(0);
     const [isPolishing, setIsPolishing] = useState(false);
     const [isFactChecking, setIsFactChecking] = useState(false);
@@ -97,6 +112,15 @@ export function AIProvider({ children }: { children: ReactNode }) {
             (usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
         setSessionCost(prev => prev + cost);
     }, [selectedModel]);
+
+    const setDefaultModel = useCallback((model: Model) => {
+        try {
+            localStorage.setItem('diff-commit-default-model', model.id);
+        } catch (e) {
+            console.warn('Failed to save default model to localStorage:', e);
+        }
+        setSelectedModel(model);
+    }, []);
 
     const findActivePrompt = useCallback((id: string, builtIn: AIPrompt[], custom: AIPrompt[]): AIPrompt | null => {
         return custom.find(p => p.id === id) ??
@@ -635,7 +659,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             isPolishing, isFactChecking, factCheckProgress, setFactCheckProgress,
             pendingPromptText, setPendingPromptText,
             activePromptId, setActivePromptId, activePrompt,
-            selectedModel, setSelectedModel, sessionCost, setSessionCost, updateCost,
+            selectedModel, setSelectedModel, setDefaultModel, sessionCost, setSessionCost, updateCost,
             handleAIEdit, handleFactCheck, handleLocalSpellCheck, handleReadAloud, cancelAIOperation,
             handleQuickSend,
             handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate

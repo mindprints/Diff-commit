@@ -10,6 +10,7 @@ export function MenuBar() {
     const {
         isDarkMode, setIsDarkMode, setShowHelp, setShowLogs,
         setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel,
+        setShowModelsModal,
         isHeaderVisible, setIsHeaderVisible
     } = useUI();
 
@@ -189,6 +190,7 @@ export function MenuBar() {
                 <MenuItem separator />
                 <MenuItem label="Manage Prompts..." onClick={() => setShowPromptsModal(true)} />
                 <MenuItem label="Project Manager..." onClick={() => setShowProjectsPanel(true)} />
+                <MenuItem label="Model Manager..." onClick={() => setShowModelsModal(true)} />
             </MenuButton>
 
             {/* Window Menu */}

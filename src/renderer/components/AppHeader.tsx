@@ -19,13 +19,15 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ViewMode, FontFamily } from '../types';
-import { MODELS, Model, getCostTier } from '../constants/models';
+import { Model, getCostTier } from '../constants/models';
+import { useModels } from '../hooks/useModels';
 // Logo import removed
 import { Button } from './Button';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
 import { useUI, useProject, useAI, useEditor } from '../contexts';
 
 export function AppHeader() {
+    const { models } = useModels();
     const {
         repositoryPath, openRepository, currentProject, projects,
         handleClearAll, commits
@@ -155,12 +157,12 @@ export function AppHeader() {
                             className="text-[10px] py-0.5 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[10rem] truncate h-6"
                             value={selectedModel.id}
                             onChange={(e) => {
-                                const model = MODELS.find(m => m.id === e.target.value);
+                                const model = models.find(m => m.id === e.target.value);
                                 if (model) setSelectedModel(model);
                             }}
                             title={`Select AI Model - Current: ${selectedModel.name} (${getCostTier(selectedModel)})`}
                         >
-                            {MODELS.map(m => (
+                            {models.map(m => (
                                 <option key={m.id} value={m.id}>{m.name} ({getCostTier(m)})</option>
                             ))}
                         </select>

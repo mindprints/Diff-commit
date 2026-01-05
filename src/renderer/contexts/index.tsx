@@ -3,17 +3,20 @@ import { UIProvider } from './UIContext';
 import { EditorProvider } from './EditorContext';
 import { ProjectProvider } from './ProjectContext';
 import { AIProvider } from './AIContext';
+import { ModelsProvider } from './ModelsContext';
 
 export function CombinedProvider({ children }: { children: ReactNode }) {
     return (
         <UIProvider>
-            <EditorProvider>
-                <ProjectProvider>
-                    <AIProvider>
-                        {children}
-                    </AIProvider>
-                </ProjectProvider>
-            </EditorProvider>
+            <ModelsProvider>
+                <EditorProvider>
+                    <ProjectProvider>
+                        <AIProvider>
+                            {children}
+                        </AIProvider>
+                    </ProjectProvider>
+                </EditorProvider>
+            </ModelsProvider>
         </UIProvider>
     );
 }
@@ -22,3 +25,4 @@ export * from './UIContext';
 export * from './EditorContext';
 export * from './ProjectContext';
 export * from './AIContext';
+export * from './ModelsContext';

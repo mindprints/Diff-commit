@@ -92,6 +92,7 @@ export interface IElectronAPI {
     onMenuToolsFactCheck: (callback: () => void) => void;
     onMenuToolsPrompts: (callback: () => void) => void;
     onMenuToolsProjects: (callback: () => void) => void;
+    onMenuToolsModels: (callback: () => void) => void;
     removeAllListeners: (channel: string) => void;
 }
 

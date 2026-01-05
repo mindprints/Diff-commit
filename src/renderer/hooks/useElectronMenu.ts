@@ -4,7 +4,8 @@ import { useUI, useProject, useAI, useEditor } from '../contexts';
 export function useElectronMenu() {
     const {
         isDarkMode, setIsDarkMode, setShowHelp, setShowLogs,
-        setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel
+        setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel,
+        setShowModelsModal
     } = useUI();
 
     const {
@@ -93,6 +94,7 @@ export function useElectronMenu() {
         window.electron.onMenuToolsFactCheck(() => handleFactCheck());
         window.electron.onMenuToolsPrompts(() => setShowPromptsModal(true));
         window.electron.onMenuToolsProjects(() => setShowProjectsPanel(true));
+        window.electron.onMenuToolsModels(() => setShowModelsModal(true));
 
         // Cleanup listeners on unmount
         return () => {
@@ -120,8 +122,9 @@ export function useElectronMenu() {
                 window.electron.removeAllListeners('menu-tools-factcheck');
                 window.electron.removeAllListeners('menu-tools-prompts');
                 window.electron.removeAllListeners('menu-tools-projects');
+                window.electron.removeAllListeners('menu-tools-models');
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, handleFileOpen, handleClearAll, openRepository, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
+    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, handleFileOpen, handleClearAll, openRepository, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
 }

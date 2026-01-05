@@ -254,6 +254,10 @@ function createMenu() {
                 {
                     label: 'Project Manager...',
                     click: () => sendToRenderer('menu-tools-projects')
+                },
+                {
+                    label: 'Model Manager...',
+                    click: () => sendToRenderer('menu-tools-models')
                 }
             ]
         },
