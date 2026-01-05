@@ -1,16 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { X, Check, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Check, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3 } from 'lucide-react';
 import clsx from 'clsx';
 import { Model, getCostTier, getCostTierColor } from '../constants/models';
 import { useModels, ExtendedModel } from '../hooks/useModels';
 import { ParsedModel, supportsVision, supportsAudio } from '../services/openRouterService';
+
+// Task categories for filtering/sorting models
+type TaskCategory = 'all' | 'coding' | 'intelligence' | 'math' | 'speed' | 'value';
+
+const TASK_CATEGORIES: { value: TaskCategory; label: string; icon: React.ReactNode; description: string }[] = [
+    { value: 'all', label: 'All Tasks', icon: <BarChart3 className="w-4 h-4" />, description: 'Default order' },
+    { value: 'coding', label: 'Coding', icon: <Code2 className="w-4 h-4" />, description: 'Sort by coding benchmark' },
+    { value: 'intelligence', label: 'Intelligence', icon: <Brain className="w-4 h-4" />, description: 'Sort by intelligence index' },
+    { value: 'math', label: 'Math', icon: <Calculator className="w-4 h-4" />, description: 'Sort by math benchmark' },
+    { value: 'speed', label: 'Speed', icon: <Zap className="w-4 h-4" />, description: 'Sort by tokens/second' },
+    { value: 'value', label: 'Value', icon: <BarChart3 className="w-4 h-4" />, description: 'Best price/performance' },
+];
 
 interface ModelsModalProps {
     isOpen: boolean;
     onClose: () => void;
     selectedModel: Model;
     onSetDefault: (model: Model) => void;
-    apiKey?: string;
 }
 
 function formatContextWindow(tokens: number): string {
@@ -167,7 +178,7 @@ function ImportBrowser({
     );
 }
 
-export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiKey }: ModelsModalProps) {
+export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: ModelsModalProps) {
     const {
         models,
         isLoading,
@@ -175,21 +186,62 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiK
         addModels,
         removeModel,
         updatePricing,
-        fetchAvailableModels
+        fetchAvailableModels,
+        fetchBenchmarks,
     } = useModels();
 
     const [showImportBrowser, setShowImportBrowser] = useState(false);
     const [availableModels, setAvailableModels] = useState<ParsedModel[]>([]);
     const [refreshingId, setRefreshingId] = useState<string | null>(null);
+    const [taskCategory, setTaskCategory] = useState<TaskCategory>('all');
+    const [benchmarksLoaded, setBenchmarksLoaded] = useState(false);
+
+    // Auto-fetch benchmarks when modal opens (if not already loaded)
+    useEffect(() => {
+        if (isOpen && !benchmarksLoaded && !isLoading) {
+            fetchBenchmarks().then(() => setBenchmarksLoaded(true));
+        }
+    }, [isOpen, benchmarksLoaded, isLoading, fetchBenchmarks]);
+
+    // Sort models based on selected task category
+    const sortedModels = useMemo(() => {
+        if (taskCategory === 'all') return models;
+
+        return [...models].sort((a, b) => {
+            let aVal = 0, bVal = 0;
+            switch (taskCategory) {
+                case 'coding':
+                    aVal = a.codingIndex ?? 0;
+                    bVal = b.codingIndex ?? 0;
+                    break;
+                case 'intelligence':
+                    aVal = a.intelligenceIndex ?? 0;
+                    bVal = b.intelligenceIndex ?? 0;
+                    break;
+                case 'math':
+                    aVal = a.mathIndex ?? 0;
+                    bVal = b.mathIndex ?? 0;
+                    break;
+                case 'speed':
+                    aVal = a.outputSpeed ?? 0;
+                    bVal = b.outputSpeed ?? 0;
+                    break;
+                case 'value':
+                    // Value = intelligence / (input price + output price), higher is better
+                    const aPrice = (a.inputPrice || 1) + (a.outputPrice || 1);
+                    const bPrice = (b.inputPrice || 1) + (b.outputPrice || 1);
+                    aVal = (a.intelligenceIndex ?? 0) / aPrice;
+                    bVal = (b.intelligenceIndex ?? 0) / bPrice;
+                    break;
+            }
+            return bVal - aVal; // Descending order
+        });
+    }, [models, taskCategory]);
 
     // Fetch available models when import browser opens
     const handleOpenImport = async () => {
-        if (!apiKey) {
-            alert('OpenRouter API key required. Set it in your environment.');
-            return;
-        }
         try {
-            const available = await fetchAvailableModels(apiKey);
+            const available = await fetchAvailableModels();
             setAvailableModels(available);
             setShowImportBrowser(true);
         } catch (e) {
@@ -198,10 +250,9 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiK
     };
 
     const handleRefreshPricing = async (modelId: string) => {
-        if (!apiKey) return;
         setRefreshingId(modelId);
         try {
-            await updatePricing(modelId, apiKey);
+            await updatePricing(modelId);
         } catch (e) {
             console.error('Failed to refresh pricing:', e);
         } finally {
@@ -215,7 +266,7 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiK
 
     if (!isOpen) return null;
 
-    const existingIds = new Set(models.map(m => m.id));
+    const existingIds = new Set<string>(models.map(m => m.id));
 
     return (
         <>
@@ -266,10 +317,40 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiK
                         </div>
                     )}
 
+                    {/* Task Category Filter */}
+                    <div className="px-6 py-3 border-b border-gray-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto">
+                        <span className="text-xs text-gray-500 dark:text-slate-400 shrink-0">Sort by:</span>
+                        {TASK_CATEGORIES.map((cat) => (
+                            <button
+                                key={cat.value}
+                                onClick={() => setTaskCategory(cat.value)}
+                                title={cat.description}
+                                className={clsx(
+                                    "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors shrink-0",
+                                    taskCategory === cat.value
+                                        ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
+                                        : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700"
+                                )}
+                            >
+                                {cat.icon}
+                                {cat.label}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => fetchBenchmarks(true)}
+                            disabled={isLoading}
+                            className="ml-auto flex items-center gap-1.5 px-2 py-1.5 text-xs text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-colors shrink-0"
+                            title="Refresh benchmark data"
+                        >
+                            <RefreshCw className={clsx("w-3.5 h-3.5", isLoading && "animate-spin")} />
+                            Refresh Benchmarks
+                        </button>
+                    </div>
+
                     {/* Models List */}
-                    <div className="overflow-y-auto max-h-[calc(80vh-140px)] p-4">
+                    <div className="overflow-y-auto max-h-[calc(80vh-200px)] p-4">
                         <div className="space-y-2">
-                            {models.map((model) => {
+                            {sortedModels.map((model) => {
                                 const isSelected = model.id === selectedModel.id;
                                 const tierColor = getCostTierColor(model);
                                 const isRefreshing = refreshingId === model.id;
@@ -310,6 +391,43 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiK
                                                 <div className="text-xs text-gray-500 dark:text-slate-400">
                                                     {model.provider}
                                                 </div>
+                                                {/* Benchmark Indicators */}
+                                                {model.benchmarkMatched && (
+                                                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                                        {model.intelligenceIndex !== undefined && (
+                                                            <span
+                                                                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                                                                title="Intelligence Index"
+                                                            >
+                                                                <Brain className="w-2.5 h-2.5" />
+                                                                {model.intelligenceIndex.toFixed(0)}
+                                                            </span>
+                                                        )}
+                                                        {model.codingIndex !== undefined && (
+                                                            <span
+                                                                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                                                title="Coding Index"
+                                                            >
+                                                                <Code2 className="w-2.5 h-2.5" />
+                                                                {model.codingIndex.toFixed(0)}
+                                                            </span>
+                                                        )}
+                                                        {model.outputSpeed !== undefined && (
+                                                            <span
+                                                                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                                                                title="Output Speed (tokens/sec)"
+                                                            >
+                                                                <Zap className="w-2.5 h-2.5" />
+                                                                {model.outputSpeed.toFixed(0)}/s
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {model.benchmarkMatched === false && (
+                                                    <div className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
+                                                        No benchmark data
+                                                    </div>
+                                                )}
                                             </button>
 
                                             {/* Stats & Actions */}
@@ -341,7 +459,7 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault, apiK
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
                                                         onClick={() => handleRefreshPricing(model.id)}
-                                                        disabled={isRefreshing || !apiKey}
+                                                        disabled={isRefreshing}
                                                         className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors disabled:opacity-50"
                                                         title="Refresh pricing"
                                                     >

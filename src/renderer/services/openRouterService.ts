@@ -113,8 +113,21 @@ function parseOpenRouterModel(model: OpenRouterModel): ParsedModel {
 
 /**
  * Fetch all available models from OpenRouter
+ * In Electron: Uses IPC to main process (API key stays secure)
+ * In browser: Falls back to VITE_OPENROUTER_API_KEY for development
  */
-export async function fetchOpenRouterModels(apiKey: string): Promise<ParsedModel[]> {
+export async function fetchOpenRouterModels(): Promise<ParsedModel[]> {
+    // Use IPC bridge in Electron environment
+    if (typeof window !== 'undefined' && window.electron?.openRouter) {
+        return window.electron.openRouter.fetchModels();
+    }
+
+    // Browser fallback for development
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!apiKey) {
+        throw new Error('OpenRouter API key not configured. Run in Electron or set VITE_OPENROUTER_API_KEY.');
+    }
+
     const response = await fetch(`${OPENROUTER_API_BASE}/models`, {
         method: 'GET',
         headers: {
@@ -136,11 +149,23 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<ParsedModel
 
 /**
  * Fetch pricing for a specific model
+ * In Electron: Uses IPC to main process (API key stays secure)
+ * In browser: Falls back to VITE_OPENROUTER_API_KEY for development
  */
 export async function fetchModelPricing(
-    modelId: string,
-    apiKey: string
+    modelId: string
 ): Promise<{ inputPrice: number; outputPrice: number }> {
+    // Use IPC bridge in Electron environment
+    if (typeof window !== 'undefined' && window.electron?.openRouter) {
+        return window.electron.openRouter.fetchPricing(modelId);
+    }
+
+    // Browser fallback for development
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!apiKey) {
+        throw new Error('OpenRouter API key not configured. Run in Electron or set VITE_OPENROUTER_API_KEY.');
+    }
+
     const response = await fetch(`${OPENROUTER_API_BASE}/models`, {
         method: 'GET',
         headers: {

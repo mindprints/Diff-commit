@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { Model, MODELS as SEED_MODELS } from '../constants/models';
 import { ParsedModel, fetchOpenRouterModels, fetchModelPricing } from '../services/openRouterService';
+import { fetchBenchmarks as fetchAABenchmarks, matchBenchmark, ModelBenchmark } from '../services/artificialAnalysisService';
 
 const STORAGE_KEY = 'diff-commit-models';
 
@@ -11,6 +12,13 @@ export interface ExtendedModel extends Model {
     modality?: string;
     description?: string;
     isImported?: boolean;
+    // Benchmark data from Artificial Analysis
+    intelligenceIndex?: number;
+    codingIndex?: number;
+    mathIndex?: number;
+    outputSpeed?: number;       // tokens per second
+    latency?: number;           // milliseconds
+    benchmarkMatched?: boolean; // true if matched to AA benchmark
 }
 
 interface ModelsContextType {
@@ -20,8 +28,9 @@ interface ModelsContextType {
     addModel: (model: ParsedModel) => void;
     addModels: (models: ParsedModel[]) => void;
     removeModel: (modelId: string) => void;
-    updatePricing: (modelId: string, apiKey: string) => Promise<void>;
-    fetchAvailableModels: (apiKey: string) => Promise<ParsedModel[]>;
+    updatePricing: (modelId: string) => Promise<void>;
+    fetchAvailableModels: () => Promise<ParsedModel[]>;
+    fetchBenchmarks: (forceRefresh?: boolean) => Promise<void>;
     resetToDefaults: () => void;
     getModel: (modelId: string) => ExtendedModel | undefined;
 }
@@ -69,10 +78,17 @@ function saveModels(models: ExtendedModel[]): void {
 
 export function ModelsProvider({ children }: { children: ReactNode }) {
     const [models, setModels] = useState<ExtendedModel[]>(() => loadModels());
-    const [isLoading, setIsLoading] = useState(false);
+    const [loadingCount, setLoadingCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
 
+    // Derive isLoading from loadingCount to handle concurrent operations
+    const isLoading = loadingCount > 0;
+
+    // Ref for stable getModel callback
+    const modelsRef = useRef(models);
+
     useEffect(() => {
+        modelsRef.current = models;
         saveModels(models);
     }, [models]);
 
@@ -95,11 +111,11 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
         setModels(prev => prev.filter(m => m.id !== modelId));
     }, []);
 
-    const updatePricing = useCallback(async (modelId: string, apiKey: string) => {
-        setIsLoading(true);
+    const updatePricing = useCallback(async (modelId: string) => {
+        setLoadingCount(c => c + 1);
         setError(null);
         try {
-            const pricing = await fetchModelPricing(modelId, apiKey);
+            const pricing = await fetchModelPricing(modelId);
             setModels(prev => prev.map(m =>
                 m.id === modelId ? { ...m, inputPrice: pricing.inputPrice, outputPrice: pricing.outputPrice } : m
             ));
@@ -108,36 +124,69 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
             setError(message);
             throw e;
         } finally {
-            setIsLoading(false);
+            setLoadingCount(c => c - 1);
         }
     }, []);
 
-    const fetchAvailableModels = useCallback(async (apiKey: string): Promise<ParsedModel[]> => {
-        setIsLoading(true);
+    const fetchAvailableModels = useCallback(async (): Promise<ParsedModel[]> => {
+        setLoadingCount(c => c + 1);
         setError(null);
         try {
-            return await fetchOpenRouterModels(apiKey);
+            return await fetchOpenRouterModels();
         } catch (e) {
             const message = e instanceof Error ? e.message : 'Failed to fetch models';
             setError(message);
             throw e;
         } finally {
-            setIsLoading(false);
+            setLoadingCount(c => c - 1);
         }
     }, []);
+
+    const fetchBenchmarks = useCallback(async (forceRefresh = false): Promise<void> => {
+        setLoadingCount(c => c + 1);
+        setError(null);
+        try {
+            const benchmarks = await fetchAABenchmarks(forceRefresh);
+            console.log('[ModelsContext] Fetched', benchmarks.length, 'benchmarks, matching to', models.length, 'models');
+
+            // Match benchmarks to models and update
+            setModels(prev => prev.map(model => {
+                const benchmark = matchBenchmark(model.id, model.name, benchmarks);
+                if (benchmark) {
+                    return {
+                        ...model,
+                        intelligenceIndex: benchmark.intelligenceIndex,
+                        codingIndex: benchmark.codingIndex,
+                        mathIndex: benchmark.mathIndex,
+                        outputSpeed: benchmark.outputSpeed,
+                        latency: benchmark.latency,
+                        benchmarkMatched: true,
+                    };
+                }
+                return { ...model, benchmarkMatched: false };
+            }));
+        } catch (e) {
+            const message = e instanceof Error ? e.message : 'Failed to fetch benchmarks';
+            setError(message);
+            console.error('[ModelsContext] Benchmark fetch error:', e);
+            // Don't rethrow - benchmarks are optional enhancement
+        } finally {
+            setLoadingCount(c => c - 1);
+        }
+    }, [models.length]); // Depend on models.length to re-match when models change
 
     const resetToDefaults = useCallback(() => {
         setModels(SEED_MODELS.map(seedToExtended));
     }, []);
 
     const getModel = useCallback((modelId: string) => {
-        return models.find(m => m.id === modelId);
-    }, [models]);
+        return modelsRef.current.find(m => m.id === modelId);
+    }, []);
 
     return (
         <ModelsContext.Provider value={{
             models, isLoading, error, addModel, addModels,
-            removeModel, updatePricing, fetchAvailableModels, resetToDefaults, getModel
+            removeModel, updatePricing, fetchAvailableModels, fetchBenchmarks, resetToDefaults, getModel
         }}>
             {children}
         </ModelsContext.Provider>

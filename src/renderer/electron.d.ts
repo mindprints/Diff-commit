@@ -65,6 +65,21 @@ export interface IElectronAPI {
         } | null>;
     };
 
+    // OpenRouter API (secure - key stays in main process)
+    openRouter: {
+        fetchModels: () => Promise<Array<{
+            id: string;
+            name: string;
+            provider: string;
+            contextWindow: number;
+            inputPrice: number;
+            outputPrice: number;
+            modality?: string;
+            description?: string;
+        }>>;
+        fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
+    };
+
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => void;
     onRequestSave: (callback: () => void) => void;

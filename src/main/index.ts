@@ -944,6 +944,181 @@ app.whenReady().then(() => {
         }
     });
 
+    // ========================================
+    // OpenRouter API Handlers (Secure - key stays in main process)
+    // ========================================
+
+    const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
+
+    /**
+     * Fetch all available models from OpenRouter
+     */
+    ipcMain.handle('openrouter:fetch-models', async () => {
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (!apiKey) {
+            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY in your .env file.');
+        }
+
+        try {
+            const response = await fetch(`${OPENROUTER_API_BASE}/models`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                const error = await response.text();
+                throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+            }
+
+            const data = await response.json();
+            const models = data.data || [];
+
+            // Parse models for the renderer
+            return models.map((model: any) => ({
+                id: model.id,
+                name: model.name,
+                provider: extractProviderName(model.id),
+                contextWindow: model.context_length,
+                inputPrice: parseFloat(model.pricing?.prompt || '0') * 1_000_000,
+                outputPrice: parseFloat(model.pricing?.completion || '0') * 1_000_000,
+                modality: parseModality(model.architecture?.modality),
+                description: model.description,
+            }));
+        } catch (e) {
+            console.error('[OpenRouter] Failed to fetch models:', e);
+            throw e;
+        }
+    });
+
+    /**
+     * Fetch pricing for a specific model
+     */
+    ipcMain.handle('openrouter:fetch-pricing', async (event, modelId: string) => {
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (!apiKey) {
+            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY in your .env file.');
+        }
+
+        if (!modelId) {
+            throw new Error('Model ID is required');
+        }
+
+        try {
+            const response = await fetch(`${OPENROUTER_API_BASE}/models`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`OpenRouter API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const models = data.data || [];
+            const model = models.find((m: any) => m.id === modelId);
+
+            if (!model) {
+                throw new Error(`Model not found: ${modelId}`);
+            }
+
+            return {
+                inputPrice: parseFloat(model.pricing?.prompt || '0') * 1_000_000,
+                outputPrice: parseFloat(model.pricing?.completion || '0') * 1_000_000,
+            };
+        } catch (e) {
+            console.error('[OpenRouter] Failed to fetch pricing:', e);
+            throw e;
+        }
+    });
+
+    // Helper: Extract provider name from model ID
+    function extractProviderName(modelId: string): string {
+        const parts = modelId.split('/');
+        if (parts.length < 2) return 'Unknown';
+
+        const providerSlug = parts[0];
+        const providerMap: Record<string, string> = {
+            'openai': 'OpenAI',
+            'anthropic': 'Anthropic',
+            'google': 'Google',
+            'meta-llama': 'Meta',
+            'mistralai': 'Mistral',
+            'cohere': 'Cohere',
+            'deepseek': 'DeepSeek',
+            'perplexity': 'Perplexity',
+            'x-ai': 'xAI',
+            'amazon': 'Amazon',
+            'microsoft': 'Microsoft',
+            'nvidia': 'NVIDIA',
+            'qwen': 'Qwen',
+        };
+
+        return providerMap[providerSlug.toLowerCase()] ||
+            providerSlug.charAt(0).toUpperCase() + providerSlug.slice(1);
+    }
+
+    // Helper: Parse modality string
+    function parseModality(modality?: string): string {
+        if (!modality) return 'text';
+        const inputPart = modality.split('->')[0] || modality;
+        return inputPart.toLowerCase();
+    }
+
+    // ========================================
+    // Artificial Analysis API Handlers (Secure - key stays in main process)
+    // ========================================
+
+    const ARTIFICIAL_ANALYSIS_API_BASE = 'https://artificialanalysis.ai/api/v2';
+
+    /**
+     * Fetch model benchmarks from Artificial Analysis
+     * Returns intelligence scores, speed metrics, and pricing data
+     */
+    ipcMain.handle('artificialanalysis:fetch-benchmarks', async () => {
+        const apiKey = process.env.ARTIFICIAL_ANALYSIS_API_KEY;
+        if (!apiKey) {
+            throw new Error('Artificial Analysis API key not configured. Set ARTIFICIAL_ANALYSIS_API_KEY in your .env file.');
+        }
+
+        try {
+            const response = await fetch(`${ARTIFICIAL_ANALYSIS_API_BASE}/data/llms/models`, {
+                method: 'GET',
+                headers: {
+                    'x-api-key': apiKey,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                const error = await response.text();
+                throw new Error(`Artificial Analysis API error: ${response.status} - ${error}`);
+            }
+
+            const data = await response.json();
+
+            // Debug logging to understand response structure
+            console.log('[ArtificialAnalysis] Response type:', typeof data);
+            console.log('[ArtificialAnalysis] Is array:', Array.isArray(data));
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+                console.log('[ArtificialAnalysis] Object keys:', Object.keys(data));
+                // Check for common data wrapper keys
+                if (data.data) console.log('[ArtificialAnalysis] data.data length:', Array.isArray(data.data) ? data.data.length : 'not array');
+                if (data.models) console.log('[ArtificialAnalysis] data.models length:', Array.isArray(data.models) ? data.models.length : 'not array');
+            }
+
+            return data;
+        } catch (e) {
+            console.error('[ArtificialAnalysis] Failed to fetch benchmarks:', e);
+            throw e;
+        }
+    });
+
     createWindow();
 });
 

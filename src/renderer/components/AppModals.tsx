@@ -151,7 +151,6 @@ export function AppModals() {
                 onClose={() => setShowModelsModal(false)}
                 selectedModel={selectedModel}
                 onSetDefault={setDefaultModel}
-                apiKey={import.meta.env.VITE_OPENROUTER_API_KEY || ''}
             />
 
             {/* Projects Panel */}

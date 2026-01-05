@@ -53,6 +53,13 @@ Verify claims with real-time web search.
 *   **Organization**: Organize prompts with custom names and colors.
 *   **Quick Access**: Seamlessly switch between built-in presets and your own custom library.
 
+### 📊 Model Benchmarks (Artificial Analysis)
+*   **Intelligence Scores**: View AI model benchmarks (Intelligence, Coding, Math indexes) from Artificial Analysis.
+*   **Task-Based Sorting**: Sort models by task type (Coding, Intelligence, Math, Speed, Value).
+*   **Price/Performance**: Compare models by value metric (intelligence per dollar).
+*   **Fuzzy Matching**: Automatically matches your OpenRouter models to benchmark data.
+*   **24-Hour Cache**: Benchmark data cached locally to minimize API calls.
+
 ### 🎨 Theme & Personalization
 *   **Dynamic Hue Slider**: Adjust the application's accent color in real-time with a compact hue slider (0-360°).
 *   **Adaptive Dark Mode**: Full support for both light and dark system preferences.
@@ -105,6 +112,7 @@ My Writing Projects/            # Repository (folder you create/open)
 *   Node.js (v18+)
 *   OpenRouter API Key (for AI features)
 *   (Optional) Perplexity API Key (for Fact Checking)
+*   (Optional) Artificial Analysis API Key (for Model Benchmarks)
 
 ### Installation
 1.  Clone the repo.
@@ -115,7 +123,10 @@ My Writing Projects/            # Repository (folder you create/open)
 3.  Set up environment:
     ```bash
     cp .env.example .env
-    # Add your OPENROUTER_API_KEY to .env
+    # Add your API keys to .env:
+    # OPENROUTER_API_KEY=your_key
+    # PERPLEXITY_API_KEY=your_key (optional)
+    # ARTIFICIAL_ANALYSIS_API_KEY=your_key (optional)
     ```
 
 ### Running Locally

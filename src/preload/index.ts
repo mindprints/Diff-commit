@@ -15,6 +15,36 @@ interface HierarchyAPI {
     } | null>;
 }
 
+// Type definitions for the OpenRouter sub-API
+interface OpenRouterAPI {
+    fetchModels: () => Promise<Array<{
+        id: string;
+        name: string;
+        provider: string;
+        contextWindow: number;
+        inputPrice: number;
+        outputPrice: number;
+        modality?: string;
+        description?: string;
+    }>>;
+    fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
+}
+
+// Type definitions for the Artificial Analysis sub-API
+interface ArtificialAnalysisAPI {
+    fetchBenchmarks: () => Promise<Array<{
+        model_name?: string;
+        creator?: string;
+        intelligence_index?: number;
+        coding_index?: number;
+        math_index?: number;
+        output_speed?: number;
+        latency?: number;
+        price_input?: number;
+        price_output?: number;
+    }>>;
+}
+
 // Full ElectronAPI interface
 export interface ElectronAPI {
     platform: string;
@@ -52,6 +82,12 @@ export interface ElectronAPI {
 
     // Hierarchy Enforcement System
     hierarchy: HierarchyAPI;
+
+    // OpenRouter API (secure - key stays in main process)
+    openRouter: OpenRouterAPI;
+
+    // Artificial Analysis API (secure - key stays in main process)
+    artificialAnalysis: ArtificialAnalysisAPI;
 
     // AI Prompts CRUD
     getPrompts: () => Promise<AIPrompt[]>;
@@ -143,6 +179,17 @@ const electronAPI: ElectronAPI = {
     // AI Prompts CRUD
     getPrompts: () => ipcRenderer.invoke('get-prompts'),
     savePrompts: (prompts: AIPrompt[]) => ipcRenderer.invoke('save-prompts', prompts),
+
+    // OpenRouter API (secure - key stays in main process)
+    openRouter: {
+        fetchModels: () => ipcRenderer.invoke('openrouter:fetch-models'),
+        fetchPricing: (modelId: string) => ipcRenderer.invoke('openrouter:fetch-pricing', modelId),
+    },
+
+    // Artificial Analysis API (secure - key stays in main process)
+    artificialAnalysis: {
+        fetchBenchmarks: () => ipcRenderer.invoke('artificialanalysis:fetch-benchmarks'),
+    },
 
     // Menu event listeners (from main process)
     onFileOpened: (callback: (content: string, path: string) => void) =>
