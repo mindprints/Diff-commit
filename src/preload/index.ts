@@ -68,6 +68,7 @@ export interface ElectronAPI {
     // File Operations
     saveFile: (content: string, defaultName?: string) => Promise<string | null>;
     exportVersions: (commits: TextCommit[]) => Promise<string | null>;
+    saveImage: (base64Data: string, defaultName: string) => Promise<string | null>;
 
     // Repository & Project System
     openRepository: () => Promise<{ path: string; projects: Project[] } | null>;
@@ -156,6 +157,7 @@ const electronAPI: ElectronAPI = {
     // File Operations
     saveFile: (content: string, defaultName?: string) => ipcRenderer.invoke('save-file', content, defaultName),
     exportVersions: (commits: TextCommit[]) => ipcRenderer.invoke('export-versions', commits),
+    saveImage: (base64Data: string, defaultName: string) => ipcRenderer.invoke('save-image', base64Data, defaultName),
 
     // Repository & Project System
     openRepository: () => ipcRenderer.invoke('open-repository'),

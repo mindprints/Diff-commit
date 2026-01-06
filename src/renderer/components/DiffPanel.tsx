@@ -4,22 +4,47 @@ import clsx from 'clsx';
 import { DiffSegment as DiffSegmentComponent } from './DiffSegment';
 import { DiffSegment, FontFamily } from '../types';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
+import { ImageViewer } from './ImageViewer';
 
-import { useUI, useEditor } from '../contexts';
+import { useUI, useEditor, useAI } from '../contexts';
 
 export function DiffPanel() {
-    const { leftPanelWidth } = useUI();
+    const { leftPanelWidth, showImageViewer } = useUI();
     const {
         handleAcceptAll, handleRejectAll,
         leftContainerRef, handleScrollSync,
         fontFamily, fontSize,
         segments, toggleSegment, originalText
     } = useEditor();
+    const {
+        isGeneratingImage,
+        generatedImage,
+        handleImageRegenerate,
+        handleImageSave,
+        clearGeneratedImage
+    } = useAI();
+
+    // Show ImageViewer when generating or when we have an image
+    const shouldShowImageViewer = showImageViewer || isGeneratingImage || generatedImage !== null;
+
     return (
         <div
-            className="flex flex-col h-full overflow-hidden"
+            className="relative flex flex-col h-full overflow-hidden"
             style={{ backgroundColor: 'var(--bg-panel)' }}
         >
+            {/* ImageViewer Overlay */}
+            {shouldShowImageViewer && (
+                <ImageViewer
+                    imageData={generatedImage?.data ?? null}
+                    prompt={generatedImage?.prompt ?? ''}
+                    isLoading={isGeneratingImage}
+                    onSave={handleImageSave}
+                    onRegenerate={handleImageRegenerate}
+                    onClose={clearGeneratedImage}
+                />
+            )}
+
+            {/* Normal Diff View Content */}
             <div id="panel-diff-header" className="flex-none h-14 p-4 flex justify-between items-center transition-colors duration-200" style={{ backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-color)' }}>
                 <h2 className="font-semibold text-gray-700 dark:text-slate-300 flex items-center gap-2">
                     <FileText className="w-4 h-4" />

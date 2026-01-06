@@ -32,6 +32,14 @@ export interface IElectronAPI {
     saveFile: (content: string, defaultName?: string) => Promise<string | null>;
     exportVersions: (versions: TextCommit[]) => Promise<string | null>;
 
+    /**
+     * Save a base64-encoded image to disk via save dialog
+     * @param base64Data - The image data (data URL or raw base64)
+     * @param defaultName - Default filename for the save dialog
+     * @returns The saved file path, or null if cancelled
+     */
+    saveImage: (base64Data: string, defaultName: string) => Promise<string | null>;
+
     // Repository & Project System
     openRepository: () => Promise<{ path: string; projects: Project[] } | null>;
     createRepository: () => Promise<{ path: string; projects: Project[] } | null>;

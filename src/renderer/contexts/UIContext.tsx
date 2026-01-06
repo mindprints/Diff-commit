@@ -41,6 +41,8 @@ interface UIContextType {
     setIsPromptPanelVisible: (visible: boolean) => void;
     isHeaderVisible: boolean;
     setIsHeaderVisible: (visible: boolean) => void;
+    showImageViewer: boolean;
+    setShowImageViewer: (show: boolean) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -64,6 +66,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [leftPanelWidth, setLeftPanelWidth] = useState(50);
     const [isPromptPanelVisible, setIsPromptPanelVisible] = useState(true);
     const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+    const [showImageViewer, setShowImageViewer] = useState(false);
 
     const isResizingLeftRight = useRef(false);
     const isResizingTopBottom = useRef(false);
@@ -145,7 +148,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
             startResizing, startResizingVertical,
             handleOpenContextMenu,
             isPromptPanelVisible, setIsPromptPanelVisible,
-            isHeaderVisible, setIsHeaderVisible
+            isHeaderVisible, setIsHeaderVisible,
+            showImageViewer, setShowImageViewer
         }}>
             {children}
         </UIContext.Provider>

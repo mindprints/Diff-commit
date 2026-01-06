@@ -3,12 +3,22 @@ import { usePrompts } from '../hooks/usePrompts';
 import { useAsyncAI } from '../hooks/useAsyncAI';
 import { useEditor } from './EditorContext';
 import { useUI } from './UIContext';
+import { useModels } from '../hooks/useModels';
 import { MODELS, Model } from '../constants/models';
 import { runFactCheck, getFactCheckModels } from '../services/factChecker';
 import { checkSpelling } from '../services/spellChecker';
 import { polishMultipleRanges } from '../services/ai';
 import { expandToWordBoundaries } from '../utils/textUtils';
 import { ViewMode, AILogEntry, PolishMode, AIPrompt } from '../types';
+import {
+    isImageGenerationRequest,
+    extractImagePrompt,
+    isImageCapableModel,
+    generateImage,
+    generateFilename,
+    KNOWN_IMAGE_MODELS,
+    ImageGenerationResponse
+} from '../services/imageGenerationService';
 
 interface AIContextType {
     // usePrompts
@@ -57,6 +67,14 @@ interface AIContextType {
     handleSaveAsPrompt: () => void;
     handleSavePromptSubmit: (prompt: AIPrompt) => Promise<void>;
     handleRate: (id: string, rating: number, feedback?: string) => Promise<void>;
+
+    // Image Generation
+    isGeneratingImage: boolean;
+    generatedImage: { data: string; prompt: string } | null;
+    handleImageGeneration: (prompt: string) => Promise<void>;
+    handleImageRegenerate: () => Promise<void>;
+    handleImageSave: () => Promise<void>;
+    clearGeneratedImage: () => void;
 }
 
 const AIContext = createContext<AIContextType | undefined>(undefined);
@@ -69,8 +87,11 @@ export function AIProvider({ children }: { children: ReactNode }) {
     } = useEditor();
     const {
         setErrorMessage, setActiveLogId, contextMenu, setSavePromptDialogOpen,
-        setContextMenu, setIsSpeaking, isSpeaking, setShowPromptsModal
+        setContextMenu, setIsSpeaking, isSpeaking, setShowPromptsModal,
+        setShowImageViewer
     } = useUI();
+
+    const { models: importedModels } = useModels();
 
     // Initialize model from localStorage or fallback to first model
     const getInitialModel = (): Model => {
@@ -93,6 +114,11 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [factCheckProgress, setFactCheckProgress] = useState('');
     const [pendingPromptText, setPendingPromptText] = useState('');
     const [activePromptId, setActivePromptId] = useState('grammar');
+
+    // Image generation state
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+    const [generatedImage, setGeneratedImage] = useState<{ data: string; prompt: string } | null>(null);
+    const lastImagePromptRef = useRef<string>('');
 
     const {
         prompts: aiPrompts,
@@ -288,6 +314,11 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setErrorMessage(null);
         if (promptIdOrInstruction === 'spelling_local') {
             return handleLocalSpellCheck();
+        }
+
+        // Check if this is an image generation request
+        if (isImageGenerationRequest(promptIdOrInstruction)) {
+            return handleImageGeneration(promptIdOrInstruction);
         }
 
         const isKnownBuiltIn = builtInPrompts.some(p => p.id === promptIdOrInstruction);
@@ -652,6 +683,166 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setActiveLogId(null);
     }, [setActiveLogId]);
 
+    // ========================================
+    // Image Generation Handlers
+    // ========================================
+
+    /**
+     * Find an image-capable model from the user's imported models
+     */
+    const findImageCapableModel = useCallback((): Model | null => {
+        // First check if selected model is image-capable
+        if (isImageCapableModel(selectedModel.id)) {
+            return selectedModel;
+        }
+
+        // Search through imported models
+        for (const model of importedModels) {
+            if (isImageCapableModel(model.id)) {
+                return model;
+            }
+        }
+
+        // Search through default models
+        for (const model of MODELS) {
+            if (isImageCapableModel(model.id)) {
+                return model;
+            }
+        }
+
+        return null;
+    }, [selectedModel, importedModels]);
+
+    /**
+     * Handle image generation request
+     */
+    const handleImageGeneration = useCallback(async (prompt: string) => {
+        const imageModel = findImageCapableModel();
+
+        if (!imageModel) {
+            setErrorMessage(
+                'No image generation model available. Please import an image model (e.g., FLUX, DALL-E) from the Model Manager.'
+            );
+            return;
+        }
+
+        // Extract the actual image prompt
+        const imagePrompt = extractImagePrompt(prompt);
+        if (!imagePrompt.trim()) {
+            setErrorMessage('Please provide a description for the image.');
+            return;
+        }
+
+        // Store prompt for regeneration
+        lastImagePromptRef.current = imagePrompt;
+
+        // Get editor content as additional context
+        const editorContent = previewTextRef.current?.trim() || '';
+
+        setIsGeneratingImage(true);
+        setGeneratedImage(null);
+        setShowImageViewer(true);
+        setErrorMessage(null);
+
+        const startTime = Date.now();
+        const response = await generateImage(imagePrompt, imageModel, editorContent);
+        const durationMs = Date.now() - startTime;
+
+        if (response.isCancelled) {
+            setIsGeneratingImage(false);
+            return;
+        }
+
+        if (response.isError || !response.imageData) {
+            setErrorMessage(response.errorMessage || 'Image generation failed.');
+            setIsGeneratingImage(false);
+            return;
+        }
+
+        setGeneratedImage({
+            data: response.imageData,
+            prompt: imagePrompt
+        });
+        setIsGeneratingImage(false);
+
+        // Log usage and cost
+        if (response.usage) {
+            updateCost(response.usage);
+
+            const cost = (response.usage.inputTokens / 1_000_000 * imageModel.inputPrice) +
+                (response.usage.outputTokens / 1_000_000 * imageModel.outputPrice);
+
+            const logEntry: AILogEntry = {
+                id: crypto.randomUUID(),
+                timestamp: Date.now(),
+                modelId: imageModel.id,
+                modelName: imageModel.name,
+                taskType: 'image-generation',
+                inputTokens: response.usage.inputTokens,
+                outputTokens: response.usage.outputTokens,
+                cost,
+                durationMs
+            };
+
+            if (window.electron && window.electron.logUsage) {
+                window.electron.logUsage(logEntry);
+            }
+            setActiveLogId(logEntry.id);
+        }
+    }, [findImageCapableModel, previewTextRef, setErrorMessage, setShowImageViewer, updateCost, setActiveLogId]);
+
+    /**
+     * Regenerate the last image with the same prompt
+     */
+    const handleImageRegenerate = useCallback(async () => {
+        const prompt = lastImagePromptRef.current;
+        if (prompt) {
+            await handleImageGeneration(`generate image ${prompt}`);
+        }
+    }, [handleImageGeneration]);
+
+    /**
+     * Save the generated image to disk
+     */
+    const handleImageSave = useCallback(async () => {
+        if (!generatedImage) return;
+
+        const filename = generateFilename(generatedImage.prompt);
+
+        if (window.electron && window.electron.saveImage) {
+            try {
+                const savedPath = await window.electron.saveImage(
+                    generatedImage.data,
+                    filename
+                );
+                if (savedPath) {
+                    console.log('[ImageGen] Saved to:', savedPath);
+                }
+            } catch (e) {
+                console.error('[ImageGen] Save failed:', e);
+                setErrorMessage('Failed to save image.');
+            }
+        } else {
+            // Fallback: download via browser
+            const link = document.createElement('a');
+            link.href = generatedImage.data;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }, [generatedImage, setErrorMessage]);
+
+    /**
+     * Clear the generated image and close the viewer
+     */
+    const clearGeneratedImage = useCallback(() => {
+        setGeneratedImage(null);
+        setIsGeneratingImage(false);
+        setShowImageViewer(false);
+        lastImagePromptRef.current = '';
+    }, [setShowImageViewer]);
+
     return (
         <AIContext.Provider value={{
             aiPrompts, builtInPrompts, customPrompts, getPrompt, createPrompt, updatePrompt, deletePrompt, resetBuiltIn, promptsLoading,
@@ -662,7 +853,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
             selectedModel, setSelectedModel, setDefaultModel, sessionCost, setSessionCost, updateCost,
             handleAIEdit, handleFactCheck, handleLocalSpellCheck, handleReadAloud, cancelAIOperation,
             handleQuickSend,
-            handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate
+            handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
+            // Image generation
+            isGeneratingImage, generatedImage,
+            handleImageGeneration, handleImageRegenerate, handleImageSave, clearGeneratedImage
         }}>
             {children}
         </AIContext.Provider>

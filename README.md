@@ -60,6 +60,16 @@ Verify claims with real-time web search.
 *   **Fuzzy Matching**: Automatically matches your OpenRouter models to benchmark data.
 *   **24-Hour Cache**: Benchmark data cached locally to minimize API calls.
 
+### 🖼️ AI Image Generation
+*   **Prompt Panel Integration**: Generate images directly from the Prompt Panel using natural language.
+*   **Trigger Keywords**: Use phrases like `generate image`, `create image`, or `image:` to activate.
+*   **Model Auto-Detection**: Automatically detects image-capable models (Gemini, FLUX, DALL-E, Stable Diffusion).
+*   **Smart Fallback**: If current model doesn't support images, finds an alternative from your imported models.
+*   **Image Viewer Overlay**: View, save (as PNG), or regenerate images in a dedicated overlay.
+*   **Context-Aware**: Include editor content as context for more relevant image generation.
+
+> See [docs/image-generation.md](docs/image-generation.md) for detailed documentation.
+
 ### 🎨 Theme & Personalization
 *   **Dynamic Hue Slider**: Adjust the application's accent color in real-time with a compact hue slider (0-360°).
 *   **Adaptive Dark Mode**: Full support for both light and dark system preferences.
@@ -167,6 +177,7 @@ To avoid confusion during development:
 ## 📝 Changelog (v1.4.0)
 
 ### New Features
+*   **AI Image Generation**: Generate images from the Prompt Panel using natural language. Supports Gemini, FLUX, DALL-E, and Stable Diffusion models with automatic model detection and fallback.
 *   **Consolidated Prompt System**: centralizes AI execution around a single "Active Prompt" workflow.
 *   **Active Prompt Dropdown**: Transform the AI header menu into a selector for the global active prompt.
 *   **Split AI Edit Button**: New primary header action to execute the active prompt with one click.

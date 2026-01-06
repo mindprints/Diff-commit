@@ -402,6 +402,40 @@ app.whenReady().then(() => {
         return null;
     });
 
+    // Save image handler
+    ipcMain.handle('save-image', async (event, base64Data: string, defaultName: string) => {
+        try {
+            const result = await dialog.showSaveDialog(mainWindow, {
+                defaultPath: defaultName || 'generated-image.png',
+                filters: [
+                    { name: 'PNG Images', extensions: ['png'] },
+                    { name: 'JPEG Images', extensions: ['jpg', 'jpeg'] },
+                    { name: 'WebP Images', extensions: ['webp'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
+            });
+
+            if (!result.canceled && result.filePath) {
+                // Extract base64 data from data URL if present
+                let imageData = base64Data;
+                if (base64Data.includes(',')) {
+                    imageData = base64Data.split(',')[1];
+                }
+
+                // Write the image file
+                const buffer = Buffer.from(imageData, 'base64');
+                fs.writeFileSync(result.filePath, buffer);
+
+                console.log('[SaveImage] Saved to:', result.filePath);
+                return result.filePath;
+            }
+            return null;
+        } catch (error) {
+            console.error('[SaveImage] Error:', error);
+            throw error;
+        }
+    });
+
     // Supported file extensions for project content
     const PROJECT_CONTENT_FILE = 'content.md';
     const DIFF_COMMIT_DIR = '.diff-commit';
