@@ -183,6 +183,7 @@ function parseBenchmarks(raw: unknown): ModelBenchmark[] {
             // Extract creator from nested model_creator object or flat field
             const creator = getNestedString(item, 'model_creator.name') ||
                 getString(item, 'creator', 'provider', 'organization');
+            if (!creator) return null;
 
             // Extract benchmark scores from nested evaluations object
             const intelligenceIndex = getNestedNumber(item, 'evaluations.artificial_analysis_intelligence_index') ??
@@ -218,6 +219,21 @@ function parseBenchmarks(raw: unknown): ModelBenchmark[] {
 }
 
 /**
+ * Load benchmarks from cache, ignoring expiry (for fallback scenarios)
+ */
+function loadFromCacheIgnoreExpiry(): ModelBenchmark[] | null {
+    try {
+        const stored = localStorage.getItem(CACHE_KEY);
+        if (!stored) return null;
+        const cache: CacheEntry = JSON.parse(stored);
+        return cache.data;
+    } catch (e) {
+        console.warn('[ArtificialAnalysis] Failed to load cache:', e);
+        return null;
+    }
+}
+
+/**
  * Fetch benchmarks from Artificial Analysis API
  * Uses IPC bridge in Electron, with localStorage caching
  */
@@ -237,8 +253,8 @@ export async function fetchBenchmarks(forceRefresh = false): Promise<ModelBenchm
             return benchmarks;
         } catch (e) {
             console.error('[ArtificialAnalysis] API fetch failed:', e);
-            // Return stale cache if available
-            const staleCache = loadFromCache();
+            // Return stale cache if available (ignoring expiry for fallback)
+            const staleCache = loadFromCacheIgnoreExpiry();
             if (staleCache) {
                 console.log('[ArtificialAnalysis] Returning stale cache due to error');
                 return staleCache;

@@ -199,7 +199,9 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
     // Auto-fetch benchmarks when modal opens (if not already loaded)
     useEffect(() => {
         if (isOpen && !benchmarksLoaded && !isLoading) {
-            fetchBenchmarks().then(() => setBenchmarksLoaded(true));
+            fetchBenchmarks()
+                .then(() => setBenchmarksLoaded(true))
+                .catch((e) => console.error('Failed to fetch benchmarks:', e));
         }
     }, [isOpen, benchmarksLoaded, isLoading, fetchBenchmarks]);
 
@@ -228,10 +230,12 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
                     break;
                 case 'value':
                     // Value = intelligence / (input price + output price), higher is better
-                    const aPrice = (a.inputPrice || 1) + (a.outputPrice || 1);
-                    const bPrice = (b.inputPrice || 1) + (b.outputPrice || 1);
-                    aVal = (a.intelligenceIndex ?? 0) / aPrice;
-                    bVal = (b.intelligenceIndex ?? 0) / bPrice;
+                    // Use nullish coalescing to treat 0 as valid (free models)
+                    const aPrice = (a.inputPrice ?? 1) + (a.outputPrice ?? 1);
+                    const bPrice = (b.inputPrice ?? 1) + (b.outputPrice ?? 1);
+                    // Guard against zero price (free models get max value if they have intelligence)
+                    aVal = aPrice > 0 ? (a.intelligenceIndex ?? 0) / aPrice : 0;
+                    bVal = bPrice > 0 ? (b.intelligenceIndex ?? 0) / bPrice : 0;
                     break;
             }
             return bVal - aVal; // Descending order

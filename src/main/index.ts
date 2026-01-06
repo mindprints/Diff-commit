@@ -960,13 +960,18 @@ app.whenReady().then(() => {
         }
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
             const response = await fetch(`${OPENROUTER_API_BASE}/models`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                 },
+                signal: controller.signal,
             });
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const error = await response.text();
@@ -974,10 +979,21 @@ app.whenReady().then(() => {
             }
 
             const data = await response.json();
-            const models = data.data || [];
+            const models = Array.isArray(data?.data) ? data.data : [];
+
+            if (models.length === 0) {
+                console.warn('[OpenRouter] No models returned from API');
+            }
 
             // Parse models for the renderer
-            return models.map((model: any) => ({
+            return models.map((model: {
+                id: string;
+                name: string;
+                context_length?: number;
+                pricing?: { prompt?: string; completion?: string };
+                architecture?: { modality?: string };
+                description?: string;
+            }) => ({
                 id: model.id,
                 name: model.name,
                 provider: extractProviderName(model.id),
@@ -1007,13 +1023,18 @@ app.whenReady().then(() => {
         }
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
             const response = await fetch(`${OPENROUTER_API_BASE}/models`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                 },
+                signal: controller.signal,
             });
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 throw new Error(`OpenRouter API error: ${response.status}`);
@@ -1087,13 +1108,18 @@ app.whenReady().then(() => {
         }
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
             const response = await fetch(`${ARTIFICIAL_ANALYSIS_API_BASE}/data/llms/models`, {
                 method: 'GET',
                 headers: {
                     'x-api-key': apiKey,
                     'Content-Type': 'application/json',
                 },
+                signal: controller.signal,
             });
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const error = await response.text();

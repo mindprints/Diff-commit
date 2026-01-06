@@ -172,6 +172,7 @@ To avoid confusion during development:
 *   **Split AI Edit Button**: New primary header action to execute the active prompt with one click.
 *   **Prompt Panel Execution**: Type raw instructions in the Prompt Panel and press `Enter` to modify text or generate new content from scratch.
 *   **Unified Ctrl+Click**: `Ctrl+Click` on any word now consistently triggers the currently active prompt for rapid iteration.
+*   **Model Benchmarks**: Compare AI models by intelligence, coding, math, speed, and value scores with 24-hour cached benchmark data from Artificial Analysis.
 
 ### Stability & Performance
 *   **Async Operation Safety**: Resolved React lifecycle crashes during parallel AI operations.

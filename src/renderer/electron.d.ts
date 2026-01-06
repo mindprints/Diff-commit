@@ -65,18 +65,51 @@ export interface IElectronAPI {
         } | null>;
     };
 
-    // OpenRouter API (secure - key stays in main process)
+    /**
+     * OpenRouter API (secure - key stays in main process)
+     * 
+     * @remarks
+     * **Pricing Precision Note**: The `inputPrice` and `outputPrice` fields use JavaScript's
+     * `number` type. While acceptable for display and comparison, be aware that IEEE 754
+     * double-precision floats can introduce rounding errors in financial calculations.
+     * 
+     * OpenRouter returns pricing as strings (e.g., "0.0000015"), which we convert to numbers
+     * after multiplying by 1,000,000 for USD per 1M tokens. For precise cost calculations,
+     * consider using a decimal library or converting to integer micro-cents.
+     * 
+     * **Error Cases**: Promises may reject if:
+     * - API key is not configured (OPENROUTER_API_KEY env var missing)
+     * - Network timeout (30 second limit)
+     * - OpenRouter API returns non-2xx status
+     */
     openRouter: {
+        /**
+         * Fetch all available models from OpenRouter
+         * @returns Array of model metadata with pricing
+         */
         fetchModels: () => Promise<Array<{
+            /** Unique model identifier (e.g., "anthropic/claude-3.5-sonnet") */
             id: string;
+            /** Human-readable model name */
             name: string;
+            /** Provider name (e.g., "Anthropic", "OpenAI") */
             provider: string;
+            /** Maximum context window in tokens */
             contextWindow: number;
+            /** Input price in USD per 1M tokens (converted from per-token rate) */
             inputPrice: number;
+            /** Output price in USD per 1M tokens (converted from per-token rate) */
             outputPrice: number;
+            /** Model modality (e.g., "text", "text+image") */
             modality?: string;
+            /** Model description */
             description?: string;
         }>>;
+        /**
+         * Fetch current pricing for a specific model
+         * @param modelId - The model ID to fetch pricing for
+         * @returns Current input and output prices in USD per 1M tokens
+         */
         fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
     };
 
