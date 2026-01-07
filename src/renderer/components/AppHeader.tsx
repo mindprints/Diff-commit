@@ -21,6 +21,7 @@ import clsx from 'clsx';
 import { ViewMode, FontFamily } from '../types';
 import { Model, getCostTier } from '../constants/models';
 import { useModels } from '../hooks/useModels';
+import { isImageCapableModel } from '../services/imageGenerationService';
 // Logo import removed
 import { Button } from './Button';
 import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
@@ -40,7 +41,7 @@ export function AppHeader() {
     } = useUI();
 
     const {
-        sessionCost, selectedModel, setSelectedModel
+        sessionCost, selectedModel, setSelectedModel, selectedImageModel, setDefaultImageModel
     } = useAI();
 
     const {
@@ -255,6 +256,39 @@ export function AppHeader() {
                                                 <div className={clsx("w-2 h-2 rounded-full", isScrollSyncEnabled ? "bg-indigo-500 animate-pulse" : "bg-gray-300 dark:bg-slate-700")}></div>
                                             </button>
                                         </div>
+                                    </div>
+
+                                    {/* Default Image Model */}
+                                    <div className="space-y-2 border-t border-gray-50 dark:border-slate-700 pt-3">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            🖼️ Image Model
+                                        </label>
+                                        <select
+                                            value={selectedImageModel?.id || ''}
+                                            onChange={(e) => {
+                                                if (e.target.value === '') {
+                                                    setDefaultImageModel(null);
+                                                } else {
+                                                    const model = models.find(m => m.id === e.target.value);
+                                                    if (model) {
+                                                        if (isImageCapableModel(model.id)) {
+                                                            setDefaultImageModel(model);
+                                                        } else {
+                                                            alert('This model does not support image generation. Please select a model with image capabilities (FLUX, DALL-E, Stable Diffusion, etc.)');
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                            className="w-full text-xs bg-gray-50 dark:bg-slate-900/50 border border-gray-100 dark:border-slate-700/50 rounded-lg px-2 py-2 text-gray-700 dark:text-slate-200 outline-none"
+                                        >
+                                            <option value="">Auto-detect</option>
+                                            {models.filter(m => isImageCapableModel(m.id)).map(m => (
+                                                <option key={m.id} value={m.id}>🖼️ {m.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-[9px] text-gray-400 dark:text-slate-500">
+                                            Used for Create Image mode
+                                        </p>
                                     </div>
 
                                     <div className="border-t border-gray-50 dark:border-slate-700 my-1 pt-3">

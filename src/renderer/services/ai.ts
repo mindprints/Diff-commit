@@ -3,9 +3,38 @@ import { AIPrompt, PolishMode } from "../types";
 import { Model } from "../constants/models";
 import { DEFAULT_PROMPTS, getPromptById } from "../constants/prompts";
 
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
+// API key cache for performance (avoid repeated IPC calls)
+let cachedApiKey: string | null = null;
+
+/**
+ * Get the OpenRouter API key securely.
+ * In Electron: Uses IPC to get the key from the secure main process storage.
+ * In Web/Vite: Falls back to build-time environment variable.
+ */
+async function getOpenRouterApiKey(): Promise<string> {
+    if (cachedApiKey !== null) return cachedApiKey;
+
+    // In Electron, use secure IPC handler
+    if (window.electron?.getApiKey) {
+        cachedApiKey = await window.electron.getApiKey('openrouter') || '';
+        return cachedApiKey;
+    }
+
+    // Fallback for web/Vite development
+    cachedApiKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
+    return cachedApiKey;
+}
+
+/**
+ * Clear the cached API key (call this when user changes their key)
+ */
+export function clearApiKeyCache(): void {
+    cachedApiKey = null;
+}
+
 const SITE_URL = 'http://localhost:5173';
 const SITE_NAME = 'Diff & Commit AI';
+
 
 interface AIResponse {
     text: string;
@@ -24,17 +53,18 @@ async function callOpenRouter(
     responseFormat?: any,
     signal?: AbortSignal
 ): Promise<AIResponse> {
-    if (!OPENROUTER_API_KEY) {
+    // Get API key securely at runtime
+    const apiKey = await getOpenRouterApiKey();
+    if (!apiKey) {
         console.warn("OpenRouter API Key is missing.");
-        // Fallback or error handling
-        return { text: "API Key missing. Check .env configuration.", isError: true };
+        return { text: "API Key missing. Please configure your OpenRouter API key.", isError: true };
     }
 
     try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+                "Authorization": `Bearer ${apiKey}`,
                 "HTTP-Referer": SITE_URL,
                 "X-Title": SITE_NAME,
                 "Content-Type": "application/json"

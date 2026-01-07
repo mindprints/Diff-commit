@@ -66,6 +66,9 @@ export function useProjects() {
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
                     setCurrentProject(null);
+
+                    // Save for skip preloading feature
+                    localStorage.setItem('last_repository_path', result.path);
                 }
             } else if (browserFS.isFileSystemAccessSupported()) {
                 // Browser mode - use File System Access API

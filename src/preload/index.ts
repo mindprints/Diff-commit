@@ -122,6 +122,7 @@ export interface ElectronAPI {
     onMenuToolsPrompts: (callback: () => void) => void;
     onMenuToolsProjects: (callback: () => void) => void;
     onMenuToolsModels: (callback: () => void) => void;
+    onMenuToolsSettings: (callback: () => void) => void;
 
     // Cleanup listeners
     removeAllListeners: (channel: string) => void;
@@ -246,6 +247,8 @@ const electronAPI: ElectronAPI = {
         ipcRenderer.on('menu-tools-projects', () => callback()),
     onMenuToolsModels: (callback: () => void) =>
         ipcRenderer.on('menu-tools-models', () => callback()),
+    onMenuToolsSettings: (callback: () => void) =>
+        ipcRenderer.on('menu-tools-settings', () => callback()),
 
     // Cleanup listeners
     removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel)

@@ -9,6 +9,7 @@ import { ProjectsPanel } from './ProjectsPanel';
 import { WelcomeModal } from './WelcomeModal';
 import { HelpModal } from './HelpModal';
 import { LogsModal } from './LogsModal';
+import { SettingsModal } from './SettingsModal';
 import { X, Volume2, Wand2, Shield, Save } from 'lucide-react';
 import { TextCommit, AIPrompt, ViewMode, PolishMode, Project } from '../types';
 
@@ -25,7 +26,8 @@ export function AppModals() {
         savePromptDialogOpen, setSavePromptDialogOpen,
         contextMenu, setContextMenu,
         errorMessage, setErrorMessage,
-        activeLogId, setActiveLogId
+        activeLogId, setActiveLogId,
+        showSettingsModal, setShowSettingsModal
     } = useUI();
 
     const {
@@ -177,6 +179,12 @@ export function AppModals() {
                 isOpen={!repositoryPath}
                 onCreateRepository={createRepository}
                 onOpenRepository={openRepository}
+            />
+
+            {/* Settings Modal */}
+            <SettingsModal
+                isOpen={showSettingsModal}
+                onClose={() => setShowSettingsModal(false)}
             />
         </>
     );

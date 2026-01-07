@@ -60,6 +60,16 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         order: 5,
         color: 'bg-rose-400',
     },
+    {
+        id: 'create_image',
+        name: 'Create Image',
+        systemInstruction: 'You are an AI image generator. The user will provide a description and you will generate an image based on that description.',
+        promptTask: 'Generate an image based on the following description.',
+        isBuiltIn: true,
+        order: 6,
+        color: 'bg-pink-500',
+        isImageMode: true,
+    },
 ];
 
 /**

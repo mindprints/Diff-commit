@@ -149,6 +149,7 @@ export interface IElectronAPI {
     onMenuToolsPrompts: (callback: () => void) => void;
     onMenuToolsProjects: (callback: () => void) => void;
     onMenuToolsModels: (callback: () => void) => void;
+    onMenuToolsSettings?: (callback: () => void) => void;
     removeAllListeners: (channel: string) => void;
 }
 

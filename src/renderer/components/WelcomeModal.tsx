@@ -1,6 +1,9 @@
-import React from 'react';
-import { FolderOpen, FolderPlus, FileText, GitBranch } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FolderOpen, FolderPlus, FileText, GitBranch, Check } from 'lucide-react';
 import { Button } from './Button';
+
+const SKIP_WELCOME_KEY = 'skip_welcome_screen';
+const LAST_REPO_KEY = 'last_repository_path';
 
 interface WelcomeModalProps {
     isOpen: boolean;
@@ -15,6 +18,38 @@ export function WelcomeModal({
     onOpenRepository,
     isLoading = false,
 }: WelcomeModalProps) {
+    // Initialize checkbox state from localStorage
+    const [rememberChoice, setRememberChoice] = useState(() => {
+        return localStorage.getItem(SKIP_WELCOME_KEY) === 'true';
+    });
+
+    // Check if we should skip and auto-load last repository
+    useEffect(() => {
+        const shouldSkip = localStorage.getItem(SKIP_WELCOME_KEY) === 'true';
+        const lastRepoPath = localStorage.getItem(LAST_REPO_KEY);
+
+        if (shouldSkip && lastRepoPath && isOpen) {
+            // Auto-open the last repository
+            onOpenRepository();
+        }
+    }, [isOpen, onOpenRepository]);
+
+    // Save checkbox state immediately when changed
+    const handleRememberChange = (checked: boolean) => {
+        setRememberChoice(checked);
+        if (checked) {
+            localStorage.setItem(SKIP_WELCOME_KEY, 'true');
+        } else {
+            localStorage.removeItem(SKIP_WELCOME_KEY);
+        }
+    };
+
+    // Wrapper to save preference after successful action
+    const handleActionWithRemember = async (action: () => Promise<void>) => {
+        // rememberChoice state is already saved via handleRememberChange
+        await action();
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -53,12 +88,12 @@ export function WelcomeModal({
                 </div>
 
                 {/* Actions */}
-                <div className="px-8 pb-8 space-y-3">
+                <div className="px-8 pb-4 space-y-3">
                     <Button
                         variant="primary"
                         size="lg"
                         className="w-full justify-center py-3"
-                        onClick={onCreateRepository}
+                        onClick={() => handleActionWithRemember(onCreateRepository)}
                         disabled={isLoading}
                         icon={<FolderPlus className="w-5 h-5" />}
                     >
@@ -83,7 +118,7 @@ export function WelcomeModal({
                         variant="secondary"
                         size="lg"
                         className="w-full justify-center py-3"
-                        onClick={onOpenRepository}
+                        onClick={() => handleActionWithRemember(onOpenRepository)}
                         disabled={isLoading}
                         icon={<FolderOpen className="w-5 h-5" />}
                     >
@@ -92,6 +127,30 @@ export function WelcomeModal({
                     <p className="text-xs text-center text-gray-500 dark:text-slate-500 -mt-1">
                         Select an existing folder that contains your projects
                     </p>
+                </div>
+
+                {/* Remember Choice Checkbox */}
+                <div className="px-8 pb-6">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <button
+                            type="button"
+                            onClick={() => handleRememberChange(!rememberChoice)}
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${rememberChoice
+                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                : 'border-gray-300 dark:border-slate-600 group-hover:border-indigo-400'
+                                }`}
+                        >
+                            {rememberChoice && <Check className="w-3 h-3" />}
+                        </button>
+                        <span className="text-sm text-gray-600 dark:text-slate-400">
+                            Skip this screen in the future
+                        </span>
+                    </label>
+                    {rememberChoice && (
+                        <p className="text-xs text-gray-400 dark:text-slate-500 mt-2 ml-8">
+                            The app will automatically open your last repository next time.
+                        </p>
+                    )}
                 </div>
 
                 {/* Footer */}

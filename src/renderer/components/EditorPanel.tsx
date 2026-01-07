@@ -40,6 +40,29 @@ export function EditorPanel() {
     const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
     const [justSaved, setJustSaved] = useState(false);
 
+    // Shift+Enter keyboard shortcut to commit with save
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Shift+Enter to save commit (same as Shift+Click)
+            if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.altKey) {
+                // Only trigger if not in an input/textarea that needs Shift+Enter
+                const activeEl = document.activeElement;
+                const isInPromptPanel = activeEl?.closest('[data-prompt-panel]');
+
+                if (!isInPromptPanel && previewText.trim()) {
+                    e.preventDefault();
+                    handleCommitClick({ shiftKey: true } as any).then(() => {
+                        setJustSaved(true);
+                        setTimeout(() => setJustSaved(false), 600);
+                    }).catch(console.error);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleCommitClick, previewText]);
+
     // Wrap handleCommitClick to add blue flash animation on successful save
     const handleCommitWithFlash = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
         const shiftPressed = e?.shiftKey;
@@ -119,7 +142,7 @@ export function EditorPanel() {
                         )}
 
                         {isPolishMenuOpen && (
-                            <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-20 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
+                            <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
                                 {/* Built-in Prompts */}
                                 <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">
                                     Correction Level

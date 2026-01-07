@@ -156,13 +156,12 @@ export async function generateImage(
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
-                'HTTP-Referer': 'http://localhost:5173',
+                'HTTP-Referer': import.meta.env.VITE_APP_URL || window.location.origin,
                 'X-Title': 'Diff & Commit AI',
             },
             body: JSON.stringify(requestBody),
             signal,
         });
-
         if (signal?.aborted) {
             return { imageData: null, isCancelled: true };
         }
@@ -338,7 +337,7 @@ export function generateFilename(prompt: string, maxLength = 30): string {
         .substring(0, maxLength);
 
     // Add timestamp for uniqueness
-    const timestamp = new Date().toISOString().slice(0, 10);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
     return `${sanitized || 'image'}_${timestamp}.png`;
 }

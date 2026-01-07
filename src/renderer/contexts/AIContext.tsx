@@ -50,6 +50,8 @@ interface AIContextType {
     selectedModel: Model;
     setSelectedModel: (model: Model) => void;
     setDefaultModel: (model: Model) => void;
+    selectedImageModel: Model | null;
+    setDefaultImageModel: (model: Model | null) => void;
     sessionCost: number;
     setSessionCost: (cost: number) => void;
     updateCost: (usage?: { inputTokens: number; outputTokens: number }) => void;
@@ -72,7 +74,7 @@ interface AIContextType {
     isGeneratingImage: boolean;
     generatedImage: { data: string; prompt: string } | null;
     handleImageGeneration: (prompt: string) => Promise<void>;
-    handleImageRegenerate: () => Promise<void>;
+    handleImageRegenerate: (additionalInstructions?: string) => Promise<void>;
     handleImageSave: () => Promise<void>;
     clearGeneratedImage: () => void;
 }
@@ -93,7 +95,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
     const { models: importedModels } = useModels();
 
-    // Initialize model from localStorage or fallback to first model
+    // Initialize text model from localStorage or fallback to first model
     const getInitialModel = (): Model => {
         try {
             const stored = localStorage.getItem('diff-commit-default-model');
@@ -107,7 +109,26 @@ export function AIProvider({ children }: { children: ReactNode }) {
         return MODELS[0];
     };
 
+    // Initialize image model from localStorage
+    const getInitialImageModel = (): Model | null => {
+        try {
+            const stored = localStorage.getItem('diff-commit-default-image-model');
+            if (stored) {
+                // Check imported models first
+                const foundImported = importedModels.find(m => m.id === stored);
+                if (foundImported) return foundImported;
+                // Then check built-in models
+                const found = MODELS.find(m => m.id === stored);
+                if (found) return found;
+            }
+        } catch (e) {
+            console.warn('Failed to read default image model from localStorage:', e);
+        }
+        return null;
+    };
+
     const [selectedModel, setSelectedModel] = useState<Model>(getInitialModel);
+    const [selectedImageModel, setSelectedImageModel] = useState<Model | null>(getInitialImageModel);
     const [sessionCost, setSessionCost] = useState(0);
     const [isPolishing, setIsPolishing] = useState(false);
     const [isFactChecking, setIsFactChecking] = useState(false);
@@ -119,6 +140,8 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<{ data: string; prompt: string } | null>(null);
     const lastImagePromptRef = useRef<string>('');
+    // Ref to break circular dependency - handleQuickSend needs to call handleImageGeneration
+    const handleImageGenerationRef = useRef<(prompt: string) => Promise<void>>(async () => { });
 
     const {
         prompts: aiPrompts,
@@ -139,6 +162,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setSessionCost(prev => prev + cost);
     }, [selectedModel]);
 
+    // Set default text model
     const setDefaultModel = useCallback((model: Model) => {
         try {
             localStorage.setItem('diff-commit-default-model', model.id);
@@ -146,6 +170,20 @@ export function AIProvider({ children }: { children: ReactNode }) {
             console.warn('Failed to save default model to localStorage:', e);
         }
         setSelectedModel(model);
+    }, []);
+
+    // Set default image model
+    const setDefaultImageModel = useCallback((model: Model | null) => {
+        try {
+            if (model) {
+                localStorage.setItem('diff-commit-default-image-model', model.id);
+            } else {
+                localStorage.removeItem('diff-commit-default-image-model');
+            }
+        } catch (e) {
+            console.warn('Failed to save default image model to localStorage:', e);
+        }
+        setSelectedImageModel(model);
     }, []);
 
     const findActivePrompt = useCallback((id: string, builtIn: AIPrompt[], custom: AIPrompt[]): AIPrompt | null => {
@@ -404,6 +442,19 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const handleQuickSend = useCallback((promptId?: string) => {
         setErrorMessage(null);
         const idToUse = promptId || activePromptId;
+        const prompt = getPrompt(idToUse);
+
+        // Check if this is an image mode prompt
+        if (prompt?.isImageMode) {
+            const editorContent = previewTextRef.current?.trim() || '';
+            if (editorContent) {
+                handleImageGenerationRef.current(editorContent);
+            } else {
+                setErrorMessage('Please enter an image description in the editor.');
+            }
+            return;
+        }
+
         const textarea = previewTextareaRef.current?.getTextarea();
         if (!textarea) return;
 
@@ -435,7 +486,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 .then(() => setFrozenSelection(null))
                 .catch(e => console.error('Failed to start selection quick send:', e));
         }
-    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection]);
+    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection, getPrompt, setErrorMessage]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();
@@ -691,19 +742,24 @@ export function AIProvider({ children }: { children: ReactNode }) {
      * Find an image-capable model from the user's imported models
      */
     const findImageCapableModel = useCallback((): Model | null => {
-        // First check if selected model is image-capable
+        // Priority 1: Use the user-configured default image model if set and valid
+        if (selectedImageModel && isImageCapableModel(selectedImageModel.id)) {
+            return selectedImageModel;
+        }
+
+        // Priority 2: Check if current text model is image-capable
         if (isImageCapableModel(selectedModel.id)) {
             return selectedModel;
         }
 
-        // Search through imported models
+        // Priority 3: Search through imported models
         for (const model of importedModels) {
             if (isImageCapableModel(model.id)) {
                 return model;
             }
         }
 
-        // Search through default models
+        // Priority 4: Search through default models
         for (const model of MODELS) {
             if (isImageCapableModel(model.id)) {
                 return model;
@@ -711,7 +767,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         }
 
         return null;
-    }, [selectedModel, importedModels]);
+    }, [selectedImageModel, selectedModel, importedModels]);
 
     /**
      * Handle image generation request
@@ -785,20 +841,41 @@ export function AIProvider({ children }: { children: ReactNode }) {
             };
 
             if (window.electron && window.electron.logUsage) {
-                window.electron.logUsage(logEntry);
+                await window.electron.logUsage(logEntry);
+            } else {
+                try {
+                    const stored = localStorage.getItem('diff-commit-logs');
+                    const logs: any[] = stored ? JSON.parse(stored) : [];
+                    logs.push(logEntry);
+                    if (logs.length > 1000) logs.shift();
+                    localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+                } catch (e) {
+                    console.warn('Failed to save log to localStorage:', e);
+                }
             }
             setActiveLogId(logEntry.id);
         }
     }, [findImageCapableModel, previewTextRef, setErrorMessage, setShowImageViewer, updateCost, setActiveLogId]);
 
+    // Update ref after handleImageGeneration is defined
+    React.useEffect(() => {
+        handleImageGenerationRef.current = handleImageGeneration;
+    }, [handleImageGeneration]);
+
     /**
-     * Regenerate the last image with the same prompt
+     * Regenerate the last image with the same prompt, optionally with additional instructions
      */
-    const handleImageRegenerate = useCallback(async () => {
-        const prompt = lastImagePromptRef.current;
-        if (prompt) {
-            await handleImageGeneration(`generate image ${prompt}`);
+    const handleImageRegenerate = useCallback(async (additionalInstructions?: string) => {
+        const basePrompt = lastImagePromptRef.current;
+        if (!basePrompt) return;
+
+        // Combine base prompt with any new instructions
+        let finalPrompt = basePrompt;
+        if (additionalInstructions?.trim()) {
+            finalPrompt = `${basePrompt}. Additional instructions: ${additionalInstructions.trim()}`;
         }
+
+        await handleImageGeneration(`generate image ${finalPrompt}`);
     }, [handleImageGeneration]);
 
     /**
@@ -850,7 +927,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             isPolishing, isFactChecking, factCheckProgress, setFactCheckProgress,
             pendingPromptText, setPendingPromptText,
             activePromptId, setActivePromptId, activePrompt,
-            selectedModel, setSelectedModel, setDefaultModel, sessionCost, setSessionCost, updateCost,
+            selectedModel, setSelectedModel, setDefaultModel, selectedImageModel, setDefaultImageModel, sessionCost, setSessionCost, updateCost,
             handleAIEdit, handleFactCheck, handleLocalSpellCheck, handleReadAloud, cancelAIOperation,
             handleQuickSend,
             handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,

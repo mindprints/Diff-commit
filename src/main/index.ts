@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItemConstructorOptions, safeStorage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Store from 'electron-store';
@@ -9,11 +9,79 @@ import * as hierarchyService from './hierarchyService';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables
-dotenv.config();
+// Determine if we're in development before loading dotenv
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-const isDev = process.env.NODE_ENV === 'development';
+// Load environment variables from the correct path
+// Development: project root (.env)
+// Production: app userData directory (e.g., %APPDATA%/diff-commit-ai/.env on Windows)
+const envPath = isDev
+    ? path.join(__dirname, '../../.env')
+    : path.join(app.getPath('userData'), '.env');
+
+// Try to load from the computed path, silently continue if not found
+dotenv.config({ path: envPath });
+
+// Also log for debugging
+if (!isDev) {
+    console.log('[Config] Looking for .env at:', envPath);
+}
+
 const store = new Store();
+
+// ========================================
+// Secure API Key Storage Helpers
+// ========================================
+
+/**
+ * Encrypt an API key using OS-level encryption (DPAPI on Windows, Keychain on macOS)
+ */
+function encryptApiKey(key: string): string {
+    if (!safeStorage.isEncryptionAvailable()) {
+        console.warn('[Security] Encryption not available, storing key in plain text');
+        return key;
+    }
+    return safeStorage.encryptString(key).toString('base64');
+}
+
+/**
+ * Decrypt an API key. Handles both encrypted and plain text keys for migration.
+ */
+function decryptApiKey(encryptedKey: string): string {
+    if (!safeStorage.isEncryptionAvailable()) {
+        return encryptedKey;
+    }
+    try {
+        return safeStorage.decryptString(Buffer.from(encryptedKey, 'base64'));
+    } catch (e) {
+        // Key might be stored in plain text from before migration
+        console.warn('[Security] Failed to decrypt key, assuming plain text');
+        return encryptedKey;
+    }
+}
+
+/**
+ * Get an API key securely. Checks electron-store first (with decryption),
+ * then falls back to environment variables.
+ */
+function getSecureApiKey(provider: string): string | undefined {
+    const storeKey = `${provider}ApiKey`;
+    const storedKey = store.get(storeKey) as string | undefined;
+
+    if (storedKey) {
+        return decryptApiKey(storedKey);
+    }
+
+    // Fall back to environment variables
+    const envVars: Record<string, string | undefined> = {
+        'gemini': process.env.GEMINI_API_KEY,
+        'openRouter': process.env.OPENROUTER_API_KEY,
+        'openrouter': process.env.OPENROUTER_API_KEY,
+        'artificialAnalysis': process.env.ARTIFICIAL_ANALYSIS_API_KEY,
+    };
+
+    return envVars[provider];
+}
 
 let mainWindow = null;
 
@@ -258,6 +326,12 @@ function createMenu() {
                 {
                     label: 'Model Manager...',
                     click: () => sendToRenderer('menu-tools-models')
+                },
+                { type: 'separator' },
+                {
+                    label: 'Settings...',
+                    accelerator: 'CmdOrCtrl+,',
+                    click: () => sendToRenderer('menu-tools-settings')
                 }
             ]
         },
@@ -303,18 +377,14 @@ app.whenReady().then(() => {
     // Create the menu
     createMenu();
 
-    // IPC Handlers for API Key
+    // IPC Handlers for API Key (using secure storage)
     ipcMain.handle('get-api-key', (event, provider) => {
-        const storeKey = `${provider}ApiKey`;
-        let envVar = undefined;
-        if (provider === 'gemini') envVar = process.env.GEMINI_API_KEY;
-        if (provider === 'openRouter') envVar = process.env.OPENROUTER_API_KEY;
-        if (provider === 'openrouter') envVar = process.env.OPENROUTER_API_KEY;
-        return store.get(storeKey) || envVar;
+        return getSecureApiKey(provider);
     });
 
     ipcMain.handle('set-api-key', (event, provider, apiKey) => {
-        store.set(`${provider}ApiKey`, apiKey);
+        const encrypted = encryptApiKey(apiKey);
+        store.set(`${provider}ApiKey`, encrypted);
     });
 
     // Logging Handlers
@@ -988,9 +1058,9 @@ app.whenReady().then(() => {
      * Fetch all available models from OpenRouter
      */
     ipcMain.handle('openrouter:fetch-models', async () => {
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        const apiKey = getSecureApiKey('openrouter');
         if (!apiKey) {
-            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY in your .env file.');
+            throw new Error('OpenRouter API key not configured. Please set your API key in the app settings or .env file.');
         }
 
         try {
@@ -1047,9 +1117,9 @@ app.whenReady().then(() => {
      * Fetch pricing for a specific model
      */
     ipcMain.handle('openrouter:fetch-pricing', async (event, modelId: string) => {
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        const apiKey = getSecureApiKey('openrouter');
         if (!apiKey) {
-            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY in your .env file.');
+            throw new Error('OpenRouter API key not configured. Please set your API key in the app settings or .env file.');
         }
 
         if (!modelId) {
@@ -1136,9 +1206,9 @@ app.whenReady().then(() => {
      * Returns intelligence scores, speed metrics, and pricing data
      */
     ipcMain.handle('artificialanalysis:fetch-benchmarks', async () => {
-        const apiKey = process.env.ARTIFICIAL_ANALYSIS_API_KEY;
+        const apiKey = getSecureApiKey('artificialAnalysis');
         if (!apiKey) {
-            throw new Error('Artificial Analysis API key not configured. Set ARTIFICIAL_ANALYSIS_API_KEY in your .env file.');
+            throw new Error('Artificial Analysis API key not configured. Please set your API key in the app settings or .env file.');
         }
 
         try {

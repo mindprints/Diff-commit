@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Download, RefreshCw, Loader2, Image as ImageIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Download, RefreshCw, Loader2, Image as ImageIcon, AlertTriangle, Send } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ImageViewerProps {
@@ -11,8 +11,8 @@ interface ImageViewerProps {
     isLoading: boolean;
     /** Called when user clicks Save */
     onSave: () => void;
-    /** Called when user clicks Regenerate */
-    onRegenerate: () => void;
+    /** Called when user clicks Regenerate, optionally with additional instructions */
+    onRegenerate: (additionalInstructions?: string) => void;
     /** Called when user clicks Close */
     onClose: () => void;
     /** Whether saving is in progress */
@@ -32,11 +32,52 @@ export function ImageViewer({
     onClose,
     isSaving = false,
 }: ImageViewerProps) {
+    // Track image load errors
+    const [imageError, setImageError] = React.useState(false);
+    // Regeneration instructions input
+    const [regenerateInstructions, setRegenerateInstructions] = useState('');
+
+    // Reset error state when imageData changes
+    React.useEffect(() => {
+        setImageError(false);
+    }, [imageData]);
+
     // Truncate long prompts for display
     const displayPrompt = prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
 
+    // Handle Escape key to close
+    React.useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [onClose]);
+
+    // Handle regenerate with instructions
+    const handleRegenerate = () => {
+        onRegenerate(regenerateInstructions.trim() || undefined);
+        setRegenerateInstructions('');
+    };
+
+    // Handle Enter key in input
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
+            e.preventDefault();
+            handleRegenerate();
+        }
+    };
+
     return (
-        <div className="absolute inset-0 z-10 flex flex-col" style={{ backgroundColor: 'var(--bg-panel)' }}>
+        <div
+            className="absolute inset-0 z-10 flex flex-col"
+            style={{ backgroundColor: 'var(--bg-panel)' }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="image-viewer-header"
+        >
             {/* Header */}
             <div
                 id="image-viewer-header"
@@ -73,7 +114,7 @@ export function ImageViewer({
                             "{displayPrompt}"
                         </p>
                     </div>
-                ) : imageData ? (
+                ) : imageData && !imageError ? (
                     <div className="flex flex-col items-center gap-4 max-w-full">
                         <div
                             className="rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-slate-700"
@@ -82,11 +123,20 @@ export function ImageViewer({
                             <img
                                 src={imageData}
                                 alt={prompt}
-                                className="max-w-full max-h-[60vh] object-contain"
+                                className="max-w-full max-h-[50vh] object-contain"
+                                onError={() => setImageError(true)}
                             />
                         </div>
                         <p className="text-gray-500 dark:text-slate-400 text-xs max-w-md text-center italic">
                             "{displayPrompt}"
+                        </p>
+                    </div>
+                ) : imageError ? (
+                    <div className="flex flex-col items-center gap-4 text-red-500 dark:text-red-400">
+                        <AlertTriangle className="w-16 h-16 opacity-70" />
+                        <p className="text-sm font-medium">Failed to load image</p>
+                        <p className="text-gray-500 dark:text-slate-500 text-xs max-w-md text-center">
+                            The generated image could not be displayed. Try regenerating.
                         </p>
                     </div>
                 ) : (
@@ -96,6 +146,37 @@ export function ImageViewer({
                     </div>
                 )}
             </div>
+
+            {/* Regeneration Instructions Input */}
+            {imageData && !isLoading && (
+                <div
+                    className="flex-none px-4 py-3"
+                    style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}
+                >
+                    <div className="flex gap-2 max-w-2xl mx-auto">
+                        <input
+                            type="text"
+                            value={regenerateInstructions}
+                            onChange={(e) => setRegenerateInstructions(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Modify image: e.g., 'remove the background', 'make it warmer'..."
+                            className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
+                        <button
+                            onClick={handleRegenerate}
+                            disabled={isLoading}
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed"
+                            title={regenerateInstructions.trim() ? 'Regenerate with modifications' : 'Regenerate same image'}
+                        >
+                            <Send className="w-4 h-4" />
+                            {regenerateInstructions.trim() ? 'Modify' : 'Regenerate'}
+                        </button>
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-slate-500 text-center mt-2">
+                        Enter modifications to change the image, or leave empty to regenerate with the same prompt
+                    </p>
+                </div>
+            )}
 
             {/* Footer with Actions */}
             <div
@@ -120,7 +201,7 @@ export function ImageViewer({
                     Save Image
                 </button>
                 <button
-                    onClick={onRegenerate}
+                    onClick={() => onRegenerate()}
                     disabled={isLoading}
                     className={clsx(
                         "flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-colors",
