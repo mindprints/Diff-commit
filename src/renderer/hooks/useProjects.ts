@@ -78,6 +78,9 @@ export function useProjects() {
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
                     setCurrentProject(null);
+
+                    // Save for skip preloading feature (browser mode)
+                    localStorage.setItem('last_repository_path', result.path);
                 }
             } else {
                 console.warn('File System Access API not supported in this browser');

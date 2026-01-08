@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Key, Save, Check, AlertCircle, Eye, EyeOff, ExternalLink } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -40,6 +40,21 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Refs for cleanup
+    const isMounted = useRef(true);
+    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        isMounted.current = true;
+        return () => {
+            isMounted.current = false;
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, []);
+
     // Load existing keys on mount
     useEffect(() => {
         if (isOpen) {
@@ -52,17 +67,22 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         setError(null);
         try {
             const loadedKeys: Record<string, string> = {};
-            for (const field of API_KEY_FIELDS) {
-                if (window.electron?.getApiKey) {
+            // Check once outside loop for efficiency
+            if (window.electron?.getApiKey) {
+                for (const field of API_KEY_FIELDS) {
                     const key = await window.electron.getApiKey(field.provider);
                     loadedKeys[field.provider] = key || '';
                 }
             }
-            setKeys(loadedKeys);
+            if (isMounted.current) {
+                setKeys(loadedKeys);
+            }
         } catch (e) {
             console.error('Failed to load API keys:', e);
         }
-        setLoading(false);
+        if (isMounted.current) {
+            setLoading(false);
+        }
     };
 
     const handleSave = async () => {
@@ -94,18 +114,30 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
             const { clearApiKeyCache } = await import('../services/ai');
             clearApiKeyCache();
 
-            setSaved(true);
-            setTimeout(() => {
-                setSaved(false);
-                if (!isFirstRun) {
-                    onClose();
+            if (isMounted.current) {
+                setSaved(true);
+                // Clear any existing timeout before setting new one
+                if (saveTimeoutRef.current) {
+                    clearTimeout(saveTimeoutRef.current);
                 }
-            }, 1500);
+                saveTimeoutRef.current = setTimeout(() => {
+                    if (isMounted.current) {
+                        setSaved(false);
+                        if (!isFirstRun) {
+                            onClose();
+                        }
+                    }
+                }, 1500);
+            }
         } catch (e) {
             console.error('Failed to save API keys:', e);
-            setError('Failed to save API keys. Please try again.');
+            if (isMounted.current) {
+                setError('Failed to save API keys. Please try again.');
+            }
         }
-        setSaving(false);
+        if (isMounted.current) {
+            setSaving(false);
+        }
     };
 
     const handleKeyChange = (provider: string, value: string) => {
@@ -239,8 +271,8 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                         onClick={handleSave}
                         disabled={saving || loading}
                         className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${saved
-                                ? 'bg-green-500 text-white'
-                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                         {saving ? (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FolderOpen, FolderPlus, FileText, GitBranch, Check } from 'lucide-react';
 import { Button } from './Button';
 
@@ -23,16 +23,23 @@ export function WelcomeModal({
         return localStorage.getItem(SKIP_WELCOME_KEY) === 'true';
     });
 
-    // Check if we should skip and auto-load last repository
-    useEffect(() => {
-        const shouldSkip = localStorage.getItem(SKIP_WELCOME_KEY) === 'true';
-        const lastRepoPath = localStorage.getItem(LAST_REPO_KEY);
+    // Track if we've already attempted auto-open (prevent repeated triggers)
+    const hasAttemptedAutoOpen = useRef(false);
+    // Use ref for callback to avoid dependency array issues
+    const onOpenRepositoryRef = useRef(onOpenRepository);
+    onOpenRepositoryRef.current = onOpenRepository;
 
-        if (shouldSkip && lastRepoPath && isOpen) {
-            // Auto-open the last repository
-            onOpenRepository();
+    // Check auto-open conditions once (avoid re-reading localStorage in effect)
+    const lastRepoPath = localStorage.getItem(LAST_REPO_KEY);
+    const shouldAutoOpen = rememberChoice && !!lastRepoPath;
+
+    // Auto-open last repository on mount (only once)
+    useEffect(() => {
+        if (shouldAutoOpen && isOpen && !hasAttemptedAutoOpen.current) {
+            hasAttemptedAutoOpen.current = true;
+            onOpenRepositoryRef.current();
         }
-    }, [isOpen, onOpenRepository]);
+    }, [shouldAutoOpen, isOpen]);
 
     // Save checkbox state immediately when changed
     const handleRememberChange = (checked: boolean) => {
@@ -50,7 +57,8 @@ export function WelcomeModal({
         await action();
     };
 
-    if (!isOpen) return null;
+    // Prevent modal flash: don't render if auto-open is happening
+    if (!isOpen || (shouldAutoOpen && !hasAttemptedAutoOpen.current)) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

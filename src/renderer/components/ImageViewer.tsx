@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, RefreshCw, Loader2, Image as ImageIcon, AlertTriangle, Send } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -33,12 +33,12 @@ export function ImageViewer({
     isSaving = false,
 }: ImageViewerProps) {
     // Track image load errors
-    const [imageError, setImageError] = React.useState(false);
+    const [imageError, setImageError] = useState(false);
     // Regeneration instructions input
     const [regenerateInstructions, setRegenerateInstructions] = useState('');
 
     // Reset error state when imageData changes
-    React.useEffect(() => {
+    useEffect(() => {
         setImageError(false);
     }, [imageData]);
 
@@ -46,7 +46,7 @@ export function ImageViewer({
     const displayPrompt = prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
 
     // Handle Escape key to close
-    React.useEffect(() => {
+    useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 onClose();

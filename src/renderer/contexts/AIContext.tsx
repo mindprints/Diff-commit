@@ -109,15 +109,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
         return MODELS[0];
     };
 
-    // Initialize image model from localStorage
+    // Initialize image model from localStorage - only check built-in MODELS
+    // (importedModels isn't populated yet during useState initialization)
     const getInitialImageModel = (): Model | null => {
         try {
             const stored = localStorage.getItem('diff-commit-default-image-model');
             if (stored) {
-                // Check imported models first
-                const foundImported = importedModels.find(m => m.id === stored);
-                if (foundImported) return foundImported;
-                // Then check built-in models
+                // Only check built-in models during initialization
                 const found = MODELS.find(m => m.id === stored);
                 if (found) return found;
             }
@@ -136,12 +134,33 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [pendingPromptText, setPendingPromptText] = useState('');
     const [activePromptId, setActivePromptId] = useState('grammar');
 
+    // Restore selectedImageModel from importedModels when they become available
+    React.useEffect(() => {
+        // Skip if we already have a selectedImageModel set
+        if (selectedImageModel) return;
+        // Skip if importedModels hasn't loaded yet
+        if (importedModels.length === 0) return;
+
+        try {
+            const stored = localStorage.getItem('diff-commit-default-image-model');
+            if (stored) {
+                const foundImported = importedModels.find(m => m.id === stored);
+                if (foundImported) {
+                    setSelectedImageModel(foundImported);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to restore image model from importedModels:', e);
+        }
+    }, [importedModels, selectedImageModel]);
+
     // Image generation state
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<{ data: string; prompt: string } | null>(null);
     const lastImagePromptRef = useRef<string>('');
     // Ref to break circular dependency - handleQuickSend needs to call handleImageGeneration
     const handleImageGenerationRef = useRef<(prompt: string) => Promise<void>>(async () => { });
+
 
     const {
         prompts: aiPrompts,

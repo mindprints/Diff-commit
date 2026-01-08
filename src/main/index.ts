@@ -63,24 +63,36 @@ function decryptApiKey(encryptedKey: string): string {
 /**
  * Get an API key securely. Checks electron-store first (with decryption),
  * then falls back to environment variables.
+ * Provider is normalized to lowercase for consistent storage.
  */
 function getSecureApiKey(provider: string): string | undefined {
-    const storeKey = `${provider}ApiKey`;
+    // Normalize provider to lowercase for consistent storage
+    const normalizedProvider = provider.toLowerCase();
+
+    // Map to canonical provider identifiers
+    const providerMap: Record<string, string> = {
+        'openrouter': 'openrouter',
+        'gemini': 'gemini',
+        'artificialanalysis': 'artificialanalysis',
+        'artificial_analysis': 'artificialanalysis',
+    };
+
+    const canonicalProvider = providerMap[normalizedProvider] || normalizedProvider;
+    const storeKey = `${canonicalProvider}ApiKey`;
     const storedKey = store.get(storeKey) as string | undefined;
 
     if (storedKey) {
         return decryptApiKey(storedKey);
     }
 
-    // Fall back to environment variables
+    // Fall back to environment variables using canonical keys
     const envVars: Record<string, string | undefined> = {
         'gemini': process.env.GEMINI_API_KEY,
-        'openRouter': process.env.OPENROUTER_API_KEY,
         'openrouter': process.env.OPENROUTER_API_KEY,
-        'artificialAnalysis': process.env.ARTIFICIAL_ANALYSIS_API_KEY,
+        'artificialanalysis': process.env.ARTIFICIAL_ANALYSIS_API_KEY,
     };
 
-    return envVars[provider];
+    return envVars[canonicalProvider];
 }
 
 let mainWindow = null;
@@ -383,8 +395,18 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle('set-api-key', (event, provider, apiKey) => {
+        // Normalize provider to match getSecureApiKey
+        const normalizedProvider = provider.toLowerCase();
+        const providerMap: Record<string, string> = {
+            'openrouter': 'openrouter',
+            'gemini': 'gemini',
+            'artificialanalysis': 'artificialanalysis',
+            'artificial_analysis': 'artificialanalysis',
+        };
+        const canonicalProvider = providerMap[normalizedProvider] || normalizedProvider;
+
         const encrypted = encryptApiKey(apiKey);
-        store.set(`${provider}ApiKey`, encrypted);
+        store.set(`${canonicalProvider}ApiKey`, encrypted);
     });
 
     // Logging Handlers
