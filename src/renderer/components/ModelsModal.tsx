@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3, Star } from 'lucide-react';
+import { X, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3, Star, Image, FileText, Wrench } from 'lucide-react';
 import clsx from 'clsx';
 import { Model, getCostTier, getCostTierColor } from '../constants/models';
 import { useModels, ExtendedModel } from '../hooks/useModels';
-import { ParsedModel, supportsVision, supportsAudio } from '../services/openRouterService';
+import { ParsedModel, supportsVision, supportsAudio, supportsTools, supportsImageGeneration, supportsFileInput } from '../services/openRouterService';
 
 // Task categories for filtering/sorting models
-type TaskCategory = 'all' | 'coding' | 'intelligence' | 'math' | 'speed' | 'value';
+type TaskCategory = 'all' | 'coding' | 'intelligence' | 'math' | 'speed' | 'value' | 'image-gen' | 'files';
 
 const TASK_CATEGORIES: { value: TaskCategory; label: string; icon: React.ReactNode; description: string }[] = [
     { value: 'all', label: 'All Tasks', icon: <BarChart3 className="w-4 h-4" />, description: 'Default order' },
@@ -15,6 +15,8 @@ const TASK_CATEGORIES: { value: TaskCategory; label: string; icon: React.ReactNo
     { value: 'math', label: 'Math', icon: <Calculator className="w-4 h-4" />, description: 'Sort by math benchmark' },
     { value: 'speed', label: 'Speed', icon: <Zap className="w-4 h-4" />, description: 'Sort by tokens/second' },
     { value: 'value', label: 'Value', icon: <BarChart3 className="w-4 h-4" />, description: 'Best price/performance' },
+    { value: 'image-gen', label: 'Image', icon: <Image className="w-4 h-4" />, description: 'Image generation models' },
+    { value: 'files', label: 'Files', icon: <FileText className="w-4 h-4" />, description: 'PDF/file capable models' },
 ];
 
 interface ModelsModalProps {
@@ -55,15 +57,41 @@ function ImportBrowser({
 }) {
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [capabilityFilters, setCapabilityFilters] = useState<Set<string>>(new Set());
 
     if (!isOpen) return null;
 
-    const filtered = availableModels.filter(m =>
-        !existingIds.has(m.id) &&
-        (m.name.toLowerCase().includes(search.toLowerCase()) ||
+    const toggleFilter = (filter: string) => {
+        const newSet = new Set(capabilityFilters);
+        if (newSet.has(filter)) {
+            newSet.delete(filter);
+        } else {
+            newSet.add(filter);
+        }
+        setCapabilityFilters(newSet);
+    };
+
+    const filtered = availableModels.filter(m => {
+        // Exclude already imported
+        if (existingIds.has(m.id)) return false;
+
+        // Text search
+        const matchesSearch = !search ||
+            m.name.toLowerCase().includes(search.toLowerCase()) ||
             m.provider.toLowerCase().includes(search.toLowerCase()) ||
-            m.id.toLowerCase().includes(search.toLowerCase()))
-    );
+            m.id.toLowerCase().includes(search.toLowerCase());
+
+        if (!matchesSearch) return false;
+
+        // Capability filters (AND logic - must match all selected)
+        if (capabilityFilters.has('vision') && !supportsVision(m.modality)) return false;
+        if (capabilityFilters.has('audio') && !supportsAudio(m.modality)) return false;
+        if (capabilityFilters.has('tools') && !supportsTools(m.supportedParams)) return false;
+        if (capabilityFilters.has('image-gen') && !supportsImageGeneration(m.modality, m.id, m.name, m.capabilities)) return false;
+        if (capabilityFilters.has('pdf') && !supportsFileInput(m.modality, m.supportedParams)) return false;
+
+        return true;
+    });
 
     const handleImport = () => {
         const toImport = availableModels.filter(m => selected.has(m.id));
@@ -87,6 +115,67 @@ function ImportBrowser({
                     <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 rounded-lg">
                         <X className="w-5 h-5" />
                     </button>
+                </div>
+
+                {/* Capability Filters */}
+                <div className="px-6 py-3 border-b border-gray-100 dark:border-slate-800">
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => toggleFilter('vision')}
+                            className={clsx(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                                capabilityFilters.has('vision')
+                                    ? "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700"
+                                    : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border border-transparent hover:bg-gray-200 dark:hover:bg-slate-700"
+                            )}
+                        >
+                            <Eye className="w-3.5 h-3.5" /> Vision
+                        </button>
+                        <button
+                            onClick={() => toggleFilter('audio')}
+                            className={clsx(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                                capabilityFilters.has('audio')
+                                    ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700"
+                                    : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border border-transparent hover:bg-gray-200 dark:hover:bg-slate-700"
+                            )}
+                        >
+                            <Mic className="w-3.5 h-3.5" /> Audio
+                        </button>
+                        <button
+                            onClick={() => toggleFilter('tools')}
+                            className={clsx(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                                capabilityFilters.has('tools')
+                                    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700"
+                                    : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border border-transparent hover:bg-gray-200 dark:hover:bg-slate-700"
+                            )}
+                        >
+                            <Wrench className="w-3.5 h-3.5" /> Tools
+                        </button>
+                        <button
+                            onClick={() => toggleFilter('image-gen')}
+                            className={clsx(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                                capabilityFilters.has('image-gen')
+                                    ? "bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300 border border-pink-300 dark:border-pink-700"
+                                    : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border border-transparent hover:bg-gray-200 dark:hover:bg-slate-700"
+                            )}
+                        >
+                            <Image className="w-3.5 h-3.5" /> Image Gen
+                        </button>
+                        <button
+                            onClick={() => toggleFilter('pdf')}
+                            className={clsx(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                                capabilityFilters.has('pdf')
+                                    ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                                    : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border border-transparent hover:bg-gray-200 dark:hover:bg-slate-700"
+                            )}
+                        >
+                            <FileText className="w-3.5 h-3.5" /> PDF/Files
+                        </button>
+                    </div>
                 </div>
 
                 {/* Search */}
@@ -143,6 +232,12 @@ function ImportBrowser({
                                                 )}
                                                 {supportsAudio(model.modality) && (
                                                     <Mic className="w-3.5 h-3.5 text-green-500" title="Supports audio" />
+                                                )}
+                                                {supportsTools(model.supportedParams) && (
+                                                    <Wrench className="w-3.5 h-3.5 text-blue-500" title="Supports tools/functions" />
+                                                )}
+                                                {supportsImageGeneration(model.modality, model.id, model.name, model.capabilities) && (
+                                                    <Image className="w-3.5 h-3.5 text-pink-500" title="Image generation" />
                                                 )}
                                             </div>
                                             <div className="text-xs text-gray-500 dark:text-slate-400">{model.provider}</div>
@@ -207,8 +302,17 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
 
     // Sort models based on selected task category
     const sortedModels = useMemo(() => {
+        // Capability-based filtering (not sorting)
+        if (taskCategory === 'image-gen') {
+            return models.filter(m => supportsImageGeneration(m.modality, m.id, m.name, m.capabilities));
+        }
+        if (taskCategory === 'files') {
+            return models.filter(m => supportsFileInput(m.modality, m.supportedParams));
+        }
+
         if (taskCategory === 'all') return models;
 
+        // Benchmark-based sorting
         return [...models].sort((a, b) => {
             let aVal = 0, bVal = 0;
             switch (taskCategory) {
