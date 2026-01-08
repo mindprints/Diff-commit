@@ -50,6 +50,7 @@ export function useProjects() {
     }, [isElectron]);
 
     // Open a repository - works for both Electron and Browser
+    // Ensures user is never "projectless" by auto-loading most recent or creating new
     const openRepository = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -65,7 +66,19 @@ export function useProjects() {
 
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
-                    setCurrentProject(null);
+
+                    // Auto-load most recent project or create one
+                    if (result.projects.length > 0) {
+                        // Sort by updatedAt desc and load the most recent
+                        const sortedProjects = [...result.projects].sort((a, b) => b.updatedAt - a.updatedAt);
+                        setCurrentProject(sortedProjects[0]);
+                    } else {
+                        // No projects - create a date-time named one
+                        const projectName = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                        const newProject = await projectStorage.createProject(projectName, '', result.path);
+                        setProjects([newProject]);
+                        setCurrentProject(newProject);
+                    }
 
                     // Save for skip preloading feature
                     localStorage.setItem('last_repository_path', result.path);
@@ -77,7 +90,20 @@ export function useProjects() {
                     repoHandleRef.current = result.handle;
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
-                    setCurrentProject(null);
+
+                    // Auto-load most recent project or create one
+                    if (result.projects.length > 0) {
+                        const sortedProjects = [...result.projects].sort((a, b) => b.updatedAt - a.updatedAt);
+                        setCurrentProject(sortedProjects[0]);
+                    } else {
+                        // No projects - create a date-time named one
+                        const projectName = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                        const newProject = await browserFS.createProjectFolder(repoHandleRef.current!, projectName, '');
+                        if (newProject) {
+                            setProjects([newProject]);
+                            setCurrentProject(newProject);
+                        }
+                    }
 
                     // Save for skip preloading feature (browser mode)
                     localStorage.setItem('last_repository_path', result.path);

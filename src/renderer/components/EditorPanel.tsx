@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit3, Volume2, Square, Wand2, X, Shield, Settings, RefreshCw, Zap, GitBranch, PanelBottomClose, PanelBottomOpen, ArrowRight } from 'lucide-react';
+import { Edit3, Volume2, Square, X, Zap, GitBranch, PanelBottomClose, PanelBottomOpen, ArrowRight, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import MultiSelectTextArea, { MultiSelectTextAreaRef } from './MultiSelectTextArea';
@@ -23,9 +23,8 @@ export function EditorPanel() {
 
     const {
         isPolishing, isFactChecking, cancelAIOperation,
-        factCheckProgress, builtInPrompts, customPrompts,
-        activePromptId, setActivePromptId, activePrompt,
-        handleAIEdit, handleFactCheck, handleReadAloud,
+        factCheckProgress, activePrompt,
+        handleReadAloud,
         pendingOperations, handleQuickSend
     } = useAI();
 
@@ -37,7 +36,6 @@ export function EditorPanel() {
         frozenSelection, setFrozenSelection
     } = useEditor();
 
-    const [isPolishMenuOpen, setIsPolishMenuOpen] = useState(false);
     const [justSaved, setJustSaved] = useState(false);
 
     // Shift+Enter keyboard shortcut to commit with save
@@ -105,115 +103,45 @@ export function EditorPanel() {
                     <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1"></div>
 
                     <div className="relative flex items-center gap-1">
-                        {isPolishMenuOpen && (
-                            <div className="fixed inset-0 z-10" onClick={() => setIsPolishMenuOpen(false)}></div>
-                        )}
-                        {/* Wand Button Removed - Dropdown now acts as Selector, Ctrl+Click or Panel executes */}
+                        {/* Prompt Selector Button - Opens Modal Directly */}
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setIsPolishMenuOpen(!isPolishMenuOpen)}
+                            onClick={() => setShowPromptsModal(true)}
                             disabled={isPolishing || isFactChecking}
                             className={clsx(
-                                "gap-2 min-w-[8rem] justify-between", // Ensure width and spacing
-                                isPolishMenuOpen && "bg-gray-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-slate-700"
+                                "gap-2 min-w-[8rem] justify-between",
+                                (isPolishing || isFactChecking) && "opacity-60"
                             )}
                         >
-                            <span className="truncate max-w-[120px]">
-                                {isFactChecking ? 'Checking...' : (activePrompt?.name || 'Select Prompt')}
+                            {(isPolishing || isFactChecking) && (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            )}
+                            <span className="truncate max-w-[100px]">
+                                {isPolishing ? 'Processing...' : isFactChecking ? 'Checking...' : (activePrompt?.name || 'Select Prompt')}
                             </span>
-                            <svg className="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                            {!(isPolishing || isFactChecking) && (
+                                <svg className="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            )}
                         </Button>
                         {(isPolishing || isFactChecking) && (
-                            <button
+                            <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={cancelAIOperation}
-                                className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                                title="Cancel AI Operation"
+                                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/30"
+                                title="Cancel AI Operation - You can switch models in the header"
                             >
-                                <X className="w-4 h-4" />
-                            </button>
+                                <X className="w-3.5 h-3.5 mr-1" />
+                                Cancel
+                            </Button>
                         )}
                         {isFactChecking && factCheckProgress && (
                             <span className="text-xs text-gray-500 dark:text-slate-400 max-w-32 truncate">
                                 {factCheckProgress}
                             </span>
-                        )}
-
-                        {isPolishMenuOpen && (
-                            <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-100 dark:border-slate-700 py-1 z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden max-h-[70vh] overflow-y-auto">
-                                {/* Built-in Prompts */}
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50 border-b border-gray-50 dark:border-slate-700">
-                                    Correction Level
-                                </div>
-                                {builtInPrompts.map(prompt => (
-                                    <button
-                                        key={prompt.id}
-                                        onClick={() => { setActivePromptId(prompt.id); setIsPolishMenuOpen(false); }}
-                                        className={clsx(
-                                            "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2",
-                                            activePromptId === prompt.id
-                                                ? "bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium"
-                                                : "text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-                                        )}
-                                    >
-                                        <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
-                                        {prompt.name}
-                                    </button>
-                                ))}
-
-                                {customPrompts.length > 0 && (
-                                    <>
-                                        <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                                        <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
-                                            Custom Prompts
-                                        </div>
-                                        {customPrompts.map(prompt => (
-                                            <button
-                                                key={prompt.id}
-                                                onClick={() => { setActivePromptId(prompt.id); setIsPolishMenuOpen(false); }}
-                                                className={clsx(
-                                                    "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2",
-                                                    activePromptId === prompt.id
-                                                        ? "bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium"
-                                                        : "text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-                                                )}
-                                            >
-                                                <span className={clsx("w-1.5 h-1.5 rounded-full", prompt.color || 'bg-gray-400')} />
-                                                {prompt.name}
-                                            </button>
-                                        ))}
-                                    </>
-                                )}
-
-                                {/* Verification Section */}
-                                <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider bg-gray-50/50 dark:bg-slate-900/50">
-                                    Verification
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        handleFactCheck();
-                                        setIsPolishMenuOpen(false);
-                                    }}
-                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 transition-colors flex items-center gap-2"
-                                >
-                                    <Shield className="w-4 h-4 text-cyan-500" />
-                                    Fact Check
-                                    <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">$$$$</span>
-                                </button>
-
-                                {/* Manage Prompts */}
-                                <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                                <button
-                                    onClick={() => { setIsPolishMenuOpen(false); setShowPromptsModal(true); }}
-                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700/50 hover:text-gray-700 dark:hover:text-slate-300 transition-colors flex items-center gap-2"
-                                >
-                                    <Settings className="w-4 h-4" />
-                                    Manage Prompts...
-                                </button>
-                            </div>
                         )}
                     </div>
 

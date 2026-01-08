@@ -47,7 +47,8 @@ export function AppModals() {
         handleFactCheck, handleReadAloud,
         handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
         pendingPromptText, setPendingPromptText,
-        selectedModel, setDefaultModel
+        selectedModel, setDefaultModel,
+        activePromptId, setDefaultPrompt
     } = useAI();
 
     return (
@@ -145,6 +146,9 @@ export function AppModals() {
                 onUpdatePrompt={(id, updates) => updatePrompt({ ...updates, id })}
                 onDeletePrompt={deletePrompt}
                 onResetBuiltIn={resetBuiltIn}
+                defaultPromptId={activePromptId}
+                onSetDefault={setDefaultPrompt}
+                onFactCheck={handleFactCheck}
             />
 
             {/* Models Manager Modal */}

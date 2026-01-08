@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, RotateCcw, Trash2, Edit3, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Plus, RotateCcw, Trash2, Edit3, Check, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { Button } from './Button';
 import { AIPrompt } from '../types';
 import { generatePromptId } from '../constants/prompts';
@@ -13,6 +13,9 @@ interface PromptsModalProps {
     onUpdatePrompt: (id: string, updates: Partial<AIPrompt>) => Promise<void>;
     onDeletePrompt: (id: string) => Promise<void>;
     onResetBuiltIn: (id: string) => Promise<void>;
+    defaultPromptId: string;
+    onSetDefault: (id: string) => void;
+    onFactCheck?: () => void;
 }
 
 interface PromptFormState {
@@ -48,6 +51,9 @@ export function PromptsModal({
     onUpdatePrompt,
     onDeletePrompt,
     onResetBuiltIn,
+    defaultPromptId,
+    onSetDefault,
+    onFactCheck,
 }: PromptsModalProps) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
@@ -158,23 +164,49 @@ export function PromptsModal({
                 {/* Header Row */}
                 <div
                     className={clsx(
-                        "flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors",
+                        "flex items-center gap-3 p-3 transition-colors",
                         isExpanded && "bg-gray-50 dark:bg-slate-800/50"
                     )}
-                    onClick={() => setExpandedId(isExpanded ? null : prompt.id)}
                 >
+                    {/* Star button for quick default selection */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSetDefault(prompt.id);
+                            onClose();
+                        }}
+                        className={clsx(
+                            "p-1 rounded transition-colors shrink-0",
+                            defaultPromptId === prompt.id
+                                ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
+                                : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:text-slate-600 dark:hover:text-amber-400 dark:hover:bg-amber-900/20"
+                        )}
+                        title={defaultPromptId === prompt.id ? "Current default prompt" : "Set as default prompt"}
+                    >
+                        <Star className={clsx("w-4 h-4", defaultPromptId === prompt.id && "fill-current")} />
+                    </button>
                     <span className={clsx("w-2.5 h-2.5 rounded-full shrink-0", prompt.color || 'bg-gray-400')} />
-                    <span className="flex-1 font-medium text-gray-800 dark:text-slate-200">{prompt.name}</span>
+                    <span
+                        className="flex-1 font-medium text-gray-800 dark:text-slate-200 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400"
+                        onClick={() => setExpandedId(isExpanded ? null : prompt.id)}
+                    >
+                        {prompt.name}
+                    </span>
                     {prompt.isBuiltIn && (
                         <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded">
                             Built-in
                         </span>
                     )}
-                    {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400" />
-                    ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
-                    )}
+                    <button
+                        onClick={() => setExpandedId(isExpanded ? null : prompt.id)}
+                        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
+                    >
+                        {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4" />
+                        )}
+                    </button>
                 </div>
 
                 {/* Expanded Content */}
@@ -247,6 +279,17 @@ export function PromptsModal({
                                     <p className="text-sm text-gray-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{prompt.promptTask}</p>
                                 </div>
                                 <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-slate-800">
+                                    {defaultPromptId !== prompt.id && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onSetDefault(prompt.id)}
+                                            icon={<Star className="w-3 h-3" />}
+                                            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                        >
+                                            Set Default
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="ghost"
                                         size="sm"

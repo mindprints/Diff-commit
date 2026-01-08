@@ -57,6 +57,7 @@ interface AIContextType {
     updateCost: (usage?: { inputTokens: number; outputTokens: number }) => void;
     activePromptId: string;
     setActivePromptId: (id: string) => void;
+    setDefaultPrompt: (id: string) => void;
     activePrompt: AIPrompt | null;
 
     // Handlers
@@ -132,7 +133,19 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [isFactChecking, setIsFactChecking] = useState(false);
     const [factCheckProgress, setFactCheckProgress] = useState('');
     const [pendingPromptText, setPendingPromptText] = useState('');
-    const [activePromptId, setActivePromptId] = useState('grammar');
+
+    // Initialize prompt from localStorage or fallback to 'grammar'
+    const getInitialPromptId = (): string => {
+        try {
+            const stored = localStorage.getItem('diff-commit-default-prompt');
+            if (stored) return stored;
+        } catch (e) {
+            console.warn('Failed to read default prompt from localStorage:', e);
+        }
+        return 'grammar';
+    };
+
+    const [activePromptId, setActivePromptId] = useState(getInitialPromptId);
 
     // Restore selectedImageModel from importedModels when they become available
     React.useEffect(() => {
@@ -203,6 +216,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
             console.warn('Failed to save default image model to localStorage:', e);
         }
         setSelectedImageModel(model);
+    }, []);
+
+    // Set default prompt
+    const setDefaultPrompt = useCallback((promptId: string) => {
+        try {
+            localStorage.setItem('diff-commit-default-prompt', promptId);
+        } catch (e) {
+            console.warn('Failed to save default prompt to localStorage:', e);
+        }
+        setActivePromptId(promptId);
     }, []);
 
     const findActivePrompt = useCallback((id: string, builtIn: AIPrompt[], custom: AIPrompt[]): AIPrompt | null => {
@@ -297,6 +320,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 setOriginalText(baseline);
             }
             setModifiedText(modified);
+            // Auto-accept: Show AI changes in editor immediately (opt-in to reject)
+            // User can still use "Reject All" in diff view to revert
+            setPreviewText(modified);
             performDiff(baseline, modified);
             setMode(ViewMode.DIFF);
         },
@@ -477,6 +503,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
         const textarea = previewTextareaRef.current?.getTextarea();
         if (!textarea) return;
 
+        // Auto-baseline: Ensure originalText is set to current editor content before AI operation
+        // This ensures diff view has a proper baseline to compare against
+        if (previewTextRef.current && (!originalTextRef.current || originalTextRef.current.trim() === '')) {
+            setOriginalText(previewTextRef.current);
+        }
+
         const { selectionStart, selectionEnd } = textarea;
 
         // If no text is selected, check for frozen selection
@@ -505,7 +537,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 .then(() => setFrozenSelection(null))
                 .catch(e => console.error('Failed to start selection quick send:', e));
         }
-    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection, getPrompt, setErrorMessage]);
+    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection, getPrompt, setErrorMessage, originalTextRef, setOriginalText]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();
@@ -945,7 +977,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             pendingOperations, startOperation, cancelAsyncOperations,
             isPolishing, isFactChecking, factCheckProgress, setFactCheckProgress,
             pendingPromptText, setPendingPromptText,
-            activePromptId, setActivePromptId, activePrompt,
+            activePromptId, setActivePromptId, setDefaultPrompt, activePrompt,
             selectedModel, setSelectedModel, setDefaultModel, selectedImageModel, setDefaultImageModel, sessionCost, setSessionCost, updateCost,
             handleAIEdit, handleFactCheck, handleLocalSpellCheck, handleReadAloud, cancelAIOperation,
             handleQuickSend,

@@ -51,8 +51,28 @@ export function DiffPanel() {
                     Diff View
                 </h2>
                 <div className="flex gap-2 text-xs">
-                    <button type="button" onClick={handleAcceptAll} className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-800/50 transition">Accept All</button>
-                    <button type="button" onClick={handleRejectAll} className="px-2 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/50 transition">Reject All</button>
+                    <button
+                        type="button"
+                        onClick={handleAcceptAll}
+                        disabled={segments.length === 0}
+                        className={clsx(
+                            "px-2 py-1 rounded border transition",
+                            segments.length > 0
+                                ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/50 hover:bg-green-100 dark:hover:bg-green-900/40"
+                                : "bg-gray-50 dark:bg-slate-800 text-gray-400 dark:text-slate-500 border-gray-200 dark:border-slate-700 cursor-not-allowed"
+                        )}
+                    >Accept All</button>
+                    <button
+                        type="button"
+                        onClick={handleRejectAll}
+                        disabled={segments.length === 0}
+                        className={clsx(
+                            "px-2 py-1 rounded border transition",
+                            segments.length > 0
+                                ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800/50 hover:bg-red-100 dark:hover:bg-red-900/40"
+                                : "bg-gray-50 dark:bg-slate-800 text-gray-400 dark:text-slate-500 border-gray-200 dark:border-slate-700 cursor-not-allowed"
+                        )}
+                    >Reject All</button>
                 </div>
             </div>
 

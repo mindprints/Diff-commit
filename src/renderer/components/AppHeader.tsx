@@ -37,7 +37,7 @@ export function AppHeader() {
     const {
         backgroundHue, setBackgroundHue, isDarkMode, setIsDarkMode,
         setShowLogs, setShowCommitHistory, setShowHelp, setShowProjectsPanel,
-        isHeaderVisible, setIsHeaderVisible
+        isHeaderVisible, setIsHeaderVisible, setShowModelsModal
     } = useUI();
 
     const {
@@ -154,19 +154,14 @@ export function AppHeader() {
                         <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-medium ml-1 mr-1 min-w-[2.5rem] text-right">
                             ${sessionCost.toFixed(4)}
                         </span>
-                        <select
-                            className="text-[10px] py-0.5 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-1 text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[10rem] truncate h-6"
-                            value={selectedModel.id}
-                            onChange={(e) => {
-                                const model = models.find(m => m.id === e.target.value);
-                                if (model) setSelectedModel(model);
-                            }}
+                        <button
+                            onClick={() => setShowModelsModal(true)}
+                            className="text-[10px] py-0.5 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded px-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[10rem] truncate h-6 flex items-center gap-1 transition-colors"
                             title={`Select AI Model - Current: ${selectedModel.name} (${getCostTier(selectedModel)})`}
                         >
-                            {models.map(m => (
-                                <option key={m.id} value={m.id}>{m.name} ({getCostTier(m)})</option>
-                            ))}
-                        </select>
+                            <span className="truncate">{selectedModel.name}</span>
+                            <span className="text-gray-400 dark:text-slate-500">({getCostTier(selectedModel)})</span>
+                        </button>
                     </div>
                 </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Check, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3 } from 'lucide-react';
+import { X, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3, Star } from 'lucide-react';
 import clsx from 'clsx';
 import { Model, getCostTier, getCostTierColor } from '../constants/models';
 import { useModels, ExtendedModel } from '../hooks/useModels';
@@ -370,9 +370,28 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
                                         )}
                                     >
                                         <div className="flex items-start justify-between gap-4">
+                                            {/* Star button for quick default selection */}
+                                            <button
+                                                onClick={() => {
+                                                    onSetDefault(model);
+                                                    onClose();
+                                                }}
+                                                className={clsx(
+                                                    "p-1.5 rounded-lg transition-colors shrink-0 mt-0.5",
+                                                    isSelected
+                                                        ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
+                                                        : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:text-slate-600 dark:hover:text-amber-400 dark:hover:bg-amber-900/20"
+                                                )}
+                                                title={isSelected ? "Current default model" : "Set as default model"}
+                                            >
+                                                <Star className={clsx("w-4 h-4", isSelected && "fill-current")} />
+                                            </button>
                                             {/* Model Info - Clickable */}
                                             <button
-                                                onClick={() => onSetDefault(model)}
+                                                onClick={() => {
+                                                    onSetDefault(model);
+                                                    onClose();
+                                                }}
                                                 className="flex-1 min-w-0 text-left"
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
@@ -384,12 +403,6 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
                                                     )}
                                                     {supportsAudio(model.modality) && (
                                                         <Mic className="w-3.5 h-3.5 text-green-500" title="Audio" />
-                                                    )}
-                                                    {isSelected && (
-                                                        <span className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 rounded-full">
-                                                            <Check className="w-3 h-3" />
-                                                            Default
-                                                        </span>
                                                     )}
                                                 </div>
                                                 <div className="text-xs text-gray-500 dark:text-slate-400">
