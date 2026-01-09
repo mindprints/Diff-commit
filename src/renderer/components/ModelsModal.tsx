@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3, Star, Image, FileText, Wrench } from 'lucide-react';
+import { X, Cpu, MessageSquare, RefreshCw, Trash2, Plus, Eye, Mic, Search, Loader2, Zap, Brain, Code2, Calculator, BarChart3, Star, Image, FileText, Wrench, Palette } from 'lucide-react';
 import clsx from 'clsx';
 import { Model, getCostTier, getCostTierColor } from '../constants/models';
 import { useModels, ExtendedModel } from '../hooks/useModels';
@@ -23,7 +23,9 @@ interface ModelsModalProps {
     isOpen: boolean;
     onClose: () => void;
     selectedModel: Model;
+    selectedImageModel: Model | null;
     onSetDefault: (model: Model) => void;
+    onSetImageDefault: (model: Model) => void;
 }
 
 function formatContextWindow(tokens: number): string {
@@ -273,7 +275,7 @@ function ImportBrowser({
     );
 }
 
-export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: ModelsModalProps) {
+export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel, onSetDefault, onSetImageDefault }: ModelsModalProps) {
     const {
         models,
         isLoading,
@@ -460,6 +462,8 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
                         <div className="space-y-2">
                             {sortedModels.map((model) => {
                                 const isSelected = model.id === selectedModel.id;
+                                const isImageSelected = selectedImageModel?.id === model.id;
+                                const isImageCapable = supportsImageGeneration(model.modality, model.id, model.name, model.capabilities);
                                 const tierColor = getCostTierColor(model);
                                 const isRefreshing = refreshingId === model.id;
 
@@ -474,22 +478,44 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
                                         )}
                                     >
                                         <div className="flex items-start justify-between gap-4">
-                                            {/* Star button for quick default selection */}
-                                            <button
-                                                onClick={() => {
-                                                    onSetDefault(model);
-                                                    onClose();
-                                                }}
-                                                className={clsx(
-                                                    "p-1.5 rounded-lg transition-colors shrink-0 mt-0.5",
-                                                    isSelected
-                                                        ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
-                                                        : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:text-slate-600 dark:hover:text-amber-400 dark:hover:bg-amber-900/20"
+                                            {/* Default selection buttons */}
+                                            <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                                                {/* Star button for text default */}
+                                                <button
+                                                    onClick={() => {
+                                                        onSetDefault(model);
+                                                        onClose();
+                                                    }}
+                                                    className={clsx(
+                                                        "p-1.5 rounded-lg transition-colors",
+                                                        isSelected
+                                                            ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
+                                                            : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:text-slate-600 dark:hover:text-amber-400 dark:hover:bg-amber-900/20"
+                                                    )}
+                                                    title={isSelected ? "Current text default" : "Set as text default"}
+                                                >
+                                                    <Star className={clsx("w-4 h-4", isSelected && "fill-current")} />
+                                                </button>
+                                                {/* Palette button for image default - only for image-capable models */}
+                                                {isImageCapable && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onSetImageDefault(model);
+                                                            onClose();
+                                                        }}
+                                                        className={clsx(
+                                                            "p-1.5 rounded-lg transition-colors",
+                                                            isImageSelected
+                                                                ? "text-pink-500 bg-pink-50 dark:bg-pink-900/30"
+                                                                : "text-gray-300 hover:text-pink-400 hover:bg-pink-50 dark:text-slate-600 dark:hover:text-pink-400 dark:hover:bg-pink-900/20"
+                                                        )}
+                                                        title={isImageSelected ? "Current image default" : "Set as image default"}
+                                                    >
+                                                        <Palette className={clsx("w-4 h-4", isImageSelected && "fill-current")} />
+                                                    </button>
                                                 )}
-                                                title={isSelected ? "Current default model" : "Set as default model"}
-                                            >
-                                                <Star className={clsx("w-4 h-4", isSelected && "fill-current")} />
-                                            </button>
+                                            </div>
                                             {/* Model Info - Clickable */}
                                             <button
                                                 onClick={() => {
@@ -605,7 +631,8 @@ export function ModelsModal({ isOpen, onClose, selectedModel, onSetDefault }: Mo
                     {/* Footer */}
                     <div className="px-6 py-3 bg-gray-50 dark:bg-slate-800/50 border-t border-gray-100 dark:border-slate-800">
                         <p className="text-xs text-gray-500 dark:text-slate-400 text-center">
-                            Prices per million tokens •
+                            <Star className="inline w-3 h-3 mx-1 text-amber-500" /> Text Default •
+                            <Palette className="inline w-3 h-3 mx-1 text-pink-500" /> Image Default •
                             <Eye className="inline w-3 h-3 mx-1 text-purple-500" /> Vision •
                             <Mic className="inline w-3 h-3 mx-1 text-green-500" /> Audio
                         </p>

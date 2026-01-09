@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, RotateCcw, Trash2, Edit3, Check, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { X, Plus, RotateCcw, Trash2, Edit3, Check, ChevronDown, ChevronUp, Star, Palette } from 'lucide-react';
 import { Button } from './Button';
 import { AIPrompt } from '../types';
+import { Model } from '../constants/models';
 import { generatePromptId } from '../constants/prompts';
 import clsx from 'clsx';
 
@@ -16,6 +17,8 @@ interface PromptsModalProps {
     defaultPromptId: string;
     onSetDefault: (id: string) => void;
     onFactCheck?: () => void;
+    selectedModel?: Model;
+    selectedImageModel?: Model | null;
 }
 
 interface PromptFormState {
@@ -54,6 +57,8 @@ export function PromptsModal({
     defaultPromptId,
     onSetDefault,
     onFactCheck,
+    selectedModel,
+    selectedImageModel,
 }: PromptsModalProps) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
@@ -196,6 +201,26 @@ export function PromptsModal({
                         <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded">
                             Built-in
                         </span>
+                    )}
+                    {/* Contextual model indicator */}
+                    {prompt.isImageMode ? (
+                        <span
+                            className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400 rounded"
+                            title="Uses image generation model"
+                        >
+                            <Palette className="w-2.5 h-2.5" />
+                            {selectedImageModel?.name ? (selectedImageModel.name.length > 15 ? selectedImageModel.name.slice(0, 12) + '...' : selectedImageModel.name) : 'No image model'}
+                        </span>
+                    ) : (
+                        selectedModel && (
+                            <span
+                                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded"
+                                title="Uses text model"
+                            >
+                                <Star className="w-2.5 h-2.5" />
+                                {selectedModel.name.length > 15 ? selectedModel.name.slice(0, 12) + '...' : selectedModel.name}
+                            </span>
+                        )
                     )}
                     <button
                         onClick={() => setExpandedId(isExpanded ? null : prompt.id)}

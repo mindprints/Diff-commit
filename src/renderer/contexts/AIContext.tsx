@@ -241,6 +241,23 @@ export function AIProvider({ children }: { children: ReactNode }) {
     );
 
     /**
+     * Check if a model is image-generation ONLY (cannot handle text tasks)
+     * These are models like FLUX, DALL-E, Stable Diffusion that can't do text editing
+     */
+    const isImageOnlyModel = useCallback((model: Model): boolean => {
+        const lowerId = model.id.toLowerCase();
+        const imageOnlyPatterns = [
+            'black-forest-labs/',  // FLUX models
+            'stability-ai/',        // Stable Diffusion
+            'dall-e',               // DALL-E models
+            '/flux',                // Additional FLUX patterns
+            '/sdxl',                // SDXL
+            '/stable-diffusion',    // Stable Diffusion
+        ];
+        return imageOnlyPatterns.some(pattern => lowerId.includes(pattern));
+    }, []);
+
+    /**
      * Canonical source selector for AI operations.
      * Priority: previewText (editor content) > modifiedText > originalText
      * This ensures AI always operates on what the user sees/expects.
@@ -404,6 +421,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
             return handleImageGeneration(promptIdOrInstruction);
         }
 
+        // Check for task mismatch: trying to use a text task on an image-only model
+        if (isImageOnlyModel(selectedModel)) {
+            setErrorMessage("Your chosen AI model doesn't perform this task. Please select a text-capable model from the Model Manager.");
+            return;
+        }
+
         const isKnownBuiltIn = builtInPrompts.some(p => p.id === promptIdOrInstruction);
         const isKnownCustom = customPrompts.some(p => p.id === promptIdOrInstruction);
         const isKnownPrompt = isKnownBuiltIn || isKnownCustom;
@@ -482,7 +505,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 console.error('Failed to start custom AI instruction:', e);
             }
         }
-    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt]);
+    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt, isImageOnlyModel, selectedModel]);
 
     const handleQuickSend = useCallback((promptId?: string) => {
         setErrorMessage(null);
@@ -497,6 +520,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
             } else {
                 setErrorMessage('Please enter an image description in the editor.');
             }
+            return;
+        }
+
+        // Check for task mismatch: trying to use a text task on an image-only model
+        if (isImageOnlyModel(selectedModel)) {
+            setErrorMessage("Your chosen AI model doesn't perform this task. Please select a text-capable model from the Model Manager.");
             return;
         }
 
@@ -537,7 +566,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 .then(() => setFrozenSelection(null))
                 .catch(e => console.error('Failed to start selection quick send:', e));
         }
-    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection, getPrompt, setErrorMessage, originalTextRef, setOriginalText]);
+    }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection, getPrompt, setErrorMessage, originalTextRef, setOriginalText, isImageOnlyModel, selectedModel]);
 
     const handleFactCheck = useCallback(async () => {
         cancelAIOperation();

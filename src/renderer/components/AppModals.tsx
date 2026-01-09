@@ -48,6 +48,7 @@ export function AppModals() {
         handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
         pendingPromptText, setPendingPromptText,
         selectedModel, setDefaultModel,
+        selectedImageModel, setDefaultImageModel,
         activePromptId, setDefaultPrompt
     } = useAI();
 
@@ -149,6 +150,8 @@ export function AppModals() {
                 defaultPromptId={activePromptId}
                 onSetDefault={setDefaultPrompt}
                 onFactCheck={handleFactCheck}
+                selectedModel={selectedModel}
+                selectedImageModel={selectedImageModel}
             />
 
             {/* Models Manager Modal */}
@@ -156,7 +159,9 @@ export function AppModals() {
                 isOpen={showModelsModal}
                 onClose={() => setShowModelsModal(false)}
                 selectedModel={selectedModel}
+                selectedImageModel={selectedImageModel}
                 onSetDefault={setDefaultModel}
+                onSetImageDefault={setDefaultImageModel}
             />
 
             {/* Projects Panel */}
