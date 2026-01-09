@@ -20,6 +20,8 @@ import {
     ImageGenerationResponse
 } from '../services/imageGenerationService';
 
+const IMAGE_ONLY_MODEL_ERROR = "Your chosen AI model doesn't perform this task. Please select a text-capable model from the Model Manager.";
+
 interface AIContextType {
     // usePrompts
     aiPrompts: AIPrompt[];
@@ -74,7 +76,7 @@ interface AIContextType {
     // Image Generation
     isGeneratingImage: boolean;
     generatedImage: { data: string; prompt: string } | null;
-    handleImageGeneration: (prompt: string) => Promise<void>;
+    handleImageGeneration: (prompt: string, base64Image?: string) => Promise<void>;
     handleImageRegenerate: (additionalInstructions?: string) => Promise<void>;
     handleImageSave: () => Promise<void>;
     clearGeneratedImage: () => void;
@@ -172,7 +174,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [generatedImage, setGeneratedImage] = useState<{ data: string; prompt: string } | null>(null);
     const lastImagePromptRef = useRef<string>('');
     // Ref to break circular dependency - handleQuickSend needs to call handleImageGeneration
-    const handleImageGenerationRef = useRef<(prompt: string) => Promise<void>>(async () => { });
+    const handleImageGenerationRef = useRef<(prompt: string, base64Image?: string) => Promise<void>>(async () => { });
 
 
     const {
@@ -423,7 +425,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         // Check for task mismatch: trying to use a text task on an image-only model
         if (isImageOnlyModel(selectedModel)) {
-            setErrorMessage("Your chosen AI model doesn't perform this task. Please select a text-capable model from the Model Manager.");
+            setErrorMessage(IMAGE_ONLY_MODEL_ERROR);
             return;
         }
 
@@ -525,7 +527,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         // Check for task mismatch: trying to use a text task on an image-only model
         if (isImageOnlyModel(selectedModel)) {
-            setErrorMessage("Your chosen AI model doesn't perform this task. Please select a text-capable model from the Model Manager.");
+            setErrorMessage(IMAGE_ONLY_MODEL_ERROR);
             return;
         }
 
@@ -569,6 +571,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }, [previewTextRef, startOperation, previewTextareaRef, activePromptId, frozenSelection, setFrozenSelection, getPrompt, setErrorMessage, originalTextRef, setOriginalText, isImageOnlyModel, selectedModel]);
 
     const handleFactCheck = useCallback(async () => {
+        // Check for task mismatch: trying to use a text task on an image-only model
+        if (isImageOnlyModel(selectedModel)) {
+            setErrorMessage(IMAGE_ONLY_MODEL_ERROR);
+            return;
+        }
+
         cancelAIOperation();
         const { sourceText } = getSourceTextForAI();
         if (!sourceText.trim()) {
@@ -651,7 +659,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setIsFactChecking(false);
         setFactCheckProgress('');
         abortControllerRef.current = null;
-    }, [cancelAIOperation, getSourceTextForAI, setErrorMessage, setFactCheckProgress, setIsFactChecking, setSessionCost, setActiveLogId]);
+    }, [cancelAIOperation, getSourceTextForAI, setErrorMessage, setFactCheckProgress, setIsFactChecking, setSessionCost, setActiveLogId, isImageOnlyModel, selectedModel]);
 
     const handleReadAloud = useCallback(() => {
         if (isSpeaking) {
@@ -680,6 +688,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }, [isSpeaking, previewTextRef, previewTextareaRef, setIsSpeaking]);
 
     const handlePolishSelection = useCallback(async (polishMode: PolishMode) => {
+        // Check for task mismatch: trying to use a text task on an image-only model
+        if (isImageOnlyModel(selectedModel)) {
+            setErrorMessage(IMAGE_ONLY_MODEL_ERROR);
+            return;
+        }
+
         const textarea = previewTextareaRef.current?.getTextarea();
         const originalTextAtStart = previewTextRef.current; // Snapshot text before async call
         let start = 0;
@@ -778,7 +792,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         setIsPolishing(false);
         abortControllerRef.current = null;
-    }, [previewTextareaRef, previewTextRef, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setModifiedText, performDiff, setMode, setErrorMessage]);
+    }, [previewTextareaRef, previewTextRef, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setModifiedText, performDiff, setMode, setErrorMessage, isImageOnlyModel]);
 
     const handleSaveAsPrompt = useCallback(() => {
         if (contextMenu?.selection) {
@@ -852,7 +866,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
     /**
      * Handle image generation request
      */
-    const handleImageGeneration = useCallback(async (prompt: string) => {
+    const handleImageGeneration = useCallback(async (prompt: string, base64Image?: string) => {
         const imageModel = findImageCapableModel();
 
         if (!imageModel) {
@@ -881,7 +895,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setErrorMessage(null);
 
         const startTime = Date.now();
-        const response = await generateImage(imagePrompt, imageModel, editorContent);
+        const response = await generateImage(imagePrompt, imageModel, editorContent, base64Image);
         const durationMs = Date.now() - startTime;
 
         if (response.isCancelled) {
@@ -951,12 +965,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         // Combine base prompt with any new instructions
         let finalPrompt = basePrompt;
+        let baseImage = undefined;
+
         if (additionalInstructions?.trim()) {
             finalPrompt = `${basePrompt}. Additional instructions: ${additionalInstructions.trim()}`;
+            // If we have modification instructions, send the current image for context/editing
+            baseImage = generatedImage?.data || undefined;
         }
 
-        await handleImageGeneration(`generate image ${finalPrompt}`);
-    }, [handleImageGeneration]);
+        await handleImageGeneration(`image: ${finalPrompt}`, baseImage);
+    }, [handleImageGeneration, generatedImage]);
 
     /**
      * Save the generated image to disk

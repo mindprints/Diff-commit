@@ -6,6 +6,10 @@ import { Model } from '../constants/models';
 import { generatePromptId } from '../constants/prompts';
 import clsx from 'clsx';
 
+function truncateModelName(name: string, maxLength = 15): string {
+    return name.length > maxLength ? name.slice(0, maxLength - 3) + '...' : name;
+}
+
 interface PromptsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -209,7 +213,7 @@ export function PromptsModal({
                             title="Uses image generation model"
                         >
                             <Palette className="w-2.5 h-2.5" />
-                            {selectedImageModel?.name ? (selectedImageModel.name.length > 15 ? selectedImageModel.name.slice(0, 12) + '...' : selectedImageModel.name) : 'No image model'}
+                            {selectedImageModel ? truncateModelName(selectedImageModel.name) : 'No image model'}
                         </span>
                     ) : (
                         selectedModel && (
@@ -218,7 +222,7 @@ export function PromptsModal({
                                 title="Uses text model"
                             >
                                 <Star className="w-2.5 h-2.5" />
-                                {selectedModel.name.length > 15 ? selectedModel.name.slice(0, 12) + '...' : selectedModel.name}
+                                {selectedModel ? truncateModelName(selectedModel.name) : ''}
                             </span>
                         )
                     )}

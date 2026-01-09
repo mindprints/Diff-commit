@@ -482,7 +482,8 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
                                             <div className="flex items-center gap-1 shrink-0 mt-0.5">
                                                 {/* Star button for text default */}
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         onSetDefault(model);
                                                         onClose();
                                                     }}

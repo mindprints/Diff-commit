@@ -101,13 +101,17 @@ export interface ImageGenerationResponse {
  * 
  * @param prompt - The image generation prompt
  * @param model - The model to use (must be image-capable)
+ * @param prompt - The image generation prompt
+ * @param model - The model to use (must be image-capable)
  * @param editorContent - Optional content from the editor to include in context
+ * @param base64Image - Optional original image data for modification (base64 data URL)
  * @param signal - Optional AbortSignal for cancellation
  */
 export async function generateImage(
     prompt: string,
     model: Model,
     editorContent?: string,
+    base64Image?: string,
     signal?: AbortSignal
 ): Promise<ImageGenerationResponse> {
     const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
@@ -122,22 +126,42 @@ export async function generateImage(
 
     // Build the full prompt with optional editor content
     // For image generation, be explicit about wanting an image
-    let fullPrompt = `Generate an image: ${prompt}`;
+    let fullPrompt = base64Image ? `Modify this image based on the following instructions: ${prompt}` : `Generate an image: ${prompt}`;
     if (editorContent && editorContent.trim()) {
-        fullPrompt = `Generate an image based on the following context: ${prompt}\n\nContext:\n${editorContent}`;
+        fullPrompt = `${base64Image ? 'Modify this image' : 'Generate an image'} based on the following context: ${prompt}\n\nContext:\n${editorContent}`;
     }
 
     console.log('[ImageGen] Making request to model:', model.id);
     console.log('[ImageGen] Prompt:', fullPrompt);
+    if (base64Image) {
+        console.log('[ImageGen] Including base image for modification, length:', base64Image.length);
+    }
 
     try {
+        // Construct the message content. If we have a base image, use multi-modal format.
+        const messageContent: any[] = [
+            {
+                type: 'text',
+                text: fullPrompt,
+            }
+        ];
+
+        if (base64Image) {
+            messageContent.push({
+                type: 'image_url',
+                image_url: {
+                    url: base64Image,
+                },
+            });
+        }
+
         // OpenRouter uses chat/completions for all models including image generation
         const requestBody: Record<string, unknown> = {
             model: model.id,
             messages: [
                 {
                     role: 'user',
-                    content: fullPrompt,
+                    content: messageContent,
                 },
             ],
         };
