@@ -59,6 +59,9 @@ export function useProjects() {
                                         setCurrentProject(newProject);
                                     }
                                 }
+
+                                // Save for skip preloading feature (consistency with openRepository)
+                                localStorage.setItem('last_repository_path', result.path);
                             }
                         } catch (e) {
                             console.error('[App] Failed to auto-load default repository:', e);

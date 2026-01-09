@@ -20,6 +20,18 @@ export class AppFolderInitializer {
     }
 
     /**
+     * Helper to check if a path exists asynchronously
+     */
+    private async existsAsync(p: string): Promise<boolean> {
+        try {
+            await fs.promises.access(p);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Create default folder structure
      */
     async initializeDefaultFolders(): Promise<{ success: boolean; paths: string[]; error?: string }> {
@@ -27,8 +39,8 @@ export class AppFolderInitializer {
 
         try {
             // Create main workspace folder
-            if (!fs.existsSync(this.workspacePath)) {
-                fs.mkdirSync(this.workspacePath, { recursive: true });
+            if (!(await this.existsAsync(this.workspacePath))) {
+                await fs.promises.mkdir(this.workspacePath, { recursive: true });
                 console.log(`Created workspace folder: ${this.workspacePath}`);
                 createdPaths.push(this.workspacePath);
             }
@@ -43,8 +55,8 @@ export class AppFolderInitializer {
             ];
 
             for (const folder of defaultFolders) {
-                if (!fs.existsSync(folder)) {
-                    fs.mkdirSync(folder, { recursive: true });
+                if (!(await this.existsAsync(folder))) {
+                    await fs.promises.mkdir(folder, { recursive: true });
                     console.log(`Created folder: ${folder}`);
                     createdPaths.push(folder);
                 }
@@ -52,18 +64,18 @@ export class AppFolderInitializer {
 
             // HIERARCHY FIX: Create a "Default" repository folder and mark it correctly
             const defaultRepoPath = path.join(reposPath, 'Default');
-            if (!fs.existsSync(defaultRepoPath)) {
-                fs.mkdirSync(defaultRepoPath, { recursive: true });
+            if (!(await this.existsAsync(defaultRepoPath))) {
+                await fs.promises.mkdir(defaultRepoPath, { recursive: true });
                 console.log(`Created default repository folder: ${defaultRepoPath}`);
                 createdPaths.push(defaultRepoPath);
 
                 // Mark it as a repository so projects can be created inside it
-                this.writeRepoMeta(defaultRepoPath, 'Default');
+                await this.writeRepoMeta(defaultRepoPath, 'Default');
             }
 
             // Create a welcome README file
             const readmePath = path.join(this.workspacePath, 'README.txt');
-            if (!fs.existsSync(readmePath)) {
+            if (!(await this.existsAsync(readmePath))) {
                 const welcomeText = `Welcome to Your Application!
 
 This folder contains all your application data.
@@ -77,7 +89,7 @@ Directory Structure:
 
 Created: ${new Date().toLocaleString()}
 `;
-                fs.writeFileSync(readmePath, welcomeText);
+                await fs.promises.writeFile(readmePath, welcomeText, 'utf-8');
                 createdPaths.push(readmePath);
             }
 
@@ -97,17 +109,23 @@ Created: ${new Date().toLocaleString()}
     }
 
     /**
-     * Write hierarchy metadata for a repository
+     * Write hierarchy metadata for a repository (async)
      */
-    private writeRepoMeta(repoPath: string, name: string): void {
-        const metaPath = path.join(repoPath, HIERARCHY_META_FILE);
-        const meta = {
-            type: 'repository' as NodeType,
-            createdAt: Date.now(),
-            name: name
-        };
-        fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
-        console.log(`[Hierarchy] Initialized repository metadata at: ${repoPath}`);
+    private async writeRepoMeta(repoPath: string, name: string): Promise<void> {
+        try {
+            const metaPath = path.join(repoPath, HIERARCHY_META_FILE);
+            const meta = {
+                type: 'repository' as NodeType,
+                createdAt: Date.now(),
+                name: name
+            };
+            await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+            console.log(`[Hierarchy] Initialized repository metadata at: ${repoPath}`);
+        } catch (error) {
+            console.error(`[Hierarchy] Failed to write repository metadata at ${repoPath}:`, error);
+            // We don't re-throw here to allow initialization to continue if possible,
+            // but the error is logged.
+        }
     }
 
     /**
@@ -118,8 +136,8 @@ Created: ${new Date().toLocaleString()}
             const documentsPath = app.getPath('documents');
             const customPath = path.join(documentsPath, folderName);
 
-            if (!fs.existsSync(customPath)) {
-                fs.mkdirSync(customPath, { recursive: true });
+            if (!(await this.existsAsync(customPath))) {
+                await fs.promises.mkdir(customPath, { recursive: true });
                 console.log(`Created folder in Documents: ${customPath}`);
                 return { success: true, path: customPath };
             }
@@ -135,7 +153,7 @@ Created: ${new Date().toLocaleString()}
     }
 
     /**
-     * Create folder at a specific path with validation
+     * Create folder at a specific path with validation (async)
      */
     async createAtPath(folderPath: string): Promise<{ success: boolean; path?: string; error?: string }> {
         try {
@@ -147,22 +165,30 @@ Created: ${new Date().toLocaleString()}
             // Resolve to absolute path
             const absolutePath = path.resolve(folderPath);
 
-            // Check if path already exists
-            if (fs.existsSync(absolutePath)) {
-                return {
-                    success: true,
-                    path: absolutePath,
-                    error: 'Folder already exists'
-                };
+            try {
+                // Check if path exists using stat
+                const stats = await fs.promises.stat(absolutePath);
+
+                if (stats.isDirectory()) {
+                    // Already a directory, return success with no error message
+                    return { success: true, path: absolutePath };
+                } else {
+                    // Path exists but is not a directory
+                    return { success: false, error: 'Path exists and is not a directory' };
+                }
+            } catch (err) {
+                // If it doesn't exist (ENOENT), we create it
+                if ((err as any).code === 'ENOENT') {
+                    await fs.promises.mkdir(absolutePath, { recursive: true });
+                    console.log(`Created folder: ${absolutePath}`);
+                    return { success: true, path: absolutePath };
+                }
+
+                // Re-throw other errors to be caught by outer try-catch
+                throw err;
             }
-
-            // Create folder
-            fs.mkdirSync(absolutePath, { recursive: true });
-            console.log(`Created folder: ${absolutePath}`);
-
-            return { success: true, path: absolutePath };
-
         } catch (error) {
+            console.error('Error in createAtPath:', error);
             return {
                 success: false,
                 error: (error as Error).message
@@ -171,12 +197,12 @@ Created: ${new Date().toLocaleString()}
     }
 
     /**
-     * Check if folders exist
+     * Check if folders exist asynchronously
      */
-    checkFoldersExist(): { workspace: boolean; repos: boolean } {
+    async checkFoldersExistAsync(): Promise<{ workspace: boolean; repos: boolean }> {
         return {
-            workspace: fs.existsSync(this.workspacePath),
-            repos: fs.existsSync(path.join(this.workspacePath, 'repos'))
+            workspace: await this.existsAsync(this.workspacePath),
+            repos: await this.existsAsync(path.join(this.workspacePath, 'repos'))
         };
     }
 

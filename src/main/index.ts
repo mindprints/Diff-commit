@@ -98,17 +98,21 @@ function getSecureApiKey(provider: string): string | undefined {
 }
 
 let mainWindow = null;
-let folderInitializer: AppFolderInitializer;
+let folderInitializer: AppFolderInitializer | null = null;
 
 // Initialize app folders before creating window
-async function initializeApp() {
+/**
+ * Initialize app folders before creating window.
+ * Returns true if successful, false otherwise.
+ */
+async function initializeApp(): Promise<boolean> {
     console.log('[App] Initializing application folders...');
 
     // Create folder initializer
     folderInitializer = new AppFolderInitializer();
 
     // Check if folders already exist
-    const exists = folderInitializer.checkFoldersExist();
+    const exists = await folderInitializer.checkFoldersExistAsync();
     console.log('[App] Workspace exists:', exists.workspace);
 
     // Create default folder structure
@@ -121,16 +125,25 @@ async function initializeApp() {
         } else {
             console.log('[App] All folders already exist');
         }
+
+        // Register IPC handlers with the repos path
+        const reposPath = folderInitializer.getReposPath();
+        console.log('[App] Repos path:', reposPath);
+
+        // Pass repos path to hierarchy validator
+        registerHierarchyHandlers(reposPath);
+        return true;
     } else {
         console.error('[App] ✗ Failed to initialize folders:', result.error);
+
+        // Show user-facing error dialog
+        dialog.showErrorBox(
+            'Application Initialization Failed',
+            `The application failed to initialize its vital folders:\n\n${result.error}\n\nPlease check your file permissions and try again.`
+        );
+
+        return false;
     }
-
-    // Register IPC handlers with the repos path
-    const reposPath = folderInitializer.getReposPath();
-    console.log('[App] Repos path:', reposPath);
-
-    // Pass repos path to hierarchy validator
-    registerHierarchyHandlers(reposPath);
 }
 
 function createWindow() {
@@ -423,7 +436,14 @@ function createMenu() {
 
 app.whenReady().then(async () => {
     // Initialize folders BEFORE creating window
-    await initializeApp();
+    const initialized = await initializeApp();
+
+    if (!initialized) {
+        console.error('[App] Startup aborted due to initialization failure.');
+        // We don't quit immediately so the error box stays visible on some systems,
+        // but we skip all the setup that requires folders.
+        return;
+    }
 
     // Create the menu
     createMenu();
@@ -1333,14 +1353,23 @@ app.whenReady().then(async () => {
     // ========================================
 
     ipcMain.handle('get-workspace-path', async () => {
+        if (!folderInitializer) {
+            throw new Error('Application not initialized');
+        }
         return folderInitializer.getWorkspacePath();
     });
 
     ipcMain.handle('get-repos-path', async () => {
+        if (!folderInitializer) {
+            throw new Error('Application not initialized');
+        }
         return folderInitializer.getDefaultRepoPath();
     });
 
     ipcMain.handle('set-custom-workspace', async (_, customPath: string) => {
+        if (!folderInitializer) {
+            throw new Error('Application not initialized');
+        }
         try {
             folderInitializer.setWorkspacePath(customPath);
             const result = await folderInitializer.initializeDefaultFolders();
@@ -1351,13 +1380,22 @@ app.whenReady().then(async () => {
     });
 
     ipcMain.handle('create-folder-at-path', async (_, folderPath: string) => {
-        return await folderInitializer.createAtPath(folderPath);
+        return await getFolderInitializer().createAtPath(folderPath);
     });
 
     createWindow();
 });
 
-export { folderInitializer };
+/**
+ * Get the initialized folder initializer.
+ * Throws an error if called before initializeApp().
+ */
+export function getFolderInitializer(): AppFolderInitializer {
+    if (!folderInitializer) {
+        throw new Error('Application not initialized: folderInitializer is null');
+    }
+    return folderInitializer;
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
