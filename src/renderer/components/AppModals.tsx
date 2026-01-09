@@ -183,9 +183,9 @@ export function AppModals() {
             <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
             <LogsModal isOpen={showLogs} onClose={() => setShowLogs(false)} />
 
-            {/* Welcome Gate - forces users to select a repository before using the app */}
+            {/* Welcome Gate - mothballed for now to open directly in the app */}
             <WelcomeModal
-                isOpen={!repositoryPath}
+                isOpen={false}
                 onCreateRepository={createRepository}
                 onOpenRepository={openRepository}
             />

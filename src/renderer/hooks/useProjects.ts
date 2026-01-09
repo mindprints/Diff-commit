@@ -35,6 +35,35 @@ export function useProjects() {
                     localStorage.removeItem('diff-commit-repository');
                     localStorage.removeItem('diff-commit-commits');
                     setProjects([]);
+
+                    // Auto-load default repository folder on startup
+                    if (window.electron?.getReposPath && window.electron?.loadRepositoryAtPath) {
+                        try {
+                            const defaultReposPath = await window.electron.getReposPath();
+                            console.log('[App] Auto-loading default repository:', defaultReposPath);
+                            const result = await window.electron.loadRepositoryAtPath(defaultReposPath);
+                            if (result) {
+                                setRepositoryPath(result.path);
+                                setProjects(result.projects);
+
+                                // Auto-load most recent project OR create a new one if empty
+                                if (result.projects.length > 0) {
+                                    const sortedProjects = [...result.projects].sort((a, b) => b.updatedAt - a.updatedAt);
+                                    setCurrentProject(sortedProjects[0]);
+                                } else {
+                                    // No projects in default repo - create one
+                                    const projectName = 'Project ' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                                    const newProject = await projectStorage.createProject(projectName, '', result.path);
+                                    if (newProject) {
+                                        setProjects([newProject]);
+                                        setCurrentProject(newProject);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.error('[App] Failed to auto-load default repository:', e);
+                        }
+                    }
                 } else {
                     // In browser mode, we can't auto-restore the handle (user must re-pick)
                     // Just load any localStorage projects as fallback

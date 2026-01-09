@@ -99,9 +99,9 @@ export interface ImageGenerationResponse {
 /**
  * Generate an image using OpenRouter's image generation API
  * 
- * @param prompt - The image generation prompt
- * @param model - The model to use (must be image-capable)
- * @param prompt - The image generation prompt
+ * @param editorContent - Optional content from the editor to include in context
+ * @param base64Image - Optional original image data for modification (base64 data URL)
+ * @param signal - Optional AbortSignal for cancellation * @param prompt - The image generation prompt
  * @param model - The model to use (must be image-capable)
  * @param editorContent - Optional content from the editor to include in context
  * @param base64Image - Optional original image data for modification (base64 data URL)

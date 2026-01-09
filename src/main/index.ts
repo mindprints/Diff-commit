@@ -5,6 +5,8 @@ import Store from 'electron-store';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import * as hierarchyService from './hierarchyService';
+import { AppFolderInitializer } from './AppFolderInitializer';
+import { registerHierarchyHandlers } from './hierarchy-ipc-handlers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,6 +98,40 @@ function getSecureApiKey(provider: string): string | undefined {
 }
 
 let mainWindow = null;
+let folderInitializer: AppFolderInitializer;
+
+// Initialize app folders before creating window
+async function initializeApp() {
+    console.log('[App] Initializing application folders...');
+
+    // Create folder initializer
+    folderInitializer = new AppFolderInitializer();
+
+    // Check if folders already exist
+    const exists = folderInitializer.checkFoldersExist();
+    console.log('[App] Workspace exists:', exists.workspace);
+
+    // Create default folder structure
+    const result = await folderInitializer.initializeDefaultFolders();
+
+    if (result.success) {
+        console.log('[App] ✓ Application folders initialized');
+        if (result.paths.length > 0) {
+            console.log('[App] Created:', result.paths.length, 'new folders/files');
+        } else {
+            console.log('[App] All folders already exist');
+        }
+    } else {
+        console.error('[App] ✗ Failed to initialize folders:', result.error);
+    }
+
+    // Register IPC handlers with the repos path
+    const reposPath = folderInitializer.getReposPath();
+    console.log('[App] Repos path:', reposPath);
+
+    // Pass repos path to hierarchy validator
+    registerHierarchyHandlers(reposPath);
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -385,7 +421,10 @@ function createMenu() {
     Menu.setApplicationMenu(menu);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+    // Initialize folders BEFORE creating window
+    await initializeApp();
+
     // Create the menu
     createMenu();
 
@@ -595,6 +634,13 @@ app.whenReady().then(() => {
         if (result.canceled || result.filePaths.length === 0) return null;
 
         const repoPath = result.filePaths[0];
+        return await scanRepository(repoPath);
+    });
+
+    /**
+     * Scan a repository folder for project folders (subdirectories with .diff-commit)
+     */
+    async function scanRepository(repoPath: string) {
         const projects = [];
 
         // Scan for project folders (subdirectories with .diff-commit)
@@ -641,6 +687,17 @@ app.whenReady().then(() => {
         }
 
         return { path: repoPath, projects };
+    }
+
+    // Load Repository at specific path
+    ipcMain.handle('load-repository-at-path', async (event, repoPath: string) => {
+        if (!repoPath || !fs.existsSync(repoPath)) return null;
+        try {
+            return await scanRepository(repoPath);
+        } catch (e) {
+            console.error('Failed to load repository at path:', repoPath, e);
+            return null;
+        }
     });
 
     // Create New Project (create a folder with content.md and .diff-commit)
@@ -1271,8 +1328,36 @@ app.whenReady().then(() => {
         }
     });
 
+    // ========================================
+    // Folder & Workspace IPC Handlers
+    // ========================================
+
+    ipcMain.handle('get-workspace-path', async () => {
+        return folderInitializer.getWorkspacePath();
+    });
+
+    ipcMain.handle('get-repos-path', async () => {
+        return folderInitializer.getDefaultRepoPath();
+    });
+
+    ipcMain.handle('set-custom-workspace', async (_, customPath: string) => {
+        try {
+            folderInitializer.setWorkspacePath(customPath);
+            const result = await folderInitializer.initializeDefaultFolders();
+            return result;
+        } catch (error) {
+            return { success: false, error: (error as Error).message };
+        }
+    });
+
+    ipcMain.handle('create-folder-at-path', async (_, folderPath: string) => {
+        return await folderInitializer.createAtPath(folderPath);
+    });
+
     createWindow();
 });
+
+export { folderInitializer };
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

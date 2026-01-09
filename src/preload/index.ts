@@ -124,6 +124,13 @@ export interface ElectronAPI {
     onMenuToolsModels: (callback: () => void) => void;
     onMenuToolsSettings: (callback: () => void) => void;
 
+    // Folder & Workspace Paths
+    getWorkspacePath: () => Promise<string>;
+    getReposPath: () => Promise<string>;
+    setCustomWorkspace: (customPath: string) => Promise<{ success: boolean; paths: string[]; error?: string }>;
+    createFolderAtPath: (folderPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+    loadRepositoryAtPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
+
     // Cleanup listeners
     removeAllListeners: (channel: string) => void;
 }
@@ -249,6 +256,13 @@ const electronAPI: ElectronAPI = {
         ipcRenderer.on('menu-tools-models', () => callback()),
     onMenuToolsSettings: (callback: () => void) =>
         ipcRenderer.on('menu-tools-settings', () => callback()),
+
+    // Folder & Workspace Paths
+    getWorkspacePath: () => ipcRenderer.invoke('get-workspace-path'),
+    getReposPath: () => ipcRenderer.invoke('get-repos-path'),
+    setCustomWorkspace: (customPath: string) => ipcRenderer.invoke('set-custom-workspace', customPath),
+    createFolderAtPath: (folderPath: string) => ipcRenderer.invoke('create-folder-at-path', folderPath),
+    loadRepositoryAtPath: (repoPath: string) => ipcRenderer.invoke('load-repository-at-path', repoPath),
 
     // Cleanup listeners
     removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel)
