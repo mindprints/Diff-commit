@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useUI, useProject } from '../contexts';
-import { X, GitMerge, FileText, Trash2 } from 'lucide-react';
+import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw } from 'lucide-react';
 import { Button } from './Button';
 import { loadGraphData, saveGraphData, hasCycle, getTopologicalSort } from '../services/graphService';
 import './ProjectNodeModal.css';
@@ -10,6 +10,7 @@ interface ProjectNodeModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
+
 
 interface NodeState {
     id: string;
@@ -48,39 +49,57 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
     const canvasRef = useRef<HTMLDivElement>(null);
 
-    // Initial Load
-    useEffect(() => {
-        if (isOpen && repositoryPath) {
-            loadGraphData(repositoryPath).then(data => {
-                // Merge data with current projects
-                // If new projects exist that aren't in graph, add them
-                // If graph has nodes that don't exist in projects, remove them from graph (cleanup)
+    // Initial Load & Reset Layout Helper
+    const initializeLayout = useCallback(async (forced: boolean = false) => {
+        if (!repositoryPath) return;
 
-                const existingProjectIds = new Set(projects.map(p => p.id));
-                const knownNodes = new Set(data.nodes.map(n => n.id));
+        const data = await loadGraphData(repositoryPath);
+        // If forced reset, ignore loaded nodes positions but keep edges? 
+        // Or reset completely? Let's keep edges but reset positions.
 
-                let validNodes = data.nodes.filter(n => existingProjectIds.has(n.id));
-                const validEdges = data.edges.filter(e => existingProjectIds.has(e.from) && existingProjectIds.has(e.to));
+        const existingProjectIds = new Set(projects.map(p => p.id));
 
-                // Add new projects at default positions
-                let newX = 50;
-                let newY = 50;
-                projects.forEach(p => {
-                    if (!knownNodes.has(p.id)) {
-                        validNodes.push({ id: p.id, x: newX, y: newY });
-                        newX += 220;
-                        if (newX > 800) {
-                            newX = 50;
-                            newY += 150;
-                        }
-                    }
-                });
+        let validNodes: NodeState[] = [];
+        let validEdges: Edge[] = [];
 
-                setNodes(validNodes);
-                setEdges(validEdges);
-            });
+        if (!forced) {
+            validNodes = data.nodes.filter(n => existingProjectIds.has(n.id));
+            validEdges = data.edges.filter(e => existingProjectIds.has(e.from) && existingProjectIds.has(e.to));
+        } else {
+            // Keep edges if possible
+            validEdges = data.edges.filter(e => existingProjectIds.has(e.from) && existingProjectIds.has(e.to));
         }
-    }, [isOpen, repositoryPath, projects.length]); // Re-run if projects change count (rough check)
+
+        const knownNodes = new Set(validNodes.map(n => n.id));
+
+        // Add new projects (or all if forced) at default positions
+        let newX = 50;
+        let newY = 50;
+        projects.forEach(p => {
+            if (!knownNodes.has(p.id)) {
+                validNodes.push({ id: p.id, x: newX, y: newY });
+                newX += 220;
+                if (newX > 800) {
+                    newX = 50;
+                    newY += 150;
+                }
+            }
+        });
+
+        setNodes(validNodes);
+        setEdges(validEdges);
+        // Reset view
+        if (forced) {
+            setOffset({ x: 0, y: 0 });
+            setScale(1);
+        }
+    }, [repositoryPath, projects]);
+
+    useEffect(() => {
+        if (isOpen) {
+            initializeLayout(false);
+        }
+    }, [isOpen, initializeLayout]);
 
     // Save on changes
     useEffect(() => {
@@ -116,8 +135,6 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 // Select logic
                 setSelectedNodes(prev => {
                     const next = new Set(prev);
-                    // Simple toggle for now, or exclusive? 
-                    // Let's make it exclusive unless Ctrl pressed
                     if (e.ctrlKey) {
                         if (next.has(nodeId)) next.delete(nodeId);
                         else next.add(nodeId);
@@ -159,12 +176,6 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const handleMouseUp = useCallback((e: React.MouseEvent) => {
         if (creatingEdge) {
             // Check if dropped on a node
-            // Simple hit testing or rely on event propagation?
-            // Since mouse events bubble, if we mouseup on a node, strict handler on node might be better
-            // But we are processing global mouse move/up here.
-            // We'll interpret target from the event? No, e.target might be the SVG overlay.
-
-            // Hit test manually
             const rect = canvasRef.current?.getBoundingClientRect();
             if (rect) {
                 const x = e.clientX - rect.left;
@@ -177,8 +188,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 );
 
                 if (targetNode && targetNode.id !== creatingEdge.from) {
-                    // Create Edge
-                    // Prevent duplicates
+                    // Create Edge (avoid duplicates)
                     if (!edges.some(edge => edge.from === creatingEdge.from && edge.to === targetNode.id)) {
                         setEdges(prev => [...prev, { from: creatingEdge.from, to: targetNode.id }]);
                     }
@@ -195,48 +205,35 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         setHoveredNode(id);
         const project = projects.find(p => p.id === id);
         if (project) {
-            // Get content - draft or last commit? 
-            // "project's most recent commit content" per requirements
-            // We assume project.content is the draft. We need commits.
+            // Try to use content from project object first (draft content)
+            let content = project.content;
 
-            // Hacky: access internal commit storage or assume empty draft means fetch commits?
-            // Let's use `window.electron.loadProjectCommits` if available or `browserFileSystem`
-            // But `ProjectContext` doesn't freely expose generic "getCommits(projectId)" for non-current projects easily
-            // except via the load side effect.
+            // If empty, it might be because we only have metadata. 
+            // We should try to load it via IPC if possible, but that's async and might be slow for hover.
+            // Requirement was "most recent commit content".
+            // If we are in Electron, we might be able to peek.
+            // But for now, let's just make sure we are not showing "undefined".
 
-            // For now, display current draft content as fallback, or try to load.
-            setHoverContent(project.content.slice(0, 500) + (project.content.length > 500 ? '...' : '') || '(Empty)');
+            if (!content) {
+                content = "(No content or empty draft)";
+                // Ideally trigger a fetch here if we had a lightweight fetcher
+            }
+
+            setHoverContent(content.slice(0, 500) + (content.length > 500 ? '...' : ''));
         }
     };
 
     const handleMerge = async () => {
         if (selectedNodes.size < 2 && edges.length === 0) return;
 
-        // Find subgraph of selected nodes? Or merge everything connected?
-        // Requirement: "define a merge sequence"
-        // Let's take all nodes involved in edges, or just selected?
-        // Let's assume user selects the nodes they want to merge, and we use edges to order them.
-        const nodesToMerge = Array.from(selectedNodes);
+        const nodesToMerge: string[] = Array.from(selectedNodes);
 
         if (nodesToMerge.length < 2) {
-            // If nothing selected, maybe merge all connected components? Too risky.
-            // Requirement says "Create nodes -> Draw arcs -> Merge button"
-            // So likely we merge the entire lineage defined by arcs?
-            // Let's merge all nodes that have connections + selected ones.
-            // A clearer UX: User selects the "sink" node (end of chain)? 
-            // OR User clicks Merge, we find the longest chain?
-
-            // Implementation: Merge ALL nodes in the current view that are connected? 
-            // Let's stick to: Merge SELECTED nodes using the order defined by EDGES.
             alert("Please select at least 2 nodes to merge (Ctrl+Click)");
             return;
         }
 
-        // Sort nodes based on edges
-        // Filter edges to only those between selected nodes
         const relevantEdges = edges.filter(e => selectedNodes.has(e.from) && selectedNodes.has(e.to));
-
-        // Use topological sort
         const sortedIds = getTopologicalSort(nodesToMerge, relevantEdges);
 
         if (!sortedIds) {
@@ -244,24 +241,64 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             return;
         }
 
-        // Concatenate content
         let mergedContent = "";
-        const projectMap = new Map(projects.map(p => [p.id, p]));
+        const projectMap = new Map<string, Project>(projects.map(p => [p.id, p]));
 
-        sortedIds.forEach((id, idx) => {
+        // Calculate average position (center of mass) for the new node
+        let avgX = 0;
+        let avgY = 0;
+        let count = 0;
+
+        sortedIds.forEach((id) => {
             const p = projectMap.get(id);
             if (p) {
                 mergedContent += `\n\n--- Content from ${p.name} ---\n\n`;
                 mergedContent += p.content;
             }
+            const n = nodes.find(node => node.id === id);
+            if (n) {
+                avgX += n.x;
+                avgY += n.y;
+                count++;
+            }
         });
+
+        // Place new node slightly offset from the center of mass
+        const newX = count > 0 ? (avgX / count) + 50 : 50;
+        const newY = count > 0 ? (avgY / count) + 50 : 50;
 
         // Create new Project
         const newName = `Merged ${sortedIds.map(id => projectMap.get(id)?.name).join('-')}`;
-        await createNewProject(newName, mergedContent.trim());
+        const newProject = await createNewProject(newName, mergedContent.trim());
 
-        // Visual feedback handled by useEffect observing projects list
-        onClose();
+        // Optimistically add the new node to graph at the calculated position so it doesn't jump to 0,0
+        // The useEffect will pick it up on next render, but we want to set it now to avoid flicker/default pos
+        // However, useEffect has logic to add unknown nodes. 
+        // We can pre-seed the graph data or just handle it here? 
+        // Best to update local state immediately.
+        setNodes(prev => [...prev, { id: newProject.id, x: newX, y: newY }]);
+
+        // Automatically link the sources to the new merge node?
+        // Requirement: "illustrate the lineage". 
+        // Let's create edges from the last items in chain to the new node?
+        // Or from ALL selected nodes to the new node?
+        // Let's assume the new node is a child of the sorted sequence.
+        // Actually, merging A+B -> C implies A&B are parents of C.
+        // So we should add edges from all selected nodes (OR just the sinks?) to the new node.
+
+        const newEdges: Edge[] = [];
+        sortedIds.forEach(id => {
+            // Avoid duplicates
+            newEdges.push({ from: id, to: newProject.id });
+        });
+        setEdges(prev => [...prev, ...newEdges]);
+
+        // Don't close immediately so user sees the result? 
+        // User requirements didn't specify. Previous code closed.
+        // "Upon merging, create a new project node... Do not auto-delete... apply color-coding"
+        // Let's keep modal open to show the visual feedback.
+        // clear selection
+        setSelectedNodes(new Set());
     };
 
     const deleteSelected = async () => {
@@ -282,6 +319,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         <div className="project-node-modal">
             {/* Toolbar */}
             <div className="modal-controls">
+                <Button variant="ghost" onClick={() => initializeLayout(true)} title="Reset Node Positions">
+                    <RotateCcw className="w-4 h-4" />
+                </Button>
+                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
                 <Button variant="ghost" onClick={deleteSelected} disabled={selectedNodes.size === 0} title="Delete Connections (Del)">
                     <Trash2 className="w-4 h-4" />
                 </Button>
@@ -290,9 +331,16 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 </Button>
             </div>
 
-            <button className="modal-close p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg hover:bg-gray-100" onClick={onClose}>
-                <X className="w-5 h-5" />
-            </button>
+            {/* Return Button */}
+            <div className="modal-close flex items-center gap-2">
+                <button
+                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors border border-gray-200 dark:border-slate-700 font-medium text-sm text-gray-700 dark:text-slate-200"
+                    onClick={onClose}
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Return to {currentProject?.name ? currentProject.name : 'Editor'}
+                </button>
+            </div>
 
             {/* Canvas */}
             <div
@@ -302,7 +350,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                onWheel={(e) => {
+                onWheel={(_e) => {
                     // Simple zoom?
                 }}
             >

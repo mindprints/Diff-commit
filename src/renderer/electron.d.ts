@@ -59,6 +59,9 @@ export interface IElectronAPI {
         repositoryPath: string;
     } | null>;
 
+    // Graph Ops (optional, future IPC)
+    handleGraphOps?: (action: string, data?: any) => Promise<any>;
+
     // Hierarchy Enforcement System
     hierarchy: {
         getNodeType: (dirPath: string) => Promise<'root' | 'repository' | 'project'>;
