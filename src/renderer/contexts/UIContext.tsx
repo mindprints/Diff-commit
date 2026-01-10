@@ -55,6 +55,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [showProjectsPanel, setShowProjectsPanel] = useState(false);
     const [showPromptsModal, setShowPromptsModal] = useState(false);
     const [showModelsModal, setShowModelsModal] = useState(false);
+    const [showGraphModal, setShowGraphModal] = useState(false);
     const [showCommitHistory, setShowCommitHistory] = useState(false);
     const [savePromptDialogOpen, setSavePromptDialogOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
@@ -153,7 +154,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
             isPromptPanelVisible, setIsPromptPanelVisible,
             isHeaderVisible, setIsHeaderVisible,
             showImageViewer, setShowImageViewer,
-            showSettingsModal, setShowSettingsModal
+            showSettingsModal, setShowSettingsModal,
+            showGraphModal, setShowGraphModal,
         }}>
             {children}
         </UIContext.Provider>

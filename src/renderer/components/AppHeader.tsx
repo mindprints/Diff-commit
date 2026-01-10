@@ -15,7 +15,8 @@ import {
     History,
     HelpCircle,
     PanelTopClose,
-    PanelTopOpen
+    PanelTopOpen,
+    Network
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ViewMode, FontFamily } from '../types';
@@ -37,7 +38,7 @@ export function AppHeader() {
     const {
         backgroundHue, setBackgroundHue, isDarkMode, setIsDarkMode,
         setShowLogs, setShowCommitHistory, setShowHelp, setShowProjectsPanel,
-        isHeaderVisible, setIsHeaderVisible, setShowModelsModal
+        isHeaderVisible, setIsHeaderVisible, setShowModelsModal, setShowGraphModal
     } = useUI();
 
     const {
@@ -108,6 +109,17 @@ export function AppHeader() {
             </div>
 
             <div className="flex items-center gap-3">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs px-2 text-gray-500 hover:text-indigo-600"
+                    onClick={() => setShowGraphModal(true)}
+                    icon={<Network className="w-3.5 h-3.5" />}
+                    title="Project Graph View"
+                >
+                    Graph
+                </Button>
+
                 <Button
                     variant="outline"
                     onClick={handleClearAll}

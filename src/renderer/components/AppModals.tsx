@@ -10,6 +10,7 @@ import { WelcomeModal } from './WelcomeModal';
 import { HelpModal } from './HelpModal';
 import { LogsModal } from './LogsModal';
 import { SettingsModal } from './SettingsModal';
+import { ProjectNodeModal } from './ProjectNodeModal';
 import { X, Volume2, Wand2, Shield, Save } from 'lucide-react';
 import { TextCommit, AIPrompt, ViewMode, PolishMode, Project } from '../types';
 
@@ -27,7 +28,8 @@ export function AppModals() {
         contextMenu, setContextMenu,
         errorMessage, setErrorMessage,
         activeLogId, setActiveLogId,
-        showSettingsModal, setShowSettingsModal
+        showSettingsModal, setShowSettingsModal,
+        showGraphModal, setShowGraphModal
     } = useUI();
 
     const {
@@ -194,6 +196,12 @@ export function AppModals() {
             <SettingsModal
                 isOpen={showSettingsModal}
                 onClose={() => setShowSettingsModal(false)}
+            />
+
+            {/* Project Graph Modal */}
+            <ProjectNodeModal
+                isOpen={showGraphModal}
+                onClose={() => setShowGraphModal(false)}
             />
         </>
     );

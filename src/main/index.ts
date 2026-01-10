@@ -440,8 +440,10 @@ app.whenReady().then(async () => {
 
     if (!initialized) {
         console.error('[App] Startup aborted due to initialization failure.');
-        // We don't quit immediately so the error box stays visible on some systems,
-        // but we skip all the setup that requires folders.
+        // Quit the app after a delay to allow the error dialog to be read
+        setTimeout(() => {
+            app.quit();
+        }, 3000);
         return;
     }
 

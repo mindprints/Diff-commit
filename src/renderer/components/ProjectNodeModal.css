@@ -1,0 +1,154 @@
+.project-node-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-primary, #f8fafc);
+}
+
+.dark .project-node-modal {
+    background-color: #0f172a;
+}
+
+.project-node-canvas {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    cursor: grab;
+    background-size: 20px 20px;
+    background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+}
+
+.dark .project-node-canvas {
+    background-image: radial-gradient(circle, #334155 1px, transparent 1px);
+}
+
+.project-node-canvas:active {
+    cursor: grabbing;
+}
+
+.project-node {
+    position: absolute;
+    width: 200px;
+    padding: 12px;
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    cursor: pointer;
+    user-select: none;
+    transition: box-shadow 0.2s, transform 0.1s, border-color 0.2s;
+    z-index: 10;
+}
+
+.dark .project-node {
+    background: #1e293b;
+    border-color: #334155;
+    color: white;
+}
+
+.project-node:hover {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    border-color: #6366f1;
+    /* Indigo-500 */
+    z-index: 20;
+}
+
+.project-node.selected {
+    border-color: #ec4899;
+    /* Pink-500 */
+    box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.3);
+}
+
+.project-node-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.project-node-meta {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.dark .project-node-meta {
+    color: #94a3b8;
+}
+
+/* Tooltip for commit content */
+.node-tooltip {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 10px;
+    width: 250px;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+
+.project-node:hover .node-tooltip {
+    opacity: 1;
+}
+
+/* Edges */
+.graph-svg-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.graph-edge {
+    stroke: #94a3b8;
+    stroke-width: 2px;
+    fill: none;
+    marker-end: url(#arrowhead);
+    transition: stroke 0.2s;
+}
+
+.graph-edge.potential {
+    stroke-dasharray: 5, 5;
+    stroke: #6366f1;
+    opacity: 0.7;
+}
+
+/* Controls */
+.modal-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 50;
+    background: white;
+    padding: 8px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.dark .modal-controls {
+    background: #1e293b;
+    border: 1px solid #334155;
+}
+
+.modal-close {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 50;
+}
