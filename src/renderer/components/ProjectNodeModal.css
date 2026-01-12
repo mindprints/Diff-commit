@@ -86,10 +86,12 @@
     transform: translateX(-50%);
     margin-top: 10px;
     width: 250px;
-    background: #0f172a;
-    color: #e2e8f0;
+    background: white;
+    color: #1e293b;
     padding: 8px;
     border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     font-size: 0.75rem;
     pointer-events: auto;
     opacity: 0;
@@ -101,8 +103,23 @@
     font-family: monospace;
 }
 
-.project-node:hover .node-tooltip {
+.dark .node-tooltip {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+.project-node:hover .node-tooltip,
+.node-tooltip.persistent {
     opacity: 1;
+}
+
+.node-tooltip.persistent {
+    width: 400px;
+    max-height: 400px;
+    z-index: 200;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
+    border: 1px solid #475569;
 }
 
 /* Edges */

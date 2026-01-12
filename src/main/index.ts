@@ -730,9 +730,13 @@ app.whenReady().then(async () => {
         const parentType = hierarchyService.getNodeType(repoPath);
 
         if (parentType === 'root') {
-            // Cannot create a project at root level
-            console.error('[Hierarchy] Blocked: Cannot create project at root level:', repoPath);
-            throw new Error('Cannot create a project here. Please open or create a Repository first.');
+            // Auto-promote root folder to repository
+            console.log('[Hierarchy] Auto-promoting root folder to repository:', repoPath);
+            hierarchyService.writeHierarchyMeta(repoPath, {
+                type: 'repository',
+                createdAt: Date.now(),
+                name: path.basename(repoPath)
+            });
         }
 
         if (parentType === 'project') {

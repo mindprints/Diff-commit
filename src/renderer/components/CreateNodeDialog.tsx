@@ -63,15 +63,31 @@ export function CreateNodeDialog({
         }
     }, [allowedTypes, selectedType]);
 
+    // Helper for timestamp
+    const getTimestampName = () => {
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    };
+
     // Reset state when dialog opens
     useEffect(() => {
         if (isOpen) {
-            setName('');
-            setSelectedType(allowedTypes.length === 1 ? allowedTypes[0] : null);
+            // Default to timestamp if creating a project (which is when parentType is repository)
+            // or if we are forced to create a project
+            const effectiveType = allowedTypes.length === 1 ? allowedTypes[0] : null;
+
+            if (effectiveType === 'project' || parentType === 'repository') {
+                setName(getTimestampName());
+            } else {
+                setName('');
+            }
+
+            setSelectedType(effectiveType);
             setValidation({ valid: true });
             setError(null);
         }
-    }, [isOpen, allowedTypes]);
+    }, [isOpen, allowedTypes, parentType]);
 
     // Debounced validation
     const validateName = useCallback(async (value: string, type: NodeType | null) => {

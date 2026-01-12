@@ -245,28 +245,38 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     const handleCopyFinal = useCallback(async () => {
         if (!previewText) return;
 
+        let textToCopy = previewText;
+        const textarea = previewTextareaRef.current?.getTextarea();
+        if (textarea) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            if (start !== end) {
+                textToCopy = previewText.substring(start, end);
+            }
+        }
+
         try {
-            await navigator.clipboard.writeText(previewText);
+            await navigator.clipboard.writeText(textToCopy);
         } catch (err) {
             console.warn('Clipboard API failed, using fallback:', err);
             try {
-                const textarea = document.createElement('textarea');
-                textarea.value = previewText;
-                textarea.style.position = 'fixed';
-                textarea.style.left = '-9999px';
-                textarea.style.top = '0';
-                document.body.appendChild(textarea);
-                textarea.focus();
-                textarea.select();
+                const hiddenTextarea = document.createElement('textarea');
+                hiddenTextarea.value = textToCopy;
+                hiddenTextarea.style.position = 'fixed';
+                hiddenTextarea.style.left = '-9999px';
+                hiddenTextarea.style.top = '0';
+                document.body.appendChild(hiddenTextarea);
+                hiddenTextarea.focus();
+                hiddenTextarea.select();
                 const successful = document.execCommand('copy');
-                document.body.removeChild(textarea);
+                document.body.removeChild(hiddenTextarea);
                 if (!successful) throw new Error('execCommand copy failed');
             } catch (fallbackErr) {
                 console.error('Copy failed:', fallbackErr);
                 setErrorMessage('Failed to copy text to clipboard.');
             }
         }
-    }, [previewText, setErrorMessage]);
+    }, [previewText, setErrorMessage, previewTextareaRef]);
 
     const handleWebSave = useCallback(() => {
         const textToSave = mode === ViewMode.DIFF ? previewText : originalText;

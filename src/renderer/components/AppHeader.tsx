@@ -48,7 +48,7 @@ export function AppHeader() {
     const {
         fontFamily, setFontFamily, fontSize, setFontSize,
         isScrollSyncEnabled, setIsScrollSyncEnabled,
-        mode, handleCopyFinal
+        mode, handleCopyFinal, previewText
     } = useEditor();
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -130,7 +130,7 @@ export function AppHeader() {
                     Clear All
                 </Button>
 
-                {mode === ViewMode.DIFF && (
+                {mode === ViewMode.DIFF && !!previewText && (
                     <Button variant="primary" size="sm" onClick={handleCopyFinal} icon={<Copy className="w-3.5 h-3.5" />} className="h-7 text-xs px-2">
                         Copy
                     </Button>
@@ -157,9 +157,7 @@ export function AppHeader() {
                             onChange={(e) => setBackgroundHue(Number(e.target.value))}
                             className="w-12 h-1 cursor-pointer appearance-none rounded-full"
                             style={{
-                                background: isDarkMode
-                                    ? 'rgba(255, 255, 255, 0.3)'
-                                    : 'rgba(0, 0, 0, 0.15)'
+                                background: 'linear-gradient(to right, hsl(0, 50%, 50%), hsl(60, 50%, 50%), hsl(120, 50%, 50%), hsl(180, 50%, 50%), hsl(240, 50%, 50%), hsl(300, 50%, 50%), hsl(360, 50%, 50%))'
                             }}
                             title={`Background Hue: ${backgroundHue}°`}
                         />

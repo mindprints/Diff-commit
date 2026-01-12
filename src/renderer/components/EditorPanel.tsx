@@ -25,7 +25,8 @@ export function EditorPanel() {
         isPolishing, isFactChecking, cancelAIOperation,
         factCheckProgress, activePrompt,
         handleReadAloud,
-        pendingOperations, handleQuickSend
+        pendingOperations, handleQuickSend,
+        isGeneratingImage
     } = useAI();
 
     const {
@@ -126,7 +127,7 @@ export function EditorPanel() {
                                 </svg>
                             )}
                         </Button>
-                        {(isPolishing || isFactChecking) && (
+                        {(isPolishing || isFactChecking || isGeneratingImage) && (
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -260,9 +261,11 @@ export function EditorPanel() {
 
             <div className="p-3 text-xs text-gray-500 dark:text-slate-400 flex items-center justify-between transition-colors duration-200" style={{ backgroundColor: 'var(--bg-muted)', borderTop: '1px solid var(--border-color)' }}>
                 <div className="flex items-center gap-4 flex-1 justify-center">
-                    <span className="flex items-center gap-1.5" title="Word Count">
+                    <span className="flex items-center gap-1.5" title="Word Count & Character Count">
                         <span className="w-2.5 h-2.5 bg-indigo-200 dark:bg-indigo-500/50 border border-indigo-400 dark:border-indigo-400/50 rounded-sm"></span>
                         <span>Words: {previewText.trim() ? previewText.trim().split(/\s+/).length : 0}</span>
+                        <span className="mx-2 opacity-30">|</span>
+                        <span>Chars: {previewText.length}</span>
                     </span>
                 </div>
 

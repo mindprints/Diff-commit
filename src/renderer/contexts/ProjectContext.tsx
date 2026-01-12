@@ -154,6 +154,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }, [previewText, commits, originalText, setHasUnsavedChanges]);
 
     const handleLoadProject = useCallback(async (id: string) => {
+        // Auto-save current project before switching
+        if (currentProject) {
+            // Persist current state
+            try {
+                await saveCurrentProject(previewText);
+            } catch (e) {
+                console.error('Failed to auto-save before switch:', e);
+            }
+        }
+
         const project = await loadProject(id);
         if (project) {
             let contentToLoad = project.content || '';
@@ -191,16 +201,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             resetDiffState();
         }
         return project;
-    }, [loadProject, getRepoHandle, setOriginalText, setPreviewText, setModifiedText, resetDiffState]);
+    }, [loadProject, getRepoHandle, setOriginalText, setPreviewText, setModifiedText, resetDiffState, currentProject, saveCurrentProject, previewText]);
 
     const handleCreateProject = useCallback(async (name: string) => {
+        // Auto-save current project before creating new one
+        if (currentProject) {
+            try {
+                await saveCurrentProject(previewText);
+            } catch (e) {
+                console.error('Failed to auto-save before create:', e);
+            }
+        }
+
         const newProject = await createNewProject(name, '');
         setOriginalText('');
         setPreviewText('');
         setModifiedText('');
         resetDiffState();
         return newProject;
-    }, [createNewProject, setOriginalText, setPreviewText, setModifiedText, resetDiffState]);
+    }, [createNewProject, setOriginalText, setPreviewText, setModifiedText, resetDiffState, currentProject, saveCurrentProject, previewText]);
 
     const handleClearAll = useCallback(() => {
         setOriginalText('');

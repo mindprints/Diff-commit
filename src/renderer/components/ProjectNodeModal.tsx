@@ -47,6 +47,23 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     // Merge Selection
     const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
 
+    // Search State
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredNodes = useMemo(() => {
+        if (!searchTerm) return nodes;
+        const term = searchTerm.toLowerCase();
+        return nodes.filter(n => {
+            const p = projects.find(proj => proj.id === n.id);
+            if (!p) return false;
+
+            const nameMatch = p.name.toLowerCase().includes(term);
+            const contentMatch = p.content && p.content.toLowerCase().includes(term);
+
+            return nameMatch || contentMatch;
+        });
+    }, [nodes, projects, searchTerm]);
+
     const canvasRef = useRef<HTMLDivElement>(null);
 
     // Initial Load & Reset Layout Helper
@@ -72,17 +89,32 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
         const knownNodes = new Set(validNodes.map(n => n.id));
 
-        // Add new projects (or all if forced) at default positions
-        let newX = 50;
-        let newY = 50;
+        // Helper to check collision
+        const isColliding = (x: number, y: number) => {
+            return validNodes.some(n =>
+                Math.abs(n.x - x) < 220 && Math.abs(n.y - y) < 150
+            );
+        };
+
+        // Add new projects (or all if forced) at non-overlapping positions
         projects.forEach(p => {
             if (!knownNodes.has(p.id)) {
-                validNodes.push({ id: p.id, x: newX, y: newY });
-                newX += 220;
-                if (newX > 800) {
-                    newX = 50;
-                    newY += 150;
+                let x = 50;
+                let y = 50;
+                let attempts = 0;
+                const maxAttempts = 100;
+
+                // Find a free spot
+                while (isColliding(x, y) && attempts < maxAttempts) {
+                    x += 220; // Move right
+                    if (x > 800) { // New row
+                        x = 50;
+                        y += 150;
+                    }
+                    attempts++;
                 }
+
+                validNodes.push({ id: p.id, x, y });
             }
         });
 
@@ -139,8 +171,13 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                         if (next.has(nodeId)) next.delete(nodeId);
                         else next.add(nodeId);
                     } else {
-                        next.clear();
-                        next.add(nodeId);
+                        // Toggle if already selected (and only this one is selected), otherwise select exclusively
+                        if (next.has(nodeId) && next.size === 1) {
+                            next.clear();
+                        } else {
+                            next.clear();
+                            next.add(nodeId);
+                        }
                     }
                     return next;
                 });
@@ -264,40 +301,61 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         });
 
         // Place new node slightly offset from the center of mass
-        const newX = count > 0 ? (avgX / count) + 50 : 50;
-        const newY = count > 0 ? (avgY / count) + 50 : 50;
+        // Place new node slightly offset from the center of mass, checking for collisions
+        let newX = count > 0 ? (avgX / count) + 50 : 50;
+        let newY = count > 0 ? (avgY / count) + 50 : 50;
+
+        // Simple collision avoidance
+        let collision = true;
+        let attempts = 0;
+        while (collision && attempts < 10) {
+            collision = nodes.some(n => Math.abs(n.x - newX) < 50 && Math.abs(n.y - newY) < 50);
+            if (collision) {
+                newX += 30;
+                newY += 30;
+                attempts++;
+            }
+        }
 
         // Create new Project
         const newName = `Merged ${sortedIds.map(id => projectMap.get(id)?.name).join('-')}`;
-        const newProject = await createNewProject(newName, mergedContent.trim());
+        let newProject;
+        try {
+            // Pass open: false to avoid auto-setting currentProject before we're ready
+            newProject = await createNewProject(newName, mergedContent.trim(), false);
+        } catch (error) {
+            console.error('Failed to create merged project:', error);
+            alert('Failed to create merged project. Please try again.');
+            return;
+        }
 
-        // Optimistically add the new node to graph at the calculated position so it doesn't jump to 0,0
-        // The useEffect will pick it up on next render, but we want to set it now to avoid flicker/default pos
-        // However, useEffect has logic to add unknown nodes. 
-        // We can pre-seed the graph data or just handle it here? 
-        // Best to update local state immediately.
-        setNodes(prev => [...prev, { id: newProject.id, x: newX, y: newY }]);
+        if (!newProject?.id) {
+            alert('Failed to create merged project. Please try again.');
+            return;
+        }
 
-        // Automatically link the sources to the new merge node?
-        // Requirement: "illustrate the lineage". 
-        // Let's create edges from the last items in chain to the new node?
-        // Or from ALL selected nodes to the new node?
-        // Let's assume the new node is a child of the sorted sequence.
-        // Actually, merging A+B -> C implies A&B are parents of C.
-        // So we should add edges from all selected nodes (OR just the sinks?) to the new node.
+        // Explicitly load the project to update Editor state (content)
+        await handleLoadProject(newProject.id);
 
+        // Update Graph State
+        // Check if node already exists (race condition with initializeLayout)
+        setNodes(prev => {
+            if (prev.some(n => n.id === newProject.id)) return prev;
+            return [...prev, { id: newProject.id, x: newX, y: newY }];
+        });
+
+        // Add edges
         const newEdges: Edge[] = [];
         sortedIds.forEach(id => {
-            // Avoid duplicates
-            newEdges.push({ from: id, to: newProject.id });
+            // Check if edge already exists
+            if (!edges.some(e => e.from === id && e.to === newProject.id)) {
+                newEdges.push({ from: id, to: newProject.id });
+            }
         });
+
         setEdges(prev => [...prev, ...newEdges]);
 
-        // Don't close immediately so user sees the result? 
-        // User requirements didn't specify. Previous code closed.
-        // "Upon merging, create a new project node... Do not auto-delete... apply color-coding"
-        // Let's keep modal open to show the visual feedback.
-        // clear selection
+        // Clear selection
         setSelectedNodes(new Set());
     };
 
@@ -313,12 +371,49 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         }
     };
 
+    // Helper to highlight text
+    const HighlightText = ({ text, highlight }: { text: string, highlight: string }) => {
+        if (!highlight.trim()) {
+            return <>{text}</>;
+        }
+        const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
+        return (
+            <>
+                {parts.map((part, i) =>
+                    part.toLowerCase() === highlight.toLowerCase() ? (
+                        <span key={i} className="bg-yellow-200 dark:bg-yellow-900 text-black dark:text-white rounded-sm px-0.5">{part}</span>
+                    ) : (
+                        part
+                    )
+                )}
+            </>
+        );
+    };
+
     if (!isOpen) return null;
 
     return (
         <div className="project-node-modal">
             {/* Toolbar */}
             <div className="modal-controls">
+                <div className="relative mr-2">
+                    <input
+                        type="text"
+                        placeholder="Search nodes..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="h-8 pl-3 pr-8 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
                 <Button variant="ghost" onClick={() => initializeLayout(true)} title="Reset Node Positions">
                     <RotateCcw className="w-4 h-4" />
                 </Button>
@@ -350,8 +445,14 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                onWheel={(_e) => {
-                    // Simple zoom?
+                onWheel={(e) => {
+                    if (e.ctrlKey) {
+                        setDraggingCanvas(false);
+                        const delta = -e.deltaY * 0.001;
+                        setScale(prev => Math.min(Math.max(0.1, prev + delta), 4));
+                    } else {
+                        setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+                    }
                 }}
             >
                 <div
@@ -395,7 +496,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     </svg>
 
                     {/* Nodes Layer */}
-                    {nodes.map(node => {
+                    {filteredNodes.map(node => {
                         const project = projects.find(p => p.id === node.id);
                         if (!project) return null;
 
@@ -415,17 +516,26 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 <div className="flex items-center gap-2 mb-2">
                                     <FileText className="w-4 h-4 text-indigo-500" />
                                     <div className="project-node-title" title={project.name}>
-                                        {project.name}
+                                        <HighlightText text={project.name} highlight={searchTerm} />
                                     </div>
                                 </div>
                                 <div className="project-node-meta">
                                     {new Date(project.updatedAt).toLocaleDateString()}
                                 </div>
 
-                                {hoveredNode === node.id && (
-                                    <div className="node-tooltip">
-                                        <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs">Latest Content</div>
-                                        {hoverContent}
+                                {(hoveredNode === node.id || selectedNodes.has(node.id)) && (
+                                    <div className={`node-tooltip ${selectedNodes.has(node.id) ? 'persistent' : ''}`}
+                                        onMouseDown={(e) => e.stopPropagation()} // Prevent drag start when clicking scrollbar/text
+                                    >
+                                        <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs flex justify-between items-center">
+                                            <span>{selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}</span>
+                                            {selectedNodes.has(node.id) && <span className="text-[10px] text-gray-400 font-normal">Selected</span>}
+                                        </div>
+                                        {selectedNodes.has(node.id) ? (
+                                            <HighlightText text={project.content || '(Empty)'} highlight={searchTerm} />
+                                        ) : (
+                                            <HighlightText text={hoverContent} highlight={searchTerm} />
+                                        )}
                                     </div>
                                 )}
                             </div>
