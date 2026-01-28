@@ -141,14 +141,7 @@ export function AppHeader() {
                 <div className="flex items-center gap-2 mr-2">
                     {/* Background Hue Slider + Model Selector & Cost */}
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-800/50 p-0.5 rounded-lg border border-gray-200 dark:border-slate-800">
-                        {/* Color Indicator Button */}
-                        <div
-                            className="w-5 h-5 rounded-full ml-1 border-2 border-white dark:border-slate-500 shadow-sm flex-shrink-0"
-                            style={{
-                                backgroundColor: `hsl(${backgroundHue}, ${isDarkMode ? '35%' : '50%'}, ${isDarkMode ? '25%' : '75%'})`
-                            }}
-                            title={`Background Hue: ${backgroundHue}°`}
-                        />                        {/* Minimal Hue Slider with thin white/gray track */}
+
                         <input
                             type="range"
                             min="0"

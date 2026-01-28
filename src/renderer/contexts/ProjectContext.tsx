@@ -20,6 +20,7 @@ interface ProjectContextType {
     createRepository: () => Promise<void>;
     repositoryPath: string | null;
     getRepoHandle: () => FileSystemDirectoryHandle | null;
+    refreshProjects: () => Promise<void>;
 
     // useCommitHistory
     commits: TextCommit[];
@@ -62,7 +63,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         openRepository,
         createRepository,
         repositoryPath,
-        getRepoHandle
+        getRepoHandle,
+        refreshProjects
     } = useProjects();
 
     const getCommitText = useCallback(() => {
@@ -161,6 +163,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 await saveCurrentProject(previewText);
             } catch (e) {
                 console.error('Failed to auto-save before switch:', e);
+                setErrorMessage("Auto-save failed — changes may be lost. Aborting switch.");
+                return; // Abort switch to prevent data loss
             }
         }
 
@@ -291,7 +295,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         handleLoadProject, handleCreateProject,
         handleAccept, handleCommitClick,
         deleteProject, renameProject,
-        openRepository, createRepository, repositoryPath, getRepoHandle,
+        openRepository, createRepository, repositoryPath, getRepoHandle, refreshProjects,
         commits, setCommits, handleCommit, handleDeleteCommit, handleClearAllCommits,
         handleClearAll, handleExportCommits, handleImportCommits, handleFileOpen, handleNewProject,
         hasUnsavedChanges, setHasUnsavedChanges,
@@ -300,7 +304,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         projects, currentProject, loadProject, saveCurrentProject, createNewProject,
         handleLoadProject, handleCreateProject, handleAccept, handleCommitClick,
         deleteProject, renameProject, openRepository, createRepository, repositoryPath,
-        getRepoHandle, commits, setCommits, handleCommit, handleDeleteCommit,
+        getRepoHandle, refreshProjects, commits, setCommits, handleCommit, handleDeleteCommit,
         handleClearAllCommits, handleClearAll, handleExportCommits, handleImportCommits,
         handleFileOpen, handleNewProject, hasUnsavedChanges, setHasUnsavedChanges,
         handleRestoreCommit, handleCompareCommit

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useUI, useProject } from '../contexts';
-import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw } from 'lucide-react';
+import { useProject } from '../contexts';
+import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw, Plus, Edit2, MoreVertical, FolderGit2, GitCommit } from 'lucide-react';
 import { Button } from './Button';
-import { loadGraphData, saveGraphData, hasCycle, getTopologicalSort } from '../services/graphService';
+import { loadGraphData, saveGraphData, getTopologicalSort } from '../services/graphService';
+import { CreateNodeDialog } from './CreateNodeDialog';
 import './ProjectNodeModal.css';
 import { Project } from '../types';
 
@@ -12,10 +13,14 @@ interface ProjectNodeModalProps {
 }
 
 
+// Entity types for visual differentiation
+type EntityType = 'repository' | 'project' | 'commit';
+
 interface NodeState {
     id: string;
     x: number;
     y: number;
+    entityType?: EntityType; // Defaults to 'project' for backward compatibility
 }
 
 interface Edge {
@@ -23,8 +28,88 @@ interface Edge {
     to: string;
 }
 
+// Entity visual styling configuration
+const ENTITY_STYLES: Record<EntityType, {
+    color: string;
+    bgClass: string;
+    borderClass: string;
+    iconColor: string;
+    label: string;
+}> = {
+    repository: {
+        color: 'indigo',
+        bgClass: 'bg-indigo-50 dark:bg-indigo-900/20',
+        borderClass: 'border-indigo-300 dark:border-indigo-600',
+        iconColor: 'text-indigo-500',
+        label: 'Repo'
+    },
+    project: {
+        color: 'emerald',
+        bgClass: 'bg-emerald-50 dark:bg-emerald-900/20',
+        borderClass: 'border-emerald-300 dark:border-emerald-600',
+        iconColor: 'text-emerald-500',
+        label: 'Project'
+    },
+    commit: {
+        color: 'amber',
+        bgClass: 'bg-amber-50 dark:bg-amber-900/20',
+        borderClass: 'border-amber-300 dark:border-amber-600',
+        iconColor: 'text-amber-500',
+        label: 'Version'
+    }
+};
+
+// Constants for Node Layout
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 100; // Approximate
+const GAP_X = 20;
+const GAP_Y = 50;
+const NODE_SPACING_X = NODE_WIDTH + GAP_X;
+const NODE_SPACING_Y = NODE_HEIGHT + GAP_Y;
+
+// Helper: Escape regex special characters
+function escapeRegExp(string: string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper: Highlight text component
+const HighlightText = ({ text, highlight }: { text: string, highlight: string }) => {
+    if (!highlight || !highlight.trim()) {
+        return <>{text}</>;
+    }
+    const escapedHighlight = escapeRegExp(highlight);
+    const parts = text.split(new RegExp(`(${escapedHighlight})`, 'gi'));
+    return (
+        <>
+            {parts.map((part, i) =>
+                part.toLowerCase() === highlight.toLowerCase() ? (
+                    <span key={i} className="bg-yellow-200 dark:bg-yellow-900 text-black dark:text-white rounded-sm px-0.5">{part}</span>
+                ) : (
+                    part
+                )
+            )}
+        </>
+    );
+};
+
+// Helper: Entity icon component based on type
+const EntityIcon = ({ type, className }: { type: EntityType; className?: string }) => {
+    const style = ENTITY_STYLES[type];
+    const iconClass = `w-4 h-4 ${style.iconColor} ${className || ''}`;
+
+    switch (type) {
+        case 'repository':
+            return <FolderGit2 className={iconClass} />;
+        case 'commit':
+            return <GitCommit className={iconClass} />;
+        case 'project':
+        default:
+            return <FileText className={iconClass} />;
+    }
+};
+
 export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
-    const { currentProject, projects, createNewProject, repositoryPath, handleLoadProject } = useProject();
+    const { currentProject, projects, createNewProject, repositoryPath, handleLoadProject, deleteProject, renameProject, refreshProjects } = useProject();
 
     // Canvas State
     const [nodes, setNodes] = useState<NodeState[]>([]);
@@ -49,6 +134,13 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
     // Search State
     const [searchTerm, setSearchTerm] = useState('');
+
+    // CRUD State
+    const [showCreateDialog, setShowCreateDialog] = useState(false);
+    const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
     const filteredNodes = useMemo(() => {
         if (!searchTerm) return nodes;
@@ -92,7 +184,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         // Helper to check collision
         const isColliding = (x: number, y: number) => {
             return validNodes.some(n =>
-                Math.abs(n.x - x) < 220 && Math.abs(n.y - y) < 150
+                Math.abs(n.x - x) < NODE_SPACING_X && Math.abs(n.y - y) < NODE_SPACING_Y
             );
         };
 
@@ -106,10 +198,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
                 // Find a free spot
                 while (isColliding(x, y) && attempts < maxAttempts) {
-                    x += 220; // Move right
+                    x += NODE_SPACING_X; // Move right
                     if (x > 800) { // New row
                         x = 50;
-                        y += 150;
+                        y += NODE_SPACING_Y;
                     }
                     attempts++;
                 }
@@ -142,6 +234,26 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             return () => clearTimeout(timeout);
         }
     }, [nodes, edges, repositoryPath, isOpen]);
+
+    // Native Wheel Listener for passive: false
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                setDraggingCanvas(false);
+                const delta = -e.deltaY * 0.001;
+                setScale(prev => Math.min(Math.max(0.1, prev + delta), 4));
+            } else {
+                setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+            }
+        };
+
+        canvas.addEventListener('wheel', handleWheel, { passive: false });
+        return () => canvas.removeEventListener('wheel', handleWheel);
+    }, []);
 
     // --- Interaction Handlers ---
 
@@ -309,10 +421,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         let collision = true;
         let attempts = 0;
         while (collision && attempts < 10) {
-            collision = nodes.some(n => Math.abs(n.x - newX) < 50 && Math.abs(n.y - newY) < 50);
+            collision = nodes.some(n => Math.abs(n.x - newX) < NODE_SPACING_X && Math.abs(n.y - newY) < NODE_SPACING_Y);
             if (collision) {
-                newX += 30;
-                newY += 30;
+                newX += GAP_X + 10;
+                newY += GAP_Y + 10;
                 attempts++;
             }
         }
@@ -359,36 +471,116 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         setSelectedNodes(new Set());
     };
 
-    const deleteSelected = async () => {
-        // Logic to delete edges or nodes? 
-        // User requirements: "Do not auto-delete source nodes; allow the user to manually delete"
-        // We'll just remove edges for now, deletion of project is heavy.
+    // CRUD: Delete nodes (projects)
+    const handleDeleteNodes = useCallback(async () => {
+        if (deleteConfirmId) {
+            // Single node deletion from confirmation
+            const nodeId = deleteConfirmId;
+            try {
+                await deleteProject(nodeId);
+                setNodes(prev => prev.filter(n => n.id !== nodeId));
+                setEdges(prev => prev.filter(e => e.from !== nodeId && e.to !== nodeId));
+                setSelectedNodes(prev => {
+                    const next = new Set(prev);
+                    next.delete(nodeId);
+                    return next;
+                });
+            } catch (error) {
+                console.error('Failed to delete project:', error);
+            }
+            setDeleteConfirmId(null);
+        } else if (selectedNodes.size > 0) {
+            // Show confirmation for selected nodes
+            if (selectedNodes.size === 1) {
+                setDeleteConfirmId(Array.from(selectedNodes)[0]);
+            } else {
+                // Multiple selection - confirm all
+                const confirmed = window.confirm(`Delete ${selectedNodes.size} projects? This cannot be undone.`);
+                if (confirmed) {
+                    for (const nodeId of selectedNodes) {
+                        try {
+                            await deleteProject(nodeId);
+                        } catch (error) {
+                            console.error('Failed to delete project:', nodeId, error);
+                        }
+                    }
+                    setNodes(prev => prev.filter(n => !selectedNodes.has(n.id)));
+                    setEdges(prev => prev.filter(e => !selectedNodes.has(e.from) && !selectedNodes.has(e.to)));
+                    setSelectedNodes(new Set());
+                }
+            }
+        }
+    }, [deleteConfirmId, selectedNodes, deleteProject]);
+
+    // CRUD: Start inline rename
+    const handleStartRename = useCallback((nodeId: string) => {
+        const project = projects.find(p => p.id === nodeId);
+        if (project) {
+            setRenamingNodeId(nodeId);
+            setRenameValue(project.name);
+        }
+        setContextMenu(null);
+    }, [projects]);
+
+    // CRUD: Confirm rename
+    const handleConfirmRename = useCallback(async () => {
+        if (!renamingNodeId || !renameValue.trim()) {
+            setRenamingNodeId(null);
+            return;
+        }
+
+        try {
+            const updated = await renameProject(renamingNodeId, renameValue.trim());
+            if (updated) {
+                // Update node ID if the project ID changed (folder rename)
+                setNodes(prev => prev.map(n =>
+                    n.id === renamingNodeId ? { ...n, id: updated.id } : n
+                ));
+                setEdges(prev => prev.map(e => ({
+                    from: e.from === renamingNodeId ? updated.id : e.from,
+                    to: e.to === renamingNodeId ? updated.id : e.to
+                })));
+                setSelectedNodes(prev => {
+                    if (prev.has(renamingNodeId)) {
+                        const next = new Set(prev);
+                        next.delete(renamingNodeId);
+                        next.add(updated.id);
+                        return next;
+                    }
+                    return prev;
+                });
+            }
+        } catch (error) {
+            console.error('Failed to rename project:', error);
+        }
+        setRenamingNodeId(null);
+    }, [renamingNodeId, renameValue, renameProject]);
+
+    // CRUD: Context menu
+    const handleContextMenu = useCallback((e: React.MouseEvent, nodeId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
+    }, []);
+
+    // Close context menu on click outside
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        if (contextMenu) {
+            document.addEventListener('click', handleClick);
+            return () => document.removeEventListener('click', handleClick);
+        }
+    }, [contextMenu]);
+
+    // Legacy delete - remove edges only (for edge cleanup)
+    const deleteEdgesOnly = useCallback(() => {
         if (selectedNodes.size > 0) {
-            // Remove edges connected to selected nodes
             setEdges(prev => prev.filter(e => !selectedNodes.has(e.from) && !selectedNodes.has(e.to)));
-            // Clear selection
             setSelectedNodes(new Set());
         }
-    };
+    }, [selectedNodes]);
 
-    // Helper to highlight text
-    const HighlightText = ({ text, highlight }: { text: string, highlight: string }) => {
-        if (!highlight.trim()) {
-            return <>{text}</>;
-        }
-        const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
-        return (
-            <>
-                {parts.map((part, i) =>
-                    part.toLowerCase() === highlight.toLowerCase() ? (
-                        <span key={i} className="bg-yellow-200 dark:bg-yellow-900 text-black dark:text-white rounded-sm px-0.5">{part}</span>
-                    ) : (
-                        part
-                    )
-                )}
-            </>
-        );
-    };
+
 
     if (!isOpen) return null;
 
@@ -396,6 +588,17 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         <div className="project-node-modal">
             {/* Toolbar */}
             <div className="modal-controls">
+                <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowCreateDialog(true)}
+                    icon={<Plus className="w-4 h-4" />}
+                    disabled={!repositoryPath}
+                    title={!repositoryPath ? 'Open a repository first' : 'Create new project'}
+                >
+                    New
+                </Button>
+                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
                 <div className="relative mr-2">
                     <input
                         type="text"
@@ -418,7 +621,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     <RotateCcw className="w-4 h-4" />
                 </Button>
                 <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
-                <Button variant="ghost" onClick={deleteSelected} disabled={selectedNodes.size === 0} title="Delete Connections (Del)">
+                <Button variant="ghost" onClick={deleteEdgesOnly} disabled={selectedNodes.size === 0} title="Remove Edges (connections only)">
+                    <X className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" onClick={handleDeleteNodes} disabled={selectedNodes.size === 0} title="Delete Selected Projects">
                     <Trash2 className="w-4 h-4" />
                 </Button>
                 <Button variant="primary" onClick={handleMerge} icon={<GitMerge className="w-4 h-4" />}>
@@ -445,15 +651,6 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                onWheel={(e) => {
-                    if (e.ctrlKey) {
-                        setDraggingCanvas(false);
-                        const delta = -e.deltaY * 0.001;
-                        setScale(prev => Math.min(Math.max(0.1, prev + delta), 4));
-                    } else {
-                        setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
-                    }
-                }}
             >
                 <div
                     style={{
@@ -500,32 +697,101 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                         const project = projects.find(p => p.id === node.id);
                         if (!project) return null;
 
+                        const entityType = node.entityType || 'project';
+                        const entityStyle = ENTITY_STYLES[entityType];
+
                         return (
                             <div
                                 key={node.id}
-                                className={`project-node ${selectedNodes.has(node.id) ? 'selected' : ''}`}
+                                className={`project-node group ${entityStyle.borderClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''}`}
                                 style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
                                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                                 onMouseEnter={() => handleNodeHover(node.id)}
                                 onMouseLeave={() => setHoveredNode(null)}
+                                onContextMenu={(e) => handleContextMenu(e, node.id)}
                                 onDoubleClick={() => {
-                                    handleLoadProject(project.id);
-                                    onClose();
+                                    if (renamingNodeId !== node.id) {
+                                        handleLoadProject(project.id);
+                                        onClose();
+                                    }
                                 }}
                             >
                                 <div className="flex items-center gap-2 mb-2">
-                                    <FileText className="w-4 h-4 text-indigo-500" />
-                                    <div className="project-node-title" title={project.name}>
-                                        <HighlightText text={project.name} highlight={searchTerm} />
-                                    </div>
+                                    <EntityIcon type={entityType} className="flex-shrink-0" />
+                                    {renamingNodeId === node.id ? (
+                                        <input
+                                            type="text"
+                                            value={renameValue}
+                                            onChange={(e) => setRenameValue(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleConfirmRename();
+                                                if (e.key === 'Escape') setRenamingNodeId(null);
+                                            }}
+                                            onBlur={handleConfirmRename}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="flex-1 px-1 py-0.5 text-sm bg-white dark:bg-slate-700 border border-indigo-500 rounded outline-none text-gray-900 dark:text-slate-100"
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <div
+                                            className="project-node-title"
+                                            title={project.name}
+                                            onDoubleClick={(e) => {
+                                                e.stopPropagation();
+                                                handleStartRename(node.id);
+                                            }}
+                                        >
+                                            <HighlightText text={project.name} highlight={searchTerm} />
+                                        </div>
+                                    )}
+                                    <button
+                                        className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-opacity"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleContextMenu(e, node.id);
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                        <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
+                                    </button>
                                 </div>
-                                <div className="project-node-meta">
-                                    {new Date(project.updatedAt).toLocaleDateString()}
+                                <div className="flex items-center justify-between">
+                                    <div className="project-node-meta">
+                                        {new Date(project.updatedAt).toLocaleDateString()}
+                                    </div>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${entityStyle.bgClass} ${entityStyle.iconColor} font-medium`}>
+                                        {entityStyle.label}
+                                    </span>
                                 </div>
 
-                                {(hoveredNode === node.id || selectedNodes.has(node.id)) && (
+                                {/* Delete Confirmation Overlay */}
+                                {deleteConfirmId === node.id && (
+                                    <div
+                                        className="absolute inset-0 bg-red-500/90 dark:bg-red-900/90 rounded-lg flex flex-col items-center justify-center p-2 z-10"
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                        <p className="text-white text-xs font-medium mb-2 text-center">Delete "{project.name}"?</p>
+                                        <div className="flex gap-2">
+                                            <button
+                                                className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white text-xs rounded transition-colors"
+                                                onClick={() => setDeleteConfirmId(null)}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                className="px-2 py-1 bg-white text-red-600 text-xs font-medium rounded hover:bg-red-100 transition-colors"
+                                                onClick={handleDeleteNodes}
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(hoveredNode === node.id || selectedNodes.has(node.id)) && !deleteConfirmId && (
                                     <div className={`node-tooltip ${selectedNodes.has(node.id) ? 'persistent' : ''}`}
-                                        onMouseDown={(e) => e.stopPropagation()} // Prevent drag start when clicking scrollbar/text
+                                        onMouseDown={(e) => e.stopPropagation()}
                                     >
                                         <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs flex justify-between items-center">
                                             <span>{selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}</span>
@@ -543,6 +809,84 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     })}
                 </div>
             </div>
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <div
+                    className="fixed bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 z-50 min-w-[140px]"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                    <button
+                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2"
+                        onClick={() => {
+                            const project = projects.find(p => p.id === contextMenu.nodeId);
+                            if (project) {
+                                handleLoadProject(project.id);
+                                onClose();
+                            }
+                            setContextMenu(null);
+                        }}
+                    >
+                        <FileText className="w-3.5 h-3.5" />
+                        Open
+                    </button>
+                    <button
+                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2"
+                        onClick={() => handleStartRename(contextMenu.nodeId)}
+                    >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Rename
+                    </button>
+                    <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                    <button
+                        className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
+                        onClick={() => {
+                            setDeleteConfirmId(contextMenu.nodeId);
+                            setContextMenu(null);
+                        }}
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                    </button>
+                </div>
+            )}
+
+            {/* Create Node Dialog */}
+            {repositoryPath && (
+                <CreateNodeDialog
+                    isOpen={showCreateDialog}
+                    onClose={() => setShowCreateDialog(false)}
+                    parentPath={repositoryPath}
+                    parentType="repository"
+                    onNodeCreated={async (node) => {
+                        // Refresh the projects list first to get the new project
+                        await refreshProjects();
+
+                        // New node created - find a free position
+                        let x = 50;
+                        let y = 50;
+                        const isColliding = (checkX: number, checkY: number) =>
+                            nodes.some(n => Math.abs(n.x - checkX) < NODE_SPACING_X && Math.abs(n.y - checkY) < NODE_SPACING_Y);
+
+                        while (isColliding(x, y)) {
+                            x += NODE_SPACING_X;
+                            if (x > 800) {
+                                x = 50;
+                                y += NODE_SPACING_Y;
+                            }
+                        }
+
+                        // Add the new node to canvas (the projects list is now updated)
+                        setNodes(prev => [...prev, { id: node.name, x, y }]);
+                        setShowCreateDialog(false);
+
+                        // Load the new project
+                        if (node.type === 'project') {
+                            await handleLoadProject(node.name);
+                        }
+                    }}
+                />
+            )}
         </div>
     );
 }

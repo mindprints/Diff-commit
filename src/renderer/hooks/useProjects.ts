@@ -358,12 +358,18 @@ export function useProjects() {
             // Browser file system - rescan
             const scanned = await browserFS.scanProjectFolders(repoHandleRef.current);
             setProjects(scanned);
+        } else if (window.electron?.loadRepositoryAtPath && repositoryPath) {
+            // Electron mode - rescan the current repository
+            const result = await window.electron.loadRepositoryAtPath(repositoryPath);
+            if (result) {
+                setProjects(result.projects);
+            }
         } else {
-            // localStorage
+            // localStorage fallback (browser without handle)
             const loaded = await projectStorage.getProjects();
             setProjects(loaded);
         }
-    }, []);
+    }, [repositoryPath]);
 
     // Get repo handle for external use (e.g., saving commits)
     const getRepoHandle = useCallback(() => repoHandleRef.current, []);
