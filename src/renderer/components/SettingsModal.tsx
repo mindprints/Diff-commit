@@ -187,31 +187,41 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         try {
             const result = await window.electron.setCustomWorkspace(nextPath);
             if (!result?.success) {
-                setWorkspaceError(result?.error || 'Failed to update workspace path');
-                setWorkspaceSaving(false);
+                if (isMounted.current) {
+                    setWorkspaceError(result?.error || 'Failed to update workspace path');
+                    setWorkspaceSaving(false);
+                }
                 return;
             }
 
             if (window.electron?.getWorkspacePath) {
                 const updatedPath = await window.electron.getWorkspacePath();
-                setWorkspacePath(updatedPath || nextPath);
-                setWorkspaceInput(updatedPath || nextPath);
+                if (isMounted.current) {
+                    setWorkspacePath(updatedPath || nextPath);
+                    setWorkspaceInput(updatedPath || nextPath);
+                }
             } else {
-                setWorkspacePath(nextPath);
+                if (isMounted.current) {
+                    setWorkspacePath(nextPath);
+                }
             }
 
-            setWorkspaceSaved(true);
-            if (workspaceSaveTimeoutRef.current) {
-                clearTimeout(workspaceSaveTimeoutRef.current);
-            }
-            workspaceSaveTimeoutRef.current = setTimeout(() => {
-                if (isMounted.current) {
-                    setWorkspaceSaved(false);
+            if (isMounted.current) {
+                setWorkspaceSaved(true);
+                if (workspaceSaveTimeoutRef.current) {
+                    clearTimeout(workspaceSaveTimeoutRef.current);
                 }
-            }, 1500);
+                workspaceSaveTimeoutRef.current = setTimeout(() => {
+                    if (isMounted.current) {
+                        setWorkspaceSaved(false);
+                    }
+                }, 1500);
+            }
         } catch (e) {
             console.error('Failed to update workspace path:', e);
-            setWorkspaceError('Failed to update workspace path. Please try again.');
+            if (isMounted.current) {
+                setWorkspaceError('Failed to update workspace path. Please try again.');
+            }
         }
 
         if (isMounted.current) {

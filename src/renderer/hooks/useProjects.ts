@@ -102,8 +102,12 @@ export function useProjects() {
             // No projects - create a date-time named one
             const projectName = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             const newProject = await projectStorage.createProject(projectName, '', result.path);
-            setProjects([newProject]);
-            setCurrentProject(newProject);
+            if (newProject) {
+                setProjects([newProject]);
+                setCurrentProject(newProject);
+            } else {
+                console.error('Failed to create initial project for repository:', result.path);
+            }
         }
 
         // Save for skip preloading feature

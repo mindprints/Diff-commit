@@ -141,6 +141,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const [hoverContent, setHoverContent] = useState<string>('');
     const [hoverContentSource, setHoverContentSource] = useState<'draft' | 'commit' | 'empty'>('draft');
     const [hoverContentCache, setHoverContentCache] = useState<Record<string, { content: string; source: 'draft' | 'commit' | 'empty'; cacheKey: string }>>({});
+    const currentHoverRef = useRef<string | null>(null);
 
     // Merge Selection
     const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
@@ -446,6 +447,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
     const handleNodeHover = async (id: string) => {
         setHoveredNode(id);
+        currentHoverRef.current = id;
 
         if (viewScope.type === 'projects') {
             const project = projects.find(p => p.id === id);
@@ -453,6 +455,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 const cacheKey = `${project.updatedAt}-${commitCounts[id] ?? 0}`;
                 const cached = hoverContentCache[id];
                 if (cached && cached.cacheKey === cacheKey) {
+                    if (currentHoverRef.current !== id) return;
                     setHoverContent(cached.content);
                     setHoverContentSource(cached.source);
                     return;
@@ -464,6 +467,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 if (!content && project.path && window.electron?.loadProjectContent) {
                     try {
                         content = await window.electron.loadProjectContent(project.path);
+                        if (currentHoverRef.current !== id) return;
                         if (content) source = 'draft';
                     } catch (e) {
                         console.warn('Failed to load project content for hover:', e);
@@ -475,9 +479,13 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     if (repoHandle) {
                         try {
                             const projectHandle = await repoHandle.getDirectoryHandle(project.name);
+                            if (currentHoverRef.current !== id) return;
                             const contentHandle = await projectHandle.getFileHandle('content.md');
+                            if (currentHoverRef.current !== id) return;
                             const file = await contentHandle.getFile();
+                            if (currentHoverRef.current !== id) return;
                             content = await file.text();
+                            if (currentHoverRef.current !== id) return;
                             if (content) source = 'draft';
                         } catch (e) {
                             console.warn('Failed to load browser project content for hover:', e);
@@ -489,6 +497,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     try {
                         if (window.electron?.loadProjectCommits && project.path) {
                             const commits = await window.electron.loadProjectCommits(project.path);
+                            if (currentHoverRef.current !== id) return;
                             if (commits && commits.length > 0) {
                                 content = commits[commits.length - 1].content || '';
                                 if (content) source = 'commit';
@@ -498,6 +507,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                             if (repoHandle) {
                                 const { loadProjectCommits } = await import('../services/browserFileSystem');
                                 const commits = await loadProjectCommits(repoHandle, project.name);
+                                if (currentHoverRef.current !== id) return;
                                 if (commits && commits.length > 0) {
                                     content = commits[commits.length - 1].content || '';
                                     if (content) source = 'commit';
@@ -514,6 +524,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     source = 'empty';
                 }
                 const preview = content.slice(0, 500) + (content.length > 500 ? '...' : '');
+                if (currentHoverRef.current !== id) return;
                 setHoverContent(preview);
                 setHoverContentSource(source);
                 setHoverContentCache(prev => ({
@@ -526,7 +537,8 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             const commit = scopeCommits.find(c => c.id === id);
             if (commit) {
                 const content = commit.content || "(Empty commit)";
-                setHoverContentSource('draft');
+                if (currentHoverRef.current !== id) return;
+                setHoverContentSource('commit');
                 setHoverContent(content.slice(0, 500) + (content.length > 500 ? '...' : ''));
             }
         }
@@ -801,6 +813,16 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 commits = await window.electron.loadProjectCommits(project.path) || [];
             } catch (e) {
                 console.error('Failed to load commits for drill-down:', e);
+            }
+        } else {
+            const repoHandle = getRepoHandle();
+            if (repoHandle) {
+                try {
+                    const { loadProjectCommits } = await import('../services/browserFileSystem');
+                    commits = await loadProjectCommits(repoHandle, project.name) || [];
+                } catch (e) {
+                    console.error('Failed to load browser commits for drill-down:', e);
+                }
             }
         }
 

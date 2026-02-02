@@ -121,9 +121,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             setPreviewText(contentToLoad);
             setModifiedText('');
             resetDiffState();
+            lastLoadedProjectIdRef.current = currentProject.id;
         }
-
-        lastLoadedProjectIdRef.current = currentProject.id;
     }, [currentProject, originalText, previewText, resetDiffState, setModifiedText, setOriginalText, setPreviewText]);
 
     const {

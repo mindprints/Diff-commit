@@ -207,8 +207,17 @@ export function RepoPickerDialog({
 
     const handleCreateRepository = async () => {
         if (!onCreateRepository) return;
-        await onCreateRepository();
-        await loadRepositories();
+        setActionError(null);
+        setLoading(true);
+        try {
+            await onCreateRepository();
+        } catch (e) {
+            console.error('Failed to create repository:', e);
+            setActionError('Failed to create repository');
+        } finally {
+            await loadRepositories();
+            setLoading(false);
+        }
     };
 
     const renderRepoRow = (repo: RepositoryInfo) => {
