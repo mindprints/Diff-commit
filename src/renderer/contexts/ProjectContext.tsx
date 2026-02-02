@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useProjects } from '../hooks/useProjects';
 import { useCommitHistory } from '../hooks/useCommitHistory';
 import { useEditor } from './EditorContext';
@@ -17,6 +17,7 @@ interface ProjectContextType {
     deleteProject: (id: string) => Promise<void>;
     renameProject: (id: string, newName: string) => Promise<any | null>;
     openRepository: () => Promise<void>;
+    loadRepositoryByPath: (repoPath: string) => Promise<any | null>;
     createRepository: () => Promise<void>;
     repositoryPath: string | null;
     getRepoHandle: () => FileSystemDirectoryHandle | null;
@@ -49,8 +50,9 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
     const { setOriginalText, setPreviewText, setModifiedText, resetDiffState, mode, setMode, originalText, previewText, performDiff } = useEditor();
-    const { setShowProjectsPanel, setErrorMessage, isShiftHeld } = useUI();
+    const { setShowProjectsPanel, setErrorMessage, isShiftHeld, setShowRepoPicker } = useUI();
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const lastLoadedProjectIdRef = useRef<string | null>(null);
 
     const {
         projects,
@@ -61,6 +63,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         deleteProject,
         renameProject,
         openRepository,
+        loadRepositoryByPath,
         createRepository,
         repositoryPath,
         getRepoHandle,
@@ -107,6 +110,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             return false;
         };
     }, [currentProject?.name, getRepoHandle]);
+
+    useEffect(() => {
+        if (!currentProject) return;
+        if (lastLoadedProjectIdRef.current === currentProject.id) return;
+
+        if (!previewText && !originalText) {
+            const contentToLoad = currentProject.content || '';
+            setOriginalText(contentToLoad);
+            setPreviewText(contentToLoad);
+            setModifiedText('');
+            resetDiffState();
+        }
+
+        lastLoadedProjectIdRef.current = currentProject.id;
+    }, [currentProject, originalText, previewText, resetDiffState, setModifiedText, setOriginalText, setPreviewText]);
 
     const {
         commits,
@@ -283,6 +301,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setShowProjectsPanel(true);
     }, [setShowProjectsPanel]);
 
+    const handleOpenRepository = useCallback(async () => {
+        if (window.electron?.listRepositories) {
+            setShowRepoPicker(true);
+            return;
+        }
+        await openRepository();
+    }, [openRepository, setShowRepoPicker]);
+
     const handleCompareCommit = useCallback((commit: TextCommit) => {
         setOriginalText(commit.content);
         setModifiedText(originalText);
@@ -295,7 +321,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         handleLoadProject, handleCreateProject,
         handleAccept, handleCommitClick,
         deleteProject, renameProject,
-        openRepository, createRepository, repositoryPath, getRepoHandle, refreshProjects,
+        openRepository: handleOpenRepository,
+        loadRepositoryByPath,
+        createRepository, repositoryPath, getRepoHandle, refreshProjects,
         commits, setCommits, handleCommit, handleDeleteCommit, handleClearAllCommits,
         handleClearAll, handleExportCommits, handleImportCommits, handleFileOpen, handleNewProject,
         hasUnsavedChanges, setHasUnsavedChanges,
@@ -303,7 +331,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }), [
         projects, currentProject, loadProject, saveCurrentProject, createNewProject,
         handleLoadProject, handleCreateProject, handleAccept, handleCommitClick,
-        deleteProject, renameProject, openRepository, createRepository, repositoryPath,
+        deleteProject, renameProject, handleOpenRepository, loadRepositoryByPath, createRepository, repositoryPath,
         getRepoHandle, refreshProjects, commits, setCommits, handleCommit, handleDeleteCommit,
         handleClearAllCommits, handleClearAll, handleExportCommits, handleImportCommits,
         handleFileOpen, handleNewProject, hasUnsavedChanges, setHasUnsavedChanges,

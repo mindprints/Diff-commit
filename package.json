@@ -1,6 +1,6 @@
 {
   "name": "diff-commit-ai",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.",
   "author": "Diff & Commit AI Team",
   "main": "./out/main/index.js",

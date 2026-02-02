@@ -11,6 +11,7 @@ import { HelpModal } from './HelpModal';
 import { LogsModal } from './LogsModal';
 import { SettingsModal } from './SettingsModal';
 import { ProjectNodeModal } from './ProjectNodeModal';
+import { RepoPickerDialog } from './RepoPickerDialog';
 import { X, Volume2, Wand2, Shield, Save } from 'lucide-react';
 import { TextCommit, AIPrompt, ViewMode, PolishMode, Project } from '../types';
 
@@ -29,7 +30,8 @@ export function AppModals() {
         errorMessage, setErrorMessage,
         activeLogId, setActiveLogId,
         showSettingsModal, setShowSettingsModal,
-        showGraphModal, setShowGraphModal
+        showGraphModal, setShowGraphModal,
+        showRepoPicker, setShowRepoPicker
     } = useUI();
 
     const {
@@ -38,7 +40,7 @@ export function AppModals() {
 
     const {
         projects, currentProject, deleteProject, renameProject,
-        openRepository, createRepository, repositoryPath,
+        openRepository, loadRepositoryByPath, createRepository, repositoryPath,
         commits, handleDeleteCommit, handleClearAllCommits,
         handleLoadProject, handleCreateProject,
         handleRestoreCommit, handleCompareCommit
@@ -196,6 +198,18 @@ export function AppModals() {
             <SettingsModal
                 isOpen={showSettingsModal}
                 onClose={() => setShowSettingsModal(false)}
+            />
+
+            <RepoPickerDialog
+                isOpen={showRepoPicker}
+                onClose={() => setShowRepoPicker(false)}
+                onSelect={async (repo) => {
+                    await loadRepositoryByPath(repo.path);
+                    setShowRepoPicker(false);
+                }}
+                onCreateRepository={async () => {
+                    await createRepository();
+                }}
             />
 
             {/* Project Graph Modal */}

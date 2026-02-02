@@ -165,7 +165,8 @@
 
 .modal-close {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    top: 72px;
+    right: 20px;
+    left: auto;
     z-index: 50;
 }

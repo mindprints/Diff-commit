@@ -1,4 +1,4 @@
-import { Project } from '../types';
+import { Project, RepositoryInfo } from '../types';
 
 const STORAGE_KEY = 'diff-commit-projects';
 const REPO_STORAGE_KEY = 'diff-commit-repository';
@@ -84,6 +84,54 @@ export async function openRepository(): Promise<{ path: string; projects: Projec
     }
 
     return null;
+}
+
+/**
+ * List repositories available in the fixed root (Electron) or virtual repo (Browser).
+ */
+export async function listRepositories(): Promise<RepositoryInfo[]> {
+    if (hasElectronProjectAPI() && window.electron.listRepositories) {
+        return await window.electron.listRepositories();
+    }
+
+    const browserRepo = getBrowserRepository();
+    if (!browserRepo) return [];
+
+    const projects = await getProjects();
+    const repoProjects = projects.filter(p => p.repositoryPath === browserRepo.path);
+    const latestUpdatedAt = repoProjects.reduce((latest, project) => {
+        return Math.max(latest, project.updatedAt || 0);
+    }, browserRepo.createdAt);
+
+    return [
+        {
+            name: browserRepo.name,
+            path: browserRepo.path,
+            projectCount: repoProjects.length,
+            createdAt: browserRepo.createdAt,
+            updatedAt: latestUpdatedAt
+        }
+    ];
+}
+
+/**
+ * Rename a repository (Electron only).
+ */
+export async function renameRepository(repoPath: string, newName: string): Promise<RepositoryInfo | null> {
+    if (hasElectronProjectAPI() && window.electron.renameRepository) {
+        return await window.electron.renameRepository(repoPath, newName);
+    }
+    return null;
+}
+
+/**
+ * Delete a repository (Electron only).
+ */
+export async function deleteRepository(repoPath: string): Promise<boolean> {
+    if (hasElectronProjectAPI() && window.electron.deleteRepository) {
+        return await window.electron.deleteRepository(repoPath);
+    }
+    return false;
 }
 
 /**

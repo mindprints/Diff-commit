@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useProject } from '../contexts';
-import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw, Plus, Edit2, MoreVertical, FolderGit2, GitCommit } from 'lucide-react';
+import { useProject, useUI } from '../contexts';
+import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw, Plus, Edit2, MoreVertical, FolderGit2, GitCommit, Home, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
 import { loadGraphData, saveGraphData, getTopologicalSort } from '../services/graphService';
 import { CreateNodeDialog } from './CreateNodeDialog';
 import './ProjectNodeModal.css';
-import { Project } from '../types';
+import { Project, TextCommit } from '../types';
 
 interface ProjectNodeModalProps {
     isOpen: boolean;
@@ -15,6 +15,15 @@ interface ProjectNodeModalProps {
 
 // Entity types for visual differentiation
 type EntityType = 'repository' | 'project' | 'commit';
+
+// Hierarchical navigation scope
+type ViewScopeType = 'projects' | 'commits';
+interface ViewScope {
+    type: ViewScopeType;
+    projectId?: string;      // Set when viewing commits of a specific project
+    projectName?: string;    // For display in breadcrumb
+    projectPath?: string;    // For loading commits
+}
 
 interface NodeState {
     id: string;
@@ -27,6 +36,7 @@ interface Edge {
     from: string;
     to: string;
 }
+
 
 // Entity visual styling configuration
 const ENTITY_STYLES: Record<EntityType, {
@@ -109,7 +119,8 @@ const EntityIcon = ({ type, className }: { type: EntityType; className?: string 
 };
 
 export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
-    const { currentProject, projects, createNewProject, repositoryPath, handleLoadProject, deleteProject, renameProject, refreshProjects } = useProject();
+    const { currentProject, projects, createNewProject, repositoryPath, handleLoadProject, deleteProject, renameProject, refreshProjects, getRepoHandle } = useProject();
+    const { setShowRepoPicker } = useUI();
 
     // Canvas State
     const [nodes, setNodes] = useState<NodeState[]>([]);
@@ -128,6 +139,8 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     // Tooltup State
     const [hoveredNode, setHoveredNode] = useState<string | null>(null);
     const [hoverContent, setHoverContent] = useState<string>('');
+    const [hoverContentSource, setHoverContentSource] = useState<'draft' | 'commit' | 'empty'>('draft');
+    const [hoverContentCache, setHoverContentCache] = useState<Record<string, { content: string; source: 'draft' | 'commit' | 'empty'; cacheKey: string }>>({});
 
     // Merge Selection
     const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
@@ -142,19 +155,97 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
+    // Hierarchical Navigation State
+    const [viewScope, setViewScope] = useState<ViewScope>({ type: 'projects' });
+    const [scopeCommits, setScopeCommits] = useState<TextCommit[]>([]);
+
+    const [commitCounts, setCommitCounts] = useState<Record<string, number>>({});
+
     const filteredNodes = useMemo(() => {
-        if (!searchTerm) return nodes;
+        let filtered = nodes;
+
+        // Apply search filter
+        if (!searchTerm) return filtered;
         const term = searchTerm.toLowerCase();
-        return nodes.filter(n => {
-            const p = projects.find(proj => proj.id === n.id);
-            if (!p) return false;
 
-            const nameMatch = p.name.toLowerCase().includes(term);
-            const contentMatch = p.content && p.content.toLowerCase().includes(term);
+        if (viewScope.type === 'projects') {
+            // Filter projects by name or content
+            return filtered.filter(n => {
+                const p = projects.find(proj => proj.id === n.id);
+                if (!p) return false;
 
-            return nameMatch || contentMatch;
-        });
-    }, [nodes, projects, searchTerm]);
+                const nameMatch = p.name.toLowerCase().includes(term);
+                const contentMatch = p.content && p.content.toLowerCase().includes(term);
+
+                return nameMatch || contentMatch;
+            });
+        } else {
+            // Filter commits by content
+            return filtered.filter(n => {
+                const commit = scopeCommits.find(c => c.id === n.id);
+                if (!commit) return false;
+                return commit.content.toLowerCase().includes(term);
+            });
+        }
+    }, [nodes, projects, scopeCommits, searchTerm, viewScope.type]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadCommitCounts = async () => {
+            if (viewScope.type !== 'projects' || projects.length === 0) {
+                if (!cancelled) setCommitCounts({});
+                return;
+            }
+
+            if (window.electron?.loadProjectCommits) {
+                const results = await Promise.all(projects.map(async (project) => {
+                    if (!project.path) return [project.id, 0] as const;
+                    try {
+                        const commits = await window.electron.loadProjectCommits(project.path);
+                        return [project.id, commits?.length || 0] as const;
+                    } catch (e) {
+                        console.warn('Failed to load commits for count:', e);
+                        return [project.id, 0] as const;
+                    }
+                }));
+
+                if (!cancelled) {
+                    setCommitCounts(Object.fromEntries(results));
+                }
+                return;
+            }
+
+            const repoHandle = getRepoHandle();
+            if (repoHandle) {
+                try {
+                    const { loadProjectCommits } = await import('../services/browserFileSystem');
+                    const results = await Promise.all(projects.map(async (project) => {
+                        try {
+                            const commits = await loadProjectCommits(repoHandle, project.name);
+                            return [project.id, commits?.length || 0] as const;
+                        } catch (e) {
+                            console.warn('Failed to load browser commits for count:', e);
+                            return [project.id, 0] as const;
+                        }
+                    }));
+
+                    if (!cancelled) {
+                        setCommitCounts(Object.fromEntries(results));
+                    }
+                } catch (e) {
+                    console.warn('Failed to load browser commit counts:', e);
+                    if (!cancelled) setCommitCounts({});
+                }
+            }
+        };
+
+        loadCommitCounts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [projects, viewScope.type, getRepoHandle]);
 
     const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -221,6 +312,9 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
     useEffect(() => {
         if (isOpen) {
+            // Reset to projects view when modal opens
+            setViewScope({ type: 'projects' });
+            setScopeCommits([]);
             initializeLayout(false);
         }
     }, [isOpen, initializeLayout]);
@@ -352,23 +446,89 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
     const handleNodeHover = async (id: string) => {
         setHoveredNode(id);
-        const project = projects.find(p => p.id === id);
-        if (project) {
-            // Try to use content from project object first (draft content)
-            let content = project.content;
 
-            // If empty, it might be because we only have metadata. 
-            // We should try to load it via IPC if possible, but that's async and might be slow for hover.
-            // Requirement was "most recent commit content".
-            // If we are in Electron, we might be able to peek.
-            // But for now, let's just make sure we are not showing "undefined".
+        if (viewScope.type === 'projects') {
+            const project = projects.find(p => p.id === id);
+            if (project) {
+                const cacheKey = `${project.updatedAt}-${commitCounts[id] ?? 0}`;
+                const cached = hoverContentCache[id];
+                if (cached && cached.cacheKey === cacheKey) {
+                    setHoverContent(cached.content);
+                    setHoverContentSource(cached.source);
+                    return;
+                }
 
-            if (!content) {
-                content = "(No content or empty draft)";
-                // Ideally trigger a fetch here if we had a lightweight fetcher
+                let content = project.content || '';
+                let source: 'draft' | 'commit' | 'empty' = content ? 'draft' : 'empty';
+
+                if (!content && project.path && window.electron?.loadProjectContent) {
+                    try {
+                        content = await window.electron.loadProjectContent(project.path);
+                        if (content) source = 'draft';
+                    } catch (e) {
+                        console.warn('Failed to load project content for hover:', e);
+                    }
+                }
+
+                if (!content) {
+                    const repoHandle = getRepoHandle();
+                    if (repoHandle) {
+                        try {
+                            const projectHandle = await repoHandle.getDirectoryHandle(project.name);
+                            const contentHandle = await projectHandle.getFileHandle('content.md');
+                            const file = await contentHandle.getFile();
+                            content = await file.text();
+                            if (content) source = 'draft';
+                        } catch (e) {
+                            console.warn('Failed to load browser project content for hover:', e);
+                        }
+                    }
+                }
+
+                if (!content) {
+                    try {
+                        if (window.electron?.loadProjectCommits && project.path) {
+                            const commits = await window.electron.loadProjectCommits(project.path);
+                            if (commits && commits.length > 0) {
+                                content = commits[commits.length - 1].content || '';
+                                if (content) source = 'commit';
+                            }
+                        } else {
+                            const repoHandle = getRepoHandle();
+                            if (repoHandle) {
+                                const { loadProjectCommits } = await import('../services/browserFileSystem');
+                                const commits = await loadProjectCommits(repoHandle, project.name);
+                                if (commits && commits.length > 0) {
+                                    content = commits[commits.length - 1].content || '';
+                                    if (content) source = 'commit';
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load commits for hover:', e);
+                    }
+                }
+
+                if (!content) {
+                    content = "(No content or empty draft)";
+                    source = 'empty';
+                }
+                const preview = content.slice(0, 500) + (content.length > 500 ? '...' : '');
+                setHoverContent(preview);
+                setHoverContentSource(source);
+                setHoverContentCache(prev => ({
+                    ...prev,
+                    [id]: { content: preview, source, cacheKey }
+                }));
             }
-
-            setHoverContent(content.slice(0, 500) + (content.length > 500 ? '...' : ''));
+        } else {
+            // Commits view
+            const commit = scopeCommits.find(c => c.id === id);
+            if (commit) {
+                const content = commit.content || "(Empty commit)";
+                setHoverContentSource('draft');
+                setHoverContent(content.slice(0, 500) + (content.length > 500 ? '...' : ''));
+            }
         }
     };
 
@@ -473,6 +633,53 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
     // CRUD: Delete nodes (projects)
     const handleDeleteNodes = useCallback(async () => {
+        if (viewScope.type === 'commits') {
+            const commitIds = deleteConfirmId ? [deleteConfirmId] : Array.from(selectedNodes);
+            if (commitIds.length === 0) return;
+
+            if (!deleteConfirmId) {
+                if (commitIds.length === 1) {
+                    setDeleteConfirmId(commitIds[0]);
+                    return;
+                }
+
+                const confirmed = window.confirm(`Delete ${commitIds.length} commits? This cannot be undone.`);
+                if (!confirmed) return;
+            }
+
+            const nextCommits = scopeCommits.filter(c => !commitIds.includes(c.id));
+
+            try {
+                if (window.electron?.saveProjectCommits && viewScope.projectPath) {
+                    await window.electron.saveProjectCommits(viewScope.projectPath, nextCommits);
+                } else {
+                    const repoHandle = getRepoHandle();
+                    if (repoHandle && viewScope.projectName) {
+                        const { saveProjectCommits } = await import('../services/browserFileSystem');
+                        await saveProjectCommits(repoHandle, viewScope.projectName, nextCommits);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to delete commits:', error);
+            }
+
+            setScopeCommits(nextCommits);
+            setNodes(prev => prev.filter(n => !commitIds.includes(n.id)));
+            setSelectedNodes(new Set());
+            setDeleteConfirmId(null);
+
+            if (viewScope.projectId) {
+                setCommitCounts(prev => ({ ...prev, [viewScope.projectId as string]: nextCommits.length }));
+            }
+            if (viewScope.projectId) {
+                setHoverContentCache(prev => {
+                    const { [viewScope.projectId as string]: _removed, ...rest } = prev;
+                    return rest;
+                });
+            }
+            return;
+        }
+
         if (deleteConfirmId) {
             // Single node deletion from confirmation
             const nodeId = deleteConfirmId;
@@ -510,7 +717,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 }
             }
         }
-    }, [deleteConfirmId, selectedNodes, deleteProject]);
+    }, [deleteConfirmId, selectedNodes, deleteProject, viewScope, scopeCommits, getRepoHandle]);
 
     // CRUD: Start inline rename
     const handleStartRename = useCallback((nodeId: string) => {
@@ -580,6 +787,53 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         }
     }, [selectedNodes]);
 
+    // --- Hierarchical Navigation Handlers ---
+
+    // Drill into a project to show its commits
+    const drillIntoProject = useCallback(async (projectId: string) => {
+        const project = projects.find(p => p.id === projectId);
+        if (!project) return;
+
+        // Load commits for this project
+        let commits: TextCommit[] = [];
+        if (window.electron?.loadProjectCommits && project.path) {
+            try {
+                commits = await window.electron.loadProjectCommits(project.path) || [];
+            } catch (e) {
+                console.error('Failed to load commits for drill-down:', e);
+            }
+        }
+
+        // Update scope
+        setViewScope({
+            type: 'commits',
+            projectId: project.id,
+            projectName: project.name,
+            projectPath: project.path
+        });
+        setScopeCommits(commits);
+
+        // Convert commits to nodes
+        const commitNodes: NodeState[] = commits.map((c, idx) => ({
+            id: c.id,
+            x: 50 + (idx % 4) * NODE_SPACING_X,
+            y: 50 + Math.floor(idx / 4) * NODE_SPACING_Y,
+            entityType: 'commit' as EntityType
+        }));
+
+        setNodes(commitNodes);
+        setEdges([]); // No edges between commits (for now)
+        setSelectedNodes(new Set());
+        setOffset({ x: 0, y: 0 });
+    }, [projects]);
+
+    // Navigate back to projects view
+    const navigateToProjects = useCallback(() => {
+        setViewScope({ type: 'projects' });
+        setScopeCommits([]);
+        // Reinitialize layout with projects
+        initializeLayout(false);
+    }, [initializeLayout]);
 
 
     if (!isOpen) return null;
@@ -593,10 +847,19 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     size="sm"
                     onClick={() => setShowCreateDialog(true)}
                     icon={<Plus className="w-4 h-4" />}
-                    disabled={!repositoryPath}
-                    title={!repositoryPath ? 'Open a repository first' : 'Create new project'}
+                    disabled={!repositoryPath || viewScope.type !== 'projects'}
+                    title={!repositoryPath ? 'Open a repository first' : viewScope.type !== 'projects' ? 'Return to Projects to create' : 'Create new project'}
                 >
                     New
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowRepoPicker(true)}
+                    icon={<FolderGit2 className="w-4 h-4" />}
+                    title="Switch repository"
+                >
+                    Repos
                 </Button>
                 <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
                 <div className="relative mr-2">
@@ -627,10 +890,31 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 <Button variant="ghost" onClick={handleDeleteNodes} disabled={selectedNodes.size === 0} title="Delete Selected Projects">
                     <Trash2 className="w-4 h-4" />
                 </Button>
-                <Button variant="primary" onClick={handleMerge} icon={<GitMerge className="w-4 h-4" />}>
+                <Button variant="primary" onClick={handleMerge} icon={<GitMerge className="w-4 h-4" />} disabled={viewScope.type !== 'projects'}>
                     Merge Selected
                 </Button>
             </div>
+
+            {/* Breadcrumb Navigation Bar */}
+            {viewScope.type !== 'projects' && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700">
+                    <button
+                        onClick={navigateToProjects}
+                        className="flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+                    >
+                        <Home className="w-3.5 h-3.5" />
+                        <span>Projects</span>
+                    </button>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                        <EntityIcon type="project" className="w-3.5 h-3.5" />
+                        {viewScope.projectName}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                        ({scopeCommits.length} commit{scopeCommits.length !== 1 ? 's' : ''})
+                    </span>
+                </div>
+            )}
 
             {/* Return Button */}
             <div className="modal-close flex items-center gap-2">
@@ -694,11 +978,30 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
                     {/* Nodes Layer */}
                     {filteredNodes.map(node => {
-                        const project = projects.find(p => p.id === node.id);
-                        if (!project) return null;
-
                         const entityType = node.entityType || 'project';
                         const entityStyle = ENTITY_STYLES[entityType];
+
+                        // Get display data based on scope
+                        let displayName = '';
+                        let displayMeta = '';
+                        let canDrillDown = false;
+                        let canRename = false;
+
+                        if (viewScope.type === 'projects') {
+                            const project = projects.find(p => p.id === node.id);
+                            if (!project) return null;
+                            displayName = project.name;
+                            displayMeta = new Date(project.updatedAt).toLocaleDateString();
+                            canDrillDown = true;
+                            canRename = true;
+                        } else {
+                            const commit = scopeCommits.find(c => c.id === node.id);
+                            if (!commit) return null;
+                            displayName = `Commit ${commit.commitNumber}`;
+                            displayMeta = new Date(commit.timestamp).toLocaleString();
+                            canDrillDown = false;
+                            canRename = false;
+                        }
 
                         return (
                             <div
@@ -708,11 +1011,13 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                                 onMouseEnter={() => handleNodeHover(node.id)}
                                 onMouseLeave={() => setHoveredNode(null)}
-                                onContextMenu={(e) => handleContextMenu(e, node.id)}
+                                onContextMenu={(e) => viewScope.type === 'projects' ? handleContextMenu(e, node.id) : undefined}
                                 onDoubleClick={() => {
                                     if (renamingNodeId !== node.id) {
-                                        handleLoadProject(project.id);
-                                        onClose();
+                                        if (canDrillDown) {
+                                            // Drill into project to show commits
+                                            drillIntoProject(node.id);
+                                        }
                                     }
                                 }}
                             >
@@ -736,13 +1041,13 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                     ) : (
                                         <div
                                             className="project-node-title"
-                                            title={project.name}
+                                            title={displayName}
                                             onDoubleClick={(e) => {
                                                 e.stopPropagation();
-                                                handleStartRename(node.id);
+                                                if (canRename) handleStartRename(node.id);
                                             }}
                                         >
-                                            <HighlightText text={project.name} highlight={searchTerm} />
+                                            <HighlightText text={displayName} highlight={searchTerm} />
                                         </div>
                                     )}
                                     <button
@@ -758,7 +1063,12 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <div className="project-node-meta">
-                                        {new Date(project.updatedAt).toLocaleDateString()}
+                                        <div>{displayMeta}</div>
+                                        {viewScope.type === 'projects' && (
+                                            <div className="text-[10px] text-gray-400 dark:text-slate-400">
+                                                commits {commitCounts[node.id] ?? 0}
+                                            </div>
+                                        )}
                                     </div>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${entityStyle.bgClass} ${entityStyle.iconColor} font-medium`}>
                                         {entityStyle.label}
@@ -771,7 +1081,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                         className="absolute inset-0 bg-red-500/90 dark:bg-red-900/90 rounded-lg flex flex-col items-center justify-center p-2 z-10"
                                         onMouseDown={(e) => e.stopPropagation()}
                                     >
-                                        <p className="text-white text-xs font-medium mb-2 text-center">Delete "{project.name}"?</p>
+                                        <p className="text-white text-xs font-medium mb-2 text-center">Delete "{displayName}"?</p>
                                         <div className="flex gap-2">
                                             <button
                                                 className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white text-xs rounded transition-colors"
@@ -793,12 +1103,24 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                     <div className={`node-tooltip ${selectedNodes.has(node.id) ? 'persistent' : ''}`}
                                         onMouseDown={(e) => e.stopPropagation()}
                                     >
-                                        <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs flex justify-between items-center">
-                                            <span>{selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}</span>
-                                            {selectedNodes.has(node.id) && <span className="text-[10px] text-gray-400 font-normal">Selected</span>}
-                                        </div>
+                                    <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs flex justify-between items-center">
+                                        <span>{selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}</span>
+                                        {!selectedNodes.has(node.id) && viewScope.type === 'projects' && hoveredNode === node.id && hoverContentSource !== 'draft' && (
+                                            <span className="text-[10px] text-gray-400 font-normal">
+                                                {hoverContentSource === 'commit' ? 'Commit Preview' : 'Empty Draft'}
+                                            </span>
+                                        )}
+                                        {selectedNodes.has(node.id) && <span className="text-[10px] text-gray-400 font-normal">Selected</span>}
+                                    </div>
                                         {selectedNodes.has(node.id) ? (
-                                            <HighlightText text={project.content || '(Empty)'} highlight={searchTerm} />
+                                            <HighlightText
+                                                text={
+                                                    viewScope.type === 'projects'
+                                                        ? (projects.find(p => p.id === node.id)?.content || '(Empty)')
+                                                        : (scopeCommits.find(c => c.id === node.id)?.content || '(Empty)')
+                                                }
+                                                highlight={searchTerm}
+                                            />
                                         ) : (
                                             <HighlightText text={hoverContent} highlight={searchTerm} />
                                         )}

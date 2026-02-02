@@ -1,5 +1,5 @@
 
-import { AILogEntry, AIPrompt, Project, TextCommit } from './types';
+import { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit } from './types';
 
 export interface IElectronAPI {
     platform: string;
@@ -43,6 +43,9 @@ export interface IElectronAPI {
     // Repository & Project System
     openRepository: () => Promise<{ path: string; projects: Project[] } | null>;
     createRepository: () => Promise<{ path: string; projects: Project[] } | null>;
+    listRepositories: () => Promise<RepositoryInfo[]>;
+    renameRepository: (repoPath: string, newName: string) => Promise<RepositoryInfo | null>;
+    deleteRepository: (repoPath: string) => Promise<boolean>;
     createProject: (repoPath: string, name: string, content?: string) => Promise<Project | null>;
     saveProjectContent: (path: string, content: string) => Promise<boolean>;
     loadProjectContent: (path: string) => Promise<string>;

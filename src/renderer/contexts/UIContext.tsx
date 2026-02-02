@@ -45,6 +45,8 @@ interface UIContextType {
     setShowImageViewer: (show: boolean) => void;
     showSettingsModal: boolean;
     setShowSettingsModal: (show: boolean) => void;
+    showRepoPicker: boolean;
+    setShowRepoPicker: (show: boolean) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -71,6 +73,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [isHeaderVisible, setIsHeaderVisible] = useState(true);
     const [showImageViewer, setShowImageViewer] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [showRepoPicker, setShowRepoPicker] = useState(false);
 
     const isResizingLeftRight = useRef(false);
     const isResizingTopBottom = useRef(false);
@@ -156,6 +159,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
             showImageViewer, setShowImageViewer,
             showSettingsModal, setShowSettingsModal,
             showGraphModal, setShowGraphModal,
+            showRepoPicker, setShowRepoPicker,
         }}>
             {children}
         </UIContext.Provider>

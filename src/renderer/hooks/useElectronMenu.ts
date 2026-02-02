@@ -5,7 +5,7 @@ export function useElectronMenu() {
     const {
         isDarkMode, setIsDarkMode, setShowHelp, setShowLogs,
         setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel,
-        setShowModelsModal, setShowSettingsModal
+        setShowModelsModal, setShowSettingsModal, setShowRepoPicker
     } = useUI();
 
     const {
@@ -56,7 +56,7 @@ export function useElectronMenu() {
             setShowProjectsPanel(true);
         });
         window.electron.onMenuOpenRepository(() => {
-            openRepository();
+            setShowRepoPicker(true);
             setShowProjectsPanel(true);
         });
         window.electron.onMenuSaveProject?.(async () => {
@@ -128,5 +128,5 @@ export function useElectronMenu() {
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, handleFileOpen, handleClearAll, openRepository, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
+    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, openRepository, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
 }

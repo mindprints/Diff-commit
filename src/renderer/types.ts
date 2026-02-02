@@ -90,3 +90,11 @@ export interface Project {
   path?: string;            // Electron: Absolute path to project folder
   repositoryPath?: string;  // Electron: Absolute path to repository root
 }
+
+export interface RepositoryInfo {
+  name: string;
+  path: string;
+  projectCount: number;
+  createdAt?: number;
+  updatedAt?: number;
+}

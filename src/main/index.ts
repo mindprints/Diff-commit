@@ -24,6 +24,16 @@ const envPath = isDev
 // Try to load from the computed path, silently continue if not found
 dotenv.config({ path: envPath });
 
+// Ensure cache directories are writable to avoid disk cache errors
+try {
+    const cachePath = path.join(app.getPath('userData'), 'cache');
+    fs.mkdirSync(cachePath, { recursive: true });
+    app.commandLine.appendSwitch('disk-cache-dir', cachePath);
+    app.commandLine.appendSwitch('gpu-cache-dir', cachePath);
+} catch (e) {
+    console.warn('[App] Failed to initialize cache directory:', e);
+}
+
 // Also log for debugging
 if (!isDev) {
     console.log('[Config] Looking for .env at:', envPath);
@@ -638,6 +648,16 @@ app.whenReady().then(async () => {
         return `${month} ${day} ${hours}.${minutes}`;
     }
 
+    function getReposRootPath(): string {
+        return getFolderInitializer().getReposPath();
+    }
+
+    function isPathInsideRoot(targetPath: string, rootPath: string): boolean {
+        const relative = path.relative(rootPath, targetPath);
+        if (!relative || relative.trim() === '') return false;
+        return !relative.startsWith('..') && !path.isAbsolute(relative);
+    }
+
     /**
      * Check if a directory is a valid project folder.
      * A project folder contains a .diff-commit directory.
@@ -647,16 +667,182 @@ app.whenReady().then(async () => {
         return fs.existsSync(diffCommitPath) && fs.statSync(diffCommitPath).isDirectory();
     }
 
+    function isRepositoryFolder(dirPath: string): boolean {
+        try {
+            return hierarchyService.getNodeType(dirPath) === 'repository';
+        } catch {
+            return false;
+        }
+    }
+
+    function getRepositoryInfo(repoPath: string): { name: string; path: string; projectCount: number; createdAt?: number; updatedAt?: number } | null {
+        if (!fs.existsSync(repoPath)) return null;
+
+        let projectCount = 0;
+        let latestUpdatedAt: number | undefined = undefined;
+        let createdAt: number | undefined = undefined;
+
+        try {
+            const stats = fs.statSync(repoPath);
+            createdAt = stats.birthtimeMs;
+            latestUpdatedAt = stats.mtimeMs;
+        } catch {
+            // Ignore stat errors
+        }
+
+        try {
+            const items = fs.readdirSync(repoPath, { withFileTypes: true });
+            for (const item of items) {
+                if (!item.isDirectory() || item.name.startsWith('.')) continue;
+                const projectPath = path.join(repoPath, item.name);
+                if (isProjectFolder(projectPath)) {
+                    projectCount++;
+                    try {
+                        const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+                        if (fs.existsSync(contentPath)) {
+                            const contentStats = fs.statSync(contentPath);
+                            if (!latestUpdatedAt || contentStats.mtimeMs > latestUpdatedAt) {
+                                latestUpdatedAt = contentStats.mtimeMs;
+                            }
+                        }
+                    } catch {
+                        // Ignore content stats errors
+                    }
+                }
+            }
+        } catch {
+            // Ignore repository scan errors
+        }
+
+        return {
+            name: path.basename(repoPath),
+            path: repoPath,
+            projectCount,
+            createdAt,
+            updatedAt: latestUpdatedAt
+        };
+    }
+
     // Open Repository (Select Folder) - scans for project folders
     ipcMain.handle('open-repository', async () => {
+        const reposRootPath = getReposRootPath();
         const result = await dialog.showOpenDialog(mainWindow, {
-            properties: ['openDirectory', 'createDirectory']
+            properties: ['openDirectory', 'createDirectory'],
+            defaultPath: reposRootPath
         });
 
         if (result.canceled || result.filePaths.length === 0) return null;
 
         const repoPath = result.filePaths[0];
+        if (!isPathInsideRoot(repoPath, reposRootPath)) {
+            dialog.showErrorBox(
+                'Invalid Repository Location',
+                `Repositories must be inside the fixed root folder:\n${reposRootPath}\n\nChange the root location in Settings if needed.`
+            );
+            return null;
+        }
         return await scanRepository(repoPath);
+    });
+
+    // List repositories from the fixed root
+    ipcMain.handle('list-repositories', async () => {
+        const reposRootPath = getReposRootPath();
+        const repositories: Array<{ name: string; path: string; projectCount: number; createdAt?: number; updatedAt?: number }> = [];
+
+        try {
+            if (!fs.existsSync(reposRootPath)) {
+                return [];
+            }
+
+            const entries = fs.readdirSync(reposRootPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+
+                const repoPath = path.join(reposRootPath, entry.name);
+                if (!isRepositoryFolder(repoPath)) continue;
+                const info = getRepositoryInfo(repoPath);
+                if (info) repositories.push(info);
+            }
+        } catch (e) {
+            console.error('Failed to list repositories:', e);
+            return [];
+        }
+
+        repositories.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        return repositories;
+    });
+
+    ipcMain.handle('rename-repository', async (event, repoPath: string, newName: string) => {
+        if (!repoPath || !newName) return null;
+
+        const reposRootPath = getReposRootPath();
+        if (!isPathInsideRoot(repoPath, reposRootPath)) {
+            throw new Error('Repository is outside the fixed root');
+        }
+
+        const parentPath = path.dirname(repoPath);
+        if (parentPath !== reposRootPath) {
+            throw new Error('Repository must be directly inside the root');
+        }
+
+        if (!isRepositoryFolder(repoPath)) {
+            throw new Error('Invalid repository folder');
+        }
+
+        const validation = hierarchyService.validateName(newName);
+        if (!validation.valid) {
+            throw new Error(validation.error || 'Invalid repository name');
+        }
+
+        const trimmedName = newName.trim();
+        const newPath = path.join(parentPath, trimmedName);
+        const isSamePath = repoPath.toLowerCase() === newPath.toLowerCase();
+        if (!isSamePath && fs.existsSync(newPath)) {
+            throw new Error(`A repository named "${trimmedName}" already exists`);
+        }
+
+        await fs.promises.rename(repoPath, newPath);
+
+        const metaPath = path.join(newPath, '.hierarchy-meta.json');
+        try {
+            if (fs.existsSync(metaPath)) {
+                const metaContent = await fs.promises.readFile(metaPath, 'utf-8');
+                const meta = JSON.parse(metaContent);
+                meta.name = trimmedName;
+                await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+            } else {
+                hierarchyService.writeHierarchyMeta(newPath, {
+                    type: 'repository',
+                    createdAt: Date.now(),
+                    name: trimmedName
+                });
+            }
+        } catch (e) {
+            console.warn('Failed to update repository metadata:', e);
+        }
+
+        return getRepositoryInfo(newPath);
+    });
+
+    ipcMain.handle('delete-repository', async (event, repoPath: string) => {
+        if (!repoPath) return false;
+
+        const reposRootPath = getReposRootPath();
+        if (!isPathInsideRoot(repoPath, reposRootPath)) {
+            throw new Error('Repository is outside the fixed root');
+        }
+
+        const parentPath = path.dirname(repoPath);
+        if (parentPath !== reposRootPath) {
+            throw new Error('Repository must be directly inside the root');
+        }
+
+        if (!isRepositoryFolder(repoPath)) {
+            throw new Error('Invalid repository folder');
+        }
+
+        await fs.promises.rm(repoPath, { recursive: true, force: true });
+        return true;
     });
 
     /**
@@ -714,6 +900,11 @@ app.whenReady().then(async () => {
     // Load Repository at specific path
     ipcMain.handle('load-repository-at-path', async (event, repoPath: string) => {
         if (!repoPath || !fs.existsSync(repoPath)) return null;
+        const reposRootPath = getReposRootPath();
+        if (!isPathInsideRoot(repoPath, reposRootPath)) {
+            console.warn('[Repository] Blocked load outside root:', repoPath);
+            return null;
+        }
         try {
             return await scanRepository(repoPath);
         } catch (e) {
@@ -1006,9 +1197,8 @@ app.whenReady().then(async () => {
 
     // Create Repository (Create a new folder on disk)
     ipcMain.handle('create-repository', async () => {
-        const docsPath = app.getPath('documents');
-        // Clear name that indicates this is a single repository for your projects
-        const defaultPath = path.join(docsPath, 'My Writing Projects');
+        const reposRootPath = getReposRootPath();
+        const defaultPath = path.join(reposRootPath, 'New Repository');
 
         const result = await dialog.showSaveDialog(mainWindow, {
             title: 'Create New Repository Folder',
@@ -1021,6 +1211,13 @@ app.whenReady().then(async () => {
         if (result.canceled || !result.filePath) return null;
 
         const repoPath = result.filePath;
+        if (!isPathInsideRoot(repoPath, reposRootPath)) {
+            dialog.showErrorBox(
+                'Invalid Repository Location',
+                `Repositories must be inside the fixed root folder:\n${reposRootPath}\n\nChange the root location in Settings if needed.`
+            );
+            return null;
+        }
 
         try {
             // HIERARCHY VALIDATION: Check if ANY ancestor is a repo or project

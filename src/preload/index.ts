@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import type { AILogEntry, AIPrompt, Project, TextCommit } from '../renderer/types';
+import type { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit } from '../renderer/types';
 
 // Type definitions for the hierarchy sub-API
 interface HierarchyAPI {
@@ -73,6 +73,9 @@ export interface ElectronAPI {
     // Repository & Project System
     openRepository: () => Promise<{ path: string; projects: Project[] } | null>;
     createRepository: () => Promise<{ path: string; projects: Project[] } | null>;
+    listRepositories: () => Promise<RepositoryInfo[]>;
+    renameRepository: (repoPath: string, newName: string) => Promise<RepositoryInfo | null>;
+    deleteRepository: (repoPath: string) => Promise<boolean>;
     createProject: (repoPath: string, name: string, content?: string) => Promise<Project | null>;
     saveProjectContent: (path: string, content: string) => Promise<boolean>;
     loadProjectContent: (path: string) => Promise<string>;
@@ -170,6 +173,9 @@ const electronAPI: ElectronAPI = {
     // Repository & Project System
     openRepository: () => ipcRenderer.invoke('open-repository'),
     createRepository: () => ipcRenderer.invoke('create-repository'),
+    listRepositories: () => ipcRenderer.invoke('list-repositories'),
+    renameRepository: (repoPath: string, newName: string) => ipcRenderer.invoke('rename-repository', repoPath, newName),
+    deleteRepository: (repoPath: string) => ipcRenderer.invoke('delete-repository', repoPath),
     createProject: (repoPath: string, name: string, content?: string) => ipcRenderer.invoke('create-project', repoPath, name, content),
     saveProjectContent: (path: string, content: string) => ipcRenderer.invoke('save-project-content', path, content),
     loadProjectContent: (path: string) => ipcRenderer.invoke('load-project-content', path),
