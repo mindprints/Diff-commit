@@ -2,10 +2,9 @@ import React from 'react';
 import { Edit3, Volume2, Square, X, Zap, GitBranch, PanelBottomClose, PanelBottomOpen, ArrowRight, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
-import MultiSelectTextArea, { MultiSelectTextAreaRef } from './MultiSelectTextArea';
-import { AIPrompt, TextCommit, PolishMode, FontFamily } from '../types';
-import { PendingOperation } from '../hooks/useAsyncAI';
-import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
+import MultiSelectTextArea from './MultiSelectTextArea';
+import { fontClasses, sizeClasses } from '../constants/ui';
+import { getFactCheckSearchMode } from '../services/openRouterSearch';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
 import { useState, useEffect, useCallback } from 'react';
@@ -13,12 +12,12 @@ import { useState, useEffect, useCallback } from 'react';
 export function EditorPanel() {
     const {
         isSpeaking, setIsSpeaking,
-        setShowPromptsModal, isShiftHeld, setShowProjectsPanel,
+        setShowPromptsModal, isShiftHeld,
         isPromptPanelVisible, setIsPromptPanelVisible
     } = useUI();
 
     const {
-        handleCommitClick, hasUnsavedChanges, commits, repositoryPath
+        handleCommitClick, hasUnsavedChanges, commits
     } = useProject();
 
     const {
@@ -30,14 +29,15 @@ export function EditorPanel() {
     } = useAI();
 
     const {
-        previewText, setPreviewText, originalText, setOriginalText, setModifiedText,
+        previewText, setPreviewText, originalText, setModifiedText,
         performDiff, isAutoCompareEnabled, setIsAutoCompareEnabled,
         previewTextareaRef, fontFamily, fontSize,
-        handleOpenContextMenu, handleScrollSync, skipNextSegmentsSync,
+        handleOpenContextMenu, handleScrollSync,
         frozenSelection, setFrozenSelection
     } = useEditor();
 
     const [justSaved, setJustSaved] = useState(false);
+    const factCheckSearchMode = getFactCheckSearchMode();
 
     // Shift+Enter keyboard shortcut to commit with save
     useEffect(() => {
@@ -50,7 +50,7 @@ export function EditorPanel() {
 
                 if (!isInPromptPanel && previewText.trim()) {
                     e.preventDefault();
-                    handleCommitClick({ shiftKey: true } as any).then(() => {
+                    handleCommitClick({ shiftKey: true } as React.MouseEvent).then(() => {
                         setJustSaved(true);
                         setTimeout(() => setJustSaved(false), 600);
                     }).catch(console.error);
@@ -109,40 +109,53 @@ export function EditorPanel() {
                             variant="outline"
                             size="sm"
                             onClick={() => setShowPromptsModal(true)}
-                            disabled={isPolishing || isFactChecking}
+                            disabled={isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0}
                             className={clsx(
                                 "gap-2 min-w-[8rem] justify-between",
-                                (isPolishing || isFactChecking) && "opacity-60"
+                                (isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && "opacity-60"
                             )}
                         >
-                            {(isPolishing || isFactChecking) && (
+                            {(isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                             )}
                             <span className="truncate max-w-[100px]">
-                                {isPolishing ? 'Processing...' : isFactChecking ? 'Checking...' : (activePrompt?.name || 'Select Prompt')}
+                                {isPolishing
+                                    ? 'Processing...'
+                                    : isFactChecking
+                                        ? 'Checking...'
+                                        : isGeneratingImage
+                                            ? 'Generating...'
+                                            : pendingOperations.length > 0
+                                                ? 'Processing...'
+                                                : (activePrompt?.name || 'Select Prompt')}
                             </span>
-                            {!(isPolishing || isFactChecking) && (
+                            {!(isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && (
                                 <svg className="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
                             )}
                         </Button>
-                        {(isPolishing || isFactChecking || isGeneratingImage) && (
+                        {(isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && (
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={cancelAIOperation}
                                 className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/30"
-                                title="Cancel AI Operation - You can switch models in the header"
+                                title="Cancel active AI operation(s)"
                             >
                                 <X className="w-3.5 h-3.5 mr-1" />
                                 Cancel
                             </Button>
                         )}
                         {isFactChecking && factCheckProgress && (
-                            <span className="text-xs text-gray-500 dark:text-slate-400 max-w-32 truncate">
-                                {factCheckProgress}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 dark:text-slate-400 max-w-32 truncate">
+                                    {factCheckProgress}
+                                </span>
+                                <span className="px-2 py-0.5 text-[10px] rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+                                    Search: {factCheckSearchMode}
+                                </span>
+                            </div>
                         )}
                     </div>
 

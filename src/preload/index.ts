@@ -1,5 +1,6 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 import type { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit } from '../renderer/types';
+import { subscribeIpcChannel } from './ipcSubscription';
 
 // Type definitions for the hierarchy sub-API
 interface HierarchyAPI {
@@ -28,6 +29,23 @@ interface OpenRouterAPI {
         description?: string;
     }>>;
     fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
+    chatCompletions: (payload: {
+        model: string;
+        messages: Array<{ role: string; content: unknown }>;
+        temperature?: number;
+        response_format?: unknown;
+        generation_config?: unknown;
+        plugins?: Array<{ id: string; [key: string]: unknown }>;
+    }) => Promise<unknown>;
+    chatCompletionsStart: (requestId: string, payload: {
+        model: string;
+        messages: Array<{ role: string; content: unknown }>;
+        temperature?: number;
+        response_format?: unknown;
+        generation_config?: unknown;
+        plugins?: Array<{ id: string; [key: string]: unknown }>;
+    }) => Promise<unknown>;
+    chatCompletionsCancel: (requestId: string) => Promise<boolean>;
 }
 
 // Type definitions for the Artificial Analysis sub-API
@@ -51,8 +69,8 @@ export interface ElectronAPI {
     resourcesPath: string;
 
     // API Key management
-    getApiKey: (provider: string) => Promise<string>;
     setApiKey: (provider: string, apiKey: string) => Promise<void>;
+    getApiKeyConfigured: (provider: string) => Promise<boolean>;
 
     // AI Usage Logging
     logUsage: (logEntry: AILogEntry) => Promise<boolean>;
@@ -83,6 +101,8 @@ export interface ElectronAPI {
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
     renameProject: (projectPath: string, newName: string) => Promise<Project | null>;
+    loadGraphData: (repoPath: string) => Promise<{ nodes: Array<{ id: string; x: number; y: number }>; edges: Array<{ from: string; to: string }> }>;
+    saveGraphData: (repoPath: string, data: { nodes: Array<{ id: string; x: number; y: number }>; edges: Array<{ from: string; to: string }> }) => Promise<boolean>;
 
     // Hierarchy Enforcement System
     hierarchy: HierarchyAPI;
@@ -98,34 +118,34 @@ export interface ElectronAPI {
     savePrompts: (prompts: AIPrompt[]) => Promise<boolean>;
 
     // Menu event listeners (from main process)
-    onFileOpened: (callback: (content: string, path: string) => void) => void;
-    onRequestSave: (callback: () => void) => void;
-    onRequestExportVersions: (callback: () => void) => void;
-    onVersionsImported: (callback: (versions: TextCommit[]) => void) => void;
-    onMenuUndo: (callback: () => void) => void;
-    onMenuRedo: (callback: () => void) => void;
-    onMenuClearAll: (callback: () => void) => void;
-    onMenuToggleDark: (callback: () => void) => void;
-    onMenuFontSize: (callback: (size: string) => void) => void;
-    onMenuFontFamily: (callback: (family: string) => void) => void;
-    onMenuShowHelp: (callback: () => void) => void;
-    onMenuShowLogs: (callback: () => void) => void;
-    onMenuShowVersions: (callback: () => void) => void;
-    onMenuNewProject: (callback: () => void) => void;
-    onMenuCreateRepository: (callback: () => void) => void;
-    onMenuOpenRepository: (callback: () => void) => void;
-    onMenuSaveProject: (callback: () => void) => void;
+    onFileOpened: (callback: (content: string, path: string) => void) => () => void;
+    onRequestSave: (callback: () => void) => () => void;
+    onRequestExportVersions: (callback: () => void) => () => void;
+    onVersionsImported: (callback: (versions: TextCommit[]) => void) => () => void;
+    onMenuUndo: (callback: () => void) => () => void;
+    onMenuRedo: (callback: () => void) => () => void;
+    onMenuClearAll: (callback: () => void) => () => void;
+    onMenuToggleDark: (callback: () => void) => () => void;
+    onMenuFontSize: (callback: (size: string) => void) => () => void;
+    onMenuFontFamily: (callback: (family: string) => void) => () => void;
+    onMenuShowHelp: (callback: () => void) => () => void;
+    onMenuShowLogs: (callback: () => void) => () => void;
+    onMenuShowVersions: (callback: () => void) => () => void;
+    onMenuNewProject: (callback: () => void) => () => void;
+    onMenuCreateRepository: (callback: () => void) => () => void;
+    onMenuOpenRepository: (callback: () => void) => () => void;
+    onMenuSaveProject: (callback: () => void) => () => void;
 
     // Tools Menu Listeners
-    onMenuToolsSpellingLocal: (callback: () => void) => void;
-    onMenuToolsSpellingAI: (callback: () => void) => void;
-    onMenuToolsGrammar: (callback: () => void) => void;
-    onMenuToolsPolish: (callback: () => void) => void;
-    onMenuToolsFactCheck: (callback: () => void) => void;
-    onMenuToolsPrompts: (callback: () => void) => void;
-    onMenuToolsProjects: (callback: () => void) => void;
-    onMenuToolsModels: (callback: () => void) => void;
-    onMenuToolsSettings: (callback: () => void) => void;
+    onMenuToolsSpellingLocal: (callback: () => void) => () => void;
+    onMenuToolsSpellingAI: (callback: () => void) => () => void;
+    onMenuToolsGrammar: (callback: () => void) => () => void;
+    onMenuToolsPolish: (callback: () => void) => () => void;
+    onMenuToolsFactCheck: (callback: () => void) => () => void;
+    onMenuToolsPrompts: (callback: () => void) => () => void;
+    onMenuToolsProjects: (callback: () => void) => () => void;
+    onMenuToolsModels: (callback: () => void) => () => void;
+    onMenuToolsSettings: (callback: () => void) => () => void;
 
     // Folder & Workspace Paths
     getWorkspacePath: () => Promise<string>;
@@ -134,8 +154,6 @@ export interface ElectronAPI {
     createFolderAtPath: (folderPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
     loadRepositoryAtPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
 
-    // Cleanup listeners
-    removeAllListeners: (channel: string) => void;
 }
 
 // Declare global Window interface augmentation
@@ -151,8 +169,8 @@ const electronAPI: ElectronAPI = {
     resourcesPath: process.resourcesPath,
 
     // API Key management
-    getApiKey: (provider: string) => ipcRenderer.invoke('get-api-key', provider),
     setApiKey: (provider: string, apiKey: string) => ipcRenderer.invoke('set-api-key', provider, apiKey),
+    getApiKeyConfigured: (provider: string) => ipcRenderer.invoke('get-api-key-configured', provider),
 
     // AI Usage Logging
     logUsage: (logEntry: AILogEntry) => ipcRenderer.invoke('log-usage', logEntry),
@@ -183,6 +201,8 @@ const electronAPI: ElectronAPI = {
     saveProjectCommits: (path: string, commits: TextCommit[]) => ipcRenderer.invoke('save-project-commits', path, commits),
     saveProjectBundle: (projectPath: string) => ipcRenderer.invoke('save-project-bundle', projectPath),
     renameProject: (projectPath: string, newName: string) => ipcRenderer.invoke('rename-project', projectPath, newName),
+    loadGraphData: (repoPath: string) => ipcRenderer.invoke('graph:load', repoPath),
+    saveGraphData: (repoPath: string, data) => ipcRenderer.invoke('graph:save', repoPath, data),
 
     // Hierarchy Enforcement System
     hierarchy: {
@@ -200,6 +220,9 @@ const electronAPI: ElectronAPI = {
     openRouter: {
         fetchModels: () => ipcRenderer.invoke('openrouter:fetch-models'),
         fetchPricing: (modelId: string) => ipcRenderer.invoke('openrouter:fetch-pricing', modelId),
+        chatCompletions: (payload) => ipcRenderer.invoke('openrouter:chat-completions', payload),
+        chatCompletionsStart: (requestId, payload) => ipcRenderer.invoke('openrouter:chat-completions-start', requestId, payload),
+        chatCompletionsCancel: (requestId) => ipcRenderer.invoke('openrouter:chat-completions-cancel', requestId),
     },
 
     // Artificial Analysis API (secure - key stays in main process)
@@ -208,60 +231,86 @@ const electronAPI: ElectronAPI = {
     },
 
     // Menu event listeners (from main process)
-    onFileOpened: (callback: (content: string, path: string) => void) =>
-        ipcRenderer.on('file-opened', (_event: IpcRendererEvent, content: string, path: string) => callback(content, path)),
-    onRequestSave: (callback: () => void) =>
-        ipcRenderer.on('request-save', () => callback()),
-    onRequestExportVersions: (callback: () => void) =>
-        ipcRenderer.on('request-export-versions', () => callback()),
-    onVersionsImported: (callback: (versions: TextCommit[]) => void) =>
-        ipcRenderer.on('versions-imported', (_event: IpcRendererEvent, versions: TextCommit[]) => callback(versions)),
-    onMenuUndo: (callback: () => void) =>
-        ipcRenderer.on('menu-undo', () => callback()),
-    onMenuRedo: (callback: () => void) =>
-        ipcRenderer.on('menu-redo', () => callback()),
-    onMenuClearAll: (callback: () => void) =>
-        ipcRenderer.on('menu-clear-all', () => callback()),
-    onMenuToggleDark: (callback: () => void) =>
-        ipcRenderer.on('menu-toggle-dark', () => callback()),
-    onMenuFontSize: (callback: (size: string) => void) =>
-        ipcRenderer.on('menu-font-size', (_event: IpcRendererEvent, size: string) => callback(size)),
-    onMenuFontFamily: (callback: (family: string) => void) =>
-        ipcRenderer.on('menu-font-family', (_event: IpcRendererEvent, family: string) => callback(family)),
-    onMenuShowHelp: (callback: () => void) =>
-        ipcRenderer.on('menu-show-help', () => callback()),
-    onMenuShowLogs: (callback: () => void) =>
-        ipcRenderer.on('menu-show-logs', () => callback()),
-    onMenuShowVersions: (callback: () => void) =>
-        ipcRenderer.on('menu-show-versions', () => callback()),
-    onMenuNewProject: (callback: () => void) =>
-        ipcRenderer.on('menu-new-project', () => callback()),
-    onMenuCreateRepository: (callback: () => void) =>
-        ipcRenderer.on('menu-create-repository', () => callback()),
-    onMenuOpenRepository: (callback: () => void) =>
-        ipcRenderer.on('menu-open-repository', () => callback()),
-    onMenuSaveProject: (callback: () => void) =>
-        ipcRenderer.on('menu-save-project', () => callback()),
+    onFileOpened: (callback: (content: string, path: string) => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'file-opened', callback);
+    },
+    onRequestSave: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'request-save', callback);
+    },
+    onRequestExportVersions: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'request-export-versions', callback);
+    },
+    onVersionsImported: (callback: (versions: TextCommit[]) => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'versions-imported', callback);
+    },
+    onMenuUndo: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-undo', callback);
+    },
+    onMenuRedo: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-redo', callback);
+    },
+    onMenuClearAll: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-clear-all', callback);
+    },
+    onMenuToggleDark: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-toggle-dark', callback);
+    },
+    onMenuFontSize: (callback: (size: string) => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-font-size', callback);
+    },
+    onMenuFontFamily: (callback: (family: string) => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-font-family', callback);
+    },
+    onMenuShowHelp: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-show-help', callback);
+    },
+    onMenuShowLogs: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-show-logs', callback);
+    },
+    onMenuShowVersions: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-show-versions', callback);
+    },
+    onMenuNewProject: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-new-project', callback);
+    },
+    onMenuCreateRepository: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-create-repository', callback);
+    },
+    onMenuOpenRepository: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-open-repository', callback);
+    },
+    onMenuSaveProject: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-save-project', callback);
+    },
 
     // Tools Menu Listeners
-    onMenuToolsSpellingLocal: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-spelling-local', () => callback()),
-    onMenuToolsSpellingAI: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-spelling-ai', () => callback()),
-    onMenuToolsGrammar: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-grammar', () => callback()),
-    onMenuToolsPolish: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-polish', () => callback()),
-    onMenuToolsFactCheck: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-factcheck', () => callback()),
-    onMenuToolsPrompts: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-prompts', () => callback()),
-    onMenuToolsProjects: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-projects', () => callback()),
-    onMenuToolsModels: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-models', () => callback()),
-    onMenuToolsSettings: (callback: () => void) =>
-        ipcRenderer.on('menu-tools-settings', () => callback()),
+    onMenuToolsSpellingLocal: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-spelling-local', callback);
+    },
+    onMenuToolsSpellingAI: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-spelling-ai', callback);
+    },
+    onMenuToolsGrammar: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-grammar', callback);
+    },
+    onMenuToolsPolish: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-polish', callback);
+    },
+    onMenuToolsFactCheck: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-factcheck', callback);
+    },
+    onMenuToolsPrompts: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-prompts', callback);
+    },
+    onMenuToolsProjects: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-projects', callback);
+    },
+    onMenuToolsModels: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-models', callback);
+    },
+    onMenuToolsSettings: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-tools-settings', callback);
+    },
 
     // Folder & Workspace Paths
     getWorkspacePath: () => ipcRenderer.invoke('get-workspace-path'),
@@ -269,9 +318,6 @@ const electronAPI: ElectronAPI = {
     setCustomWorkspace: (customPath: string) => ipcRenderer.invoke('set-custom-workspace', customPath),
     createFolderAtPath: (folderPath: string) => ipcRenderer.invoke('create-folder-at-path', folderPath),
     loadRepositoryAtPath: (repoPath: string) => ipcRenderer.invoke('load-repository-at-path', repoPath),
-
-    // Cleanup listeners
-    removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel)
 };
 
 // Expose to renderer

@@ -19,30 +19,12 @@ interface GraphData {
     edges: GraphEdge[];
 }
 
-const GRAPH_FILE = 'project-graph.json';
-
 /**
  * Load the graph data from the repository root.
  */
 export async function loadGraphData(repoPath: string): Promise<GraphData> {
-    if (window.electron?.loadProjectCommits && (window.electron as any)?.handleGraphOps) {
-        // Use IPC if available (assuming we add a handleGraphOps or similar generic file reader/writer later)
-        // For now, we reuse the pattern: try to read file directly using node fs via IPC
-        // But since we don't have a specific IPC for arbitrary JSON, we might fallback to localStorage or assume
-        // we need to add a generic read/write IPC.
-        // Wait, the user instructions didn't explicitly ask for new IPC handlers, but we need to persist to repo.
-        // We can use the browserFileSystem approach for browser, and for Electron we might need a new handler
-        // or abuse an existing one?
-        // Let's assume we can use a new generic read/write or add it to hierarchy handlers?
-        // Actually, let's start with BrowserFS as it's cleaner to implement in Renderer first, 
-        // and for Electron we'll check if we have a file reader. 
-        // Looking at `projectStorage.ts`, we mostly use specific IPCs. 
-
-        // Let's rely on the `browserFileSystem` logic because it abstracts the file handle concept which might work
-        // if we passed the repo handle.
-
-        // FOR NOW: Let's assume we can write to the repo root using the browser file system logic 
-        // if we have the handle.
+    if (window.electron?.loadGraphData) {
+        return window.electron.loadGraphData(repoPath);
     }
 
     // Fallback: LocalStorage for prototype if FS access isn't perfect
@@ -59,11 +41,13 @@ export async function loadGraphData(repoPath: string): Promise<GraphData> {
  * Save the graph data.
  */
 export async function saveGraphData(repoPath: string, data: GraphData): Promise<void> {
+    if (window.electron?.saveGraphData) {
+        await window.electron.saveGraphData(repoPath, data);
+        return;
+    }
+
     const key = `graph-data-${repoPath}`;
     localStorage.setItem(key, JSON.stringify(data));
-
-    // TODO: Implement actual file persistence once basic interactions work
-    // This is "good enough" for the prototype phase interacting with the UI.
 }
 
 /**

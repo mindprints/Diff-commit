@@ -47,6 +47,14 @@ export interface ParsedModel {
     capabilities?: string[];  // e.g., ['image-generation']
 }
 
+interface OpenRouterPingResponse {
+    choices?: Array<{
+        message?: {
+            content?: string;
+        };
+    }>;
+}
+
 /**
  * Extract provider name from model ID
  * e.g., "anthropic/claude-3-opus" -> "Anthropic"
@@ -197,6 +205,55 @@ export async function fetchModelPricing(
 }
 
 /**
+ * Send a lightweight ping request to verify a model is reachable.
+ * Returns round-trip latency and a simple response snippet.
+ */
+export async function pingModel(modelId: string): Promise<{ ok: boolean; latencyMs: number; message: string }> {
+    if (!modelId) {
+        throw new Error('Model ID is required');
+    }
+
+    const payload = {
+        model: modelId,
+        messages: [{ role: 'user', content: 'Reply with only: PONG' }],
+        temperature: 0,
+    };
+
+    const start = performance.now();
+
+    if (typeof window !== 'undefined' && window.electron?.openRouter?.chatCompletions) {
+        const data = await window.electron.openRouter.chatCompletions(payload) as OpenRouterPingResponse;
+        const latencyMs = Math.round(performance.now() - start);
+        const message = data.choices?.[0]?.message?.content?.toString().trim() || 'No response content';
+        return { ok: true, latencyMs, message };
+    }
+
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!apiKey) {
+        throw new Error('OpenRouter API key not configured. Run in Electron or set VITE_OPENROUTER_API_KEY.');
+    }
+
+    const response = await fetch(`${OPENROUTER_API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const latencyMs = Math.round(performance.now() - start);
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json() as OpenRouterPingResponse;
+    const message = data.choices?.[0]?.message?.content?.toString().trim() || 'No response content';
+    return { ok: true, latencyMs, message };
+}
+
+/**
  * Check if model supports vision (image input)
  */
 export function supportsVision(modality?: string): boolean {
@@ -267,4 +324,30 @@ export function supportsFileInput(modality?: string, supportedParams?: string[])
     // Vision models can typically handle PDFs through OpenRouter's PDF plugin
     // Also check for 'file' in supportedParams if OpenRouter adds it
     return supportsVision(modality) || (supportedParams?.includes('file') ?? false);
+}
+
+/**
+ * Check if model likely supports web/search retrieval.
+ * Uses capabilities, supported params, and model naming heuristics.
+ */
+export function supportsSearchCapability(
+    modelId?: string,
+    modelName?: string,
+    capabilities?: string[],
+    supportedParams?: string[]
+): boolean {
+    const capValues = (capabilities || []).map((c) => c.toLowerCase());
+    const paramValues = (supportedParams || []).map((p) => p.toLowerCase());
+
+    if (capValues.some((c) => c.includes('search') || c.includes('web') || c.includes('retrieval') || c.includes('browse'))) {
+        return true;
+    }
+
+    if (paramValues.some((p) => p.includes('search') || p.includes('web') || p.includes('browse') || p.includes('retrieval'))) {
+        return true;
+    }
+
+    const combined = `${modelId || ''} ${modelName || ''}`.toLowerCase();
+    const keywords = ['sonar', 'perplexity', 'search', 'web-search', 'web search', 'retrieval', 'browse'];
+    return keywords.some((kw) => combined.includes(kw));
 }

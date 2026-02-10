@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
-import { useAsyncAI } from '../hooks/useAsyncAI';
+import { useAsyncAI, PendingOperation } from '../hooks/useAsyncAI';
 import { useEditor } from './EditorContext';
 import { useUI } from './UIContext';
 import { useModels } from '../hooks/useModels';
@@ -35,7 +35,7 @@ interface AIContextType {
     promptsLoading: boolean;
 
     // useAsyncAI
-    pendingOperations: any[]; // PendingOperation type is defined in useAsyncAI.ts but not exported nicely yet
+    pendingOperations: PendingOperation[];
     startOperation: (start: number, end: number, promptId: string, customPrompt?: AIPrompt) => Promise<void>;
     cancelAsyncOperations: () => void;
     handleQuickSend: (promptId?: string) => void;
@@ -363,6 +363,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         cancelAsyncOperations();
         setIsPolishing(false);
         setIsFactChecking(false);
+        setIsGeneratingImage(false);
         setFactCheckProgress('');
     }, [cancelAsyncOperations]);
 
@@ -895,8 +896,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setErrorMessage(null);
 
         const startTime = Date.now();
-        const response = await generateImage(imagePrompt, imageModel, editorContent, base64Image);
+        abortControllerRef.current = new AbortController();
+        const response = await generateImage(
+            imagePrompt,
+            imageModel,
+            editorContent,
+            base64Image,
+            abortControllerRef.current.signal
+        );
         const durationMs = Date.now() - startTime;
+        abortControllerRef.current = null;
 
         if (response.isCancelled) {
             setIsGeneratingImage(false);

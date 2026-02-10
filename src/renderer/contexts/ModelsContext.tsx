@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { Model, MODELS as SEED_MODELS } from '../constants/models';
-import { ParsedModel, fetchOpenRouterModels, fetchModelPricing } from '../services/openRouterService';
-import { fetchBenchmarks as fetchAABenchmarks, matchBenchmark, ModelBenchmark } from '../services/artificialAnalysisService';
+import { ParsedModel, fetchOpenRouterModels, fetchModelPricing, pingModel as pingOpenRouterModel } from '../services/openRouterService';
+import { fetchBenchmarks as fetchAABenchmarks, matchBenchmark } from '../services/artificialAnalysisService';
 
 const STORAGE_KEY = 'diff-commit-models';
 
@@ -29,6 +29,7 @@ interface ModelsContextType {
     addModels: (models: ParsedModel[]) => void;
     removeModel: (modelId: string) => void;
     updatePricing: (modelId: string) => Promise<void>;
+    pingModel: (modelId: string) => Promise<{ ok: boolean; latencyMs: number; message: string }>;
     fetchAvailableModels: () => Promise<ParsedModel[]>;
     fetchBenchmarks: (forceRefresh?: boolean) => Promise<void>;
     resetToDefaults: () => void;
@@ -142,6 +143,20 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
+    const pingModel = useCallback(async (modelId: string): Promise<{ ok: boolean; latencyMs: number; message: string }> => {
+        setLoadingCount(c => c + 1);
+        setError(null);
+        try {
+            return await pingOpenRouterModel(modelId);
+        } catch (e) {
+            const message = e instanceof Error ? e.message : 'Failed to ping model';
+            setError(message);
+            throw e;
+        } finally {
+            setLoadingCount(c => c - 1);
+        }
+    }, []);
+
     const fetchBenchmarks = useCallback(async (forceRefresh = false): Promise<void> => {
         setLoadingCount(c => c + 1);
         setError(null);
@@ -186,7 +201,7 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     return (
         <ModelsContext.Provider value={{
             models, isLoading, error, addModel, addModels,
-            removeModel, updatePricing, fetchAvailableModels, fetchBenchmarks, resetToDefaults, getModel
+            removeModel, updatePricing, pingModel, fetchAvailableModels, fetchBenchmarks, resetToDefaults, getModel
         }}>
             {children}
         </ModelsContext.Provider>

@@ -5,8 +5,8 @@ export interface IElectronAPI {
     platform: string;
 
     // API Key management
-    getApiKey: (provider: string) => Promise<string>;
     setApiKey: (provider: string, apiKey: string) => Promise<void>;
+    getApiKeyConfigured: (provider: string) => Promise<boolean>;
 
     // AI Usage Logging
     logUsage: (logEntry: AILogEntry) => Promise<boolean>;
@@ -61,9 +61,17 @@ export interface IElectronAPI {
         path: string;
         repositoryPath: string;
     } | null>;
-
-    // Graph Ops (optional, future IPC)
-    handleGraphOps?: (action: string, data?: any) => Promise<any>;
+    loadGraphData: (repoPath: string) => Promise<{
+        nodes: Array<{ id: string; x: number; y: number }>;
+        edges: Array<{ from: string; to: string }>;
+    }>;
+    saveGraphData: (
+        repoPath: string,
+        data: {
+            nodes: Array<{ id: string; x: number; y: number }>;
+            edges: Array<{ from: string; to: string }>;
+        }
+    ) => Promise<boolean>;
 
     // Hierarchy Enforcement System
     hierarchy: {
@@ -125,38 +133,54 @@ export interface IElectronAPI {
          * @returns Current input and output prices in USD per 1M tokens
          */
         fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
+        chatCompletions: (payload: {
+            model: string;
+            messages: Array<{ role: string; content: unknown }>;
+            temperature?: number;
+            response_format?: unknown;
+            generation_config?: unknown;
+            plugins?: Array<{ id: string; [key: string]: unknown }>;
+        }) => Promise<unknown>;
+        chatCompletionsStart?: (requestId: string, payload: {
+            model: string;
+            messages: Array<{ role: string; content: unknown }>;
+            temperature?: number;
+            response_format?: unknown;
+            generation_config?: unknown;
+            plugins?: Array<{ id: string; [key: string]: unknown }>;
+        }) => Promise<unknown>;
+        chatCompletionsCancel?: (requestId: string) => Promise<boolean>;
     };
 
     // Menu event listeners
-    onFileOpened: (callback: (content: string, path: string) => void) => void;
-    onRequestSave: (callback: () => void) => void;
-    onRequestExportVersions: (callback: () => void) => void;
-    onVersionsImported: (callback: (versions: TextCommit[]) => void) => void;
-    onMenuUndo: (callback: () => void) => void;
-    onMenuRedo: (callback: () => void) => void;
-    onMenuClearAll: (callback: () => void) => void;
-    onMenuToggleDark: (callback: () => void) => void;
-    onMenuFontSize: (callback: (size: string) => void) => void;
-    onMenuFontFamily: (callback: (family: string) => void) => void;
-    onMenuShowHelp: (callback: () => void) => void;
-    onMenuShowLogs: (callback: () => void) => void;
-    onMenuShowVersions: (callback: () => void) => void;
-    onMenuNewProject: (callback: () => void) => void;
-    onMenuCreateRepository: (callback: () => void) => void;
-    onMenuOpenRepository: (callback: () => void) => void;
-    onMenuSaveProject: (callback: () => void) => void;
+    onFileOpened: (callback: (content: string, path: string) => void) => () => void;
+    onRequestSave: (callback: () => void) => () => void;
+    onRequestExportVersions: (callback: () => void) => () => void;
+    onVersionsImported: (callback: (versions: TextCommit[]) => void) => () => void;
+    onMenuUndo: (callback: () => void) => () => void;
+    onMenuRedo: (callback: () => void) => () => void;
+    onMenuClearAll: (callback: () => void) => () => void;
+    onMenuToggleDark: (callback: () => void) => () => void;
+    onMenuFontSize: (callback: (size: string) => void) => () => void;
+    onMenuFontFamily: (callback: (family: string) => void) => () => void;
+    onMenuShowHelp: (callback: () => void) => () => void;
+    onMenuShowLogs: (callback: () => void) => () => void;
+    onMenuShowVersions: (callback: () => void) => () => void;
+    onMenuNewProject: (callback: () => void) => () => void;
+    onMenuCreateRepository: (callback: () => void) => () => void;
+    onMenuOpenRepository: (callback: () => void) => () => void;
+    onMenuSaveProject: (callback: () => void) => () => void;
 
     // Tools Menu Listeners
-    onMenuToolsSpellingLocal: (callback: () => void) => void;
-    onMenuToolsSpellingAI: (callback: () => void) => void;
-    onMenuToolsGrammar: (callback: () => void) => void;
-    onMenuToolsPolish: (callback: () => void) => void;
-    onMenuToolsFactCheck: (callback: () => void) => void;
-    onMenuToolsPrompts: (callback: () => void) => void;
-    onMenuToolsProjects: (callback: () => void) => void;
-    onMenuToolsModels: (callback: () => void) => void;
-    onMenuToolsSettings?: (callback: () => void) => void;
-    removeAllListeners: (channel: string) => void;
+    onMenuToolsSpellingLocal: (callback: () => void) => () => void;
+    onMenuToolsSpellingAI: (callback: () => void) => () => void;
+    onMenuToolsGrammar: (callback: () => void) => () => void;
+    onMenuToolsPolish: (callback: () => void) => () => void;
+    onMenuToolsFactCheck: (callback: () => void) => () => void;
+    onMenuToolsPrompts: (callback: () => void) => () => void;
+    onMenuToolsProjects: (callback: () => void) => () => void;
+    onMenuToolsModels: (callback: () => void) => () => void;
+    onMenuToolsSettings?: (callback: () => void) => () => void;
 }
 
 declare global {

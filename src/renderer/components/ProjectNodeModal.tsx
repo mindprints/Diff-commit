@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useProject, useUI } from '../contexts';
-import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw, Plus, Edit2, MoreVertical, FolderGit2, GitCommit, Home, ChevronRight } from 'lucide-react';
+import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw, Plus, Edit2, FolderGit2, GitCommit, Home, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
 import { loadGraphData, saveGraphData, getTopologicalSort } from '../services/graphService';
 import { CreateNodeDialog } from './CreateNodeDialog';
 import './ProjectNodeModal.css';
 import { Project, TextCommit } from '../types';
+import { GraphModalShell } from './graph/GraphModalShell';
+import { GraphCanvas } from './graph/GraphCanvas';
+import { GraphContextMenu } from './graph/GraphContextMenu';
+import { GraphNodeCard } from './graph/GraphNodeCard';
+import { GraphNodeTooltip } from './graph/GraphNodeTooltip';
+import { GraphSearchControl } from './graph/GraphSearchControl';
 
 interface ProjectNodeModalProps {
     isOpen: boolean;
@@ -163,7 +169,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const [commitCounts, setCommitCounts] = useState<Record<string, number>>({});
 
     const filteredNodes = useMemo(() => {
-        let filtered = nodes;
+        const filtered = nodes;
 
         // Apply search filter
         if (!searchTerm) return filtered;
@@ -685,8 +691,9 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             }
             if (viewScope.projectId) {
                 setHoverContentCache(prev => {
-                    const { [viewScope.projectId as string]: _removed, ...rest } = prev;
-                    return rest;
+                    const next = { ...prev };
+                    delete next[viewScope.projectId as string];
+                    return next;
                 });
             }
             return;
@@ -861,64 +868,53 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div className="project-node-modal">
-            {/* Toolbar */}
-            <div className="modal-controls">
-                <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setShowCreateDialog(true)}
-                    icon={<Plus className="w-4 h-4" />}
-                    disabled={!repositoryPath || viewScope.type !== 'projects'}
-                    title={!repositoryPath ? 'Open a repository first' : viewScope.type !== 'projects' ? 'Return to Projects to create' : 'Create new project'}
-                >
-                    New
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowRepoPicker(true)}
-                    icon={<FolderGit2 className="w-4 h-4" />}
-                    title="Switch repository"
-                >
-                    Repos
-                </Button>
-                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
-                <div className="relative mr-2">
-                    <input
-                        type="text"
-                        placeholder="Search nodes..."
+        <GraphModalShell
+            controls={
+                <>
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setShowCreateDialog(true)}
+                        icon={<Plus className="w-4 h-4" />}
+                        disabled={!repositoryPath || viewScope.type !== 'projects'}
+                        title={!repositoryPath ? 'Open a repository first' : viewScope.type !== 'projects' ? 'Return to Projects to create' : 'Create new project'}
+                    >
+                        New
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowRepoPicker(true)}
+                        icon={<FolderGit2 className="w-4 h-4" />}
+                        title="Switch repository"
+                    >
+                        Repos
+                    </Button>
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
+                    <GraphSearchControl
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-8 pl-3 pr-8 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                        onChange={setSearchTerm}
+                        placeholder="Search nodes..."
+                        className="mr-2"
+                        inputClassName="text-xs"
                     />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600"
-                        >
-                            <X className="w-3.5 h-3.5" />
-                        </button>
-                    )}
-                </div>
-                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
-                <Button variant="ghost" onClick={() => initializeLayout(true)} title="Reset Node Positions">
-                    <RotateCcw className="w-4 h-4" />
-                </Button>
-                <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
-                <Button variant="ghost" onClick={deleteEdgesOnly} disabled={selectedNodes.size === 0} title="Remove Edges (connections only)">
-                    <X className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" onClick={handleDeleteNodes} disabled={selectedNodes.size === 0} title="Delete Selected Projects">
-                    <Trash2 className="w-4 h-4" />
-                </Button>
-                <Button variant="primary" onClick={handleMerge} icon={<GitMerge className="w-4 h-4" />} disabled={viewScope.type !== 'projects'}>
-                    Merge Selected
-                </Button>
-            </div>
-
-            {/* Breadcrumb Navigation Bar */}
-            {viewScope.type !== 'projects' && (
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
+                    <Button variant="ghost" onClick={() => initializeLayout(true)} title="Reset Node Positions">
+                        <RotateCcw className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
+                    <Button variant="ghost" onClick={deleteEdgesOnly} disabled={selectedNodes.size === 0} title="Remove Edges (connections only)">
+                        <X className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" onClick={handleDeleteNodes} disabled={selectedNodes.size === 0} title="Delete Selected Projects">
+                        <Trash2 className="w-4 h-4" />
+                    </Button>
+                    <Button variant="primary" onClick={handleMerge} icon={<GitMerge className="w-4 h-4" />} disabled={viewScope.type !== 'projects'}>
+                        Merge Selected
+                    </Button>
+                </>
+            }
+            topBar={viewScope.type !== 'projects' ? (
                 <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700">
                     <button
                         onClick={navigateToProjects}
@@ -936,10 +932,8 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                         ({scopeCommits.length} commit{scopeCommits.length !== 1 ? 's' : ''})
                     </span>
                 </div>
-            )}
-
-            {/* Return Button */}
-            <div className="modal-close flex items-center gap-2">
+            ) : undefined}
+            closeControl={
                 <button
                     className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors border border-gray-200 dark:border-slate-700 font-medium text-sm text-gray-700 dark:text-slate-200"
                     onClick={onClose}
@@ -947,27 +941,18 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     <ArrowLeft className="w-4 h-4" />
                     Return to {currentProject?.name ? currentProject.name : 'Editor'}
                 </button>
-            </div>
-
-            {/* Canvas */}
-            <div
-                ref={canvasRef}
-                className="project-node-canvas"
+            }
+        >
+            <GraphCanvas
+                canvasRef={canvasRef}
+                offset={offset}
+                scale={scale}
                 onMouseDown={(e) => handleMouseDown(e, null)}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
             >
-                <div
-                    style={{
-                        transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                        transformOrigin: '0 0',
-                        width: '100%',
-                        height: '100%'
-                    }}
-                >
-                    {/* Edges Layer */}
-                    <svg className="graph-svg-layer" style={{ overflow: 'visible' }}>
+                {/* Edges Layer */}
+                <svg className="graph-svg-layer" style={{ overflow: 'visible' }}>
                         <defs>
                             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="280" refY="3.5" orient="auto">
                                 <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
@@ -996,10 +981,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 className="graph-edge potential"
                             />
                         )}
-                    </svg>
+                </svg>
 
-                    {/* Nodes Layer */}
-                    {filteredNodes.map(node => {
+                {/* Nodes Layer */}
+                {filteredNodes.map(node => {
                         const entityType = node.entityType || 'project';
                         const entityStyle = ENTITY_STYLES[entityType];
 
@@ -1026,10 +1011,11 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                         }
 
                         return (
-                            <div
+                            <GraphNodeCard
                                 key={node.id}
-                                className={`project-node group ${entityStyle.borderClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''}`}
-                                style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
+                                x={node.x}
+                                y={node.y}
+                                className={`${entityStyle.borderClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''}`}
                                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                                 onMouseEnter={() => handleNodeHover(node.id)}
                                 onMouseLeave={() => setHoveredNode(null)}
@@ -1042,8 +1028,8 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                         }
                                     }
                                 }}
-                            >
-                                <div className="flex items-center gap-2 mb-2">
+                                header={
+                                    <>
                                     <EntityIcon type={entityType} className="flex-shrink-0" />
                                     {renamingNodeId === node.id ? (
                                         <input
@@ -1072,18 +1058,15 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                             <HighlightText text={displayName} highlight={searchTerm} />
                                         </div>
                                     )}
-                                    <button
-                                        className="ml-auto p-0.5 opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-opacity"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleContextMenu(e, node.id);
-                                        }}
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                    >
-                                        <MoreVertical className="w-3.5 h-3.5 text-gray-400" />
-                                    </button>
-                                </div>
-                                <div className="flex items-center justify-between">
+                                    </>
+                                }
+                                onMenuClick={viewScope.type === 'projects'
+                                    ? (e) => {
+                                        e.stopPropagation();
+                                        handleContextMenu(e, node.id);
+                                    }
+                                    : undefined}
+                                body={<div className="flex items-center justify-between">
                                     <div className="project-node-meta">
                                         <div>{displayMeta}</div>
                                         {viewScope.type === 'projects' && (
@@ -1095,10 +1078,8 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${entityStyle.bgClass} ${entityStyle.iconColor} font-medium`}>
                                         {entityStyle.label}
                                     </span>
-                                </div>
-
-                                {/* Delete Confirmation Overlay */}
-                                {deleteConfirmId === node.id && (
+                                </div>}
+                                overlay={deleteConfirmId === node.id ? (
                                     <div
                                         className="absolute inset-0 bg-red-500/90 dark:bg-red-900/90 rounded-lg flex flex-col items-center justify-center p-2 z-10"
                                         onMouseDown={(e) => e.stopPropagation()}
@@ -1119,21 +1100,19 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                             </button>
                                         </div>
                                     </div>
-                                )}
-
-                                {(hoveredNode === node.id || selectedNodes.has(node.id)) && !deleteConfirmId && (
-                                    <div className={`node-tooltip ${selectedNodes.has(node.id) ? 'persistent' : ''}`}
-                                        onMouseDown={(e) => e.stopPropagation()}
+                                ) : undefined}
+                                tooltip={(hoveredNode === node.id || selectedNodes.has(node.id)) && !deleteConfirmId ? (
+                                    <GraphNodeTooltip
+                                        title={selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}
+                                        subtitle={
+                                            selectedNodes.has(node.id)
+                                                ? 'Selected'
+                                                : viewScope.type === 'projects' && hoveredNode === node.id && hoverContentSource !== 'draft'
+                                                    ? (hoverContentSource === 'commit' ? 'Commit Preview' : 'Empty Draft')
+                                                    : undefined
+                                        }
+                                        persistent={selectedNodes.has(node.id)}
                                     >
-                                    <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs flex justify-between items-center">
-                                        <span>{selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}</span>
-                                        {!selectedNodes.has(node.id) && viewScope.type === 'projects' && hoveredNode === node.id && hoverContentSource !== 'draft' && (
-                                            <span className="text-[10px] text-gray-400 font-normal">
-                                                {hoverContentSource === 'commit' ? 'Commit Preview' : 'Empty Draft'}
-                                            </span>
-                                        )}
-                                        {selectedNodes.has(node.id) && <span className="text-[10px] text-gray-400 font-normal">Selected</span>}
-                                    </div>
                                         {selectedNodes.has(node.id) ? (
                                             <HighlightText
                                                 text={
@@ -1146,53 +1125,54 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                         ) : (
                                             <HighlightText text={hoverContent} highlight={searchTerm} />
                                         )}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+                                    </GraphNodeTooltip>
+                                ) : undefined}
+                            />
+                    );
+                })}
+            </GraphCanvas>
 
             {/* Context Menu */}
             {contextMenu && (
-                <div
-                    className="fixed bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 z-50 min-w-[140px]"
-                    style={{ left: contextMenu.x, top: contextMenu.y }}
-                >
-                    <button
-                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2"
-                        onClick={() => {
-                            const project = projects.find(p => p.id === contextMenu.nodeId);
-                            if (project) {
-                                handleLoadProject(project.id);
-                                onClose();
-                            }
-                            setContextMenu(null);
-                        }}
-                    >
-                        <FileText className="w-3.5 h-3.5" />
-                        Open
-                    </button>
-                    <button
-                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-2"
-                        onClick={() => handleStartRename(contextMenu.nodeId)}
-                    >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        Rename
-                    </button>
-                    <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
-                    <button
-                        className="w-full text-left px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
-                        onClick={() => {
-                            setDeleteConfirmId(contextMenu.nodeId);
-                            setContextMenu(null);
-                        }}
-                    >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete
-                    </button>
-                </div>
+                <GraphContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    items={[
+                        {
+                            key: 'open',
+                            label: 'Open',
+                            icon: <FileText className="w-3.5 h-3.5" />,
+                            onClick: () => {
+                                const project = projects.find(p => p.id === contextMenu.nodeId);
+                                if (project) {
+                                    handleLoadProject(project.id);
+                                    onClose();
+                                }
+                                setContextMenu(null);
+                            },
+                        },
+                        {
+                            key: 'rename',
+                            label: 'Rename',
+                            icon: <Edit2 className="w-3.5 h-3.5" />,
+                            onClick: () => {
+                                handleStartRename(contextMenu.nodeId);
+                                setContextMenu(null);
+                            },
+                        },
+                        {
+                            key: 'delete',
+                            label: 'Delete',
+                            icon: <Trash2 className="w-3.5 h-3.5" />,
+                            tone: 'danger',
+                            dividerBefore: true,
+                            onClick: () => {
+                                setDeleteConfirmId(contextMenu.nodeId);
+                                setContextMenu(null);
+                            },
+                        },
+                    ]}
+                />
             )}
 
             {/* Create Node Dialog */}
@@ -1231,6 +1211,6 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     }}
                 />
             )}
-        </div>
+        </GraphModalShell>
     );
 }

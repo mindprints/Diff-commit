@@ -3,7 +3,7 @@ import { RatingPrompt } from './RatingPrompt';
 import { CommitHistoryModal } from './CommitHistoryModal';
 import { ContextMenu } from './ContextMenu';
 import { SavePromptDialog } from './SavePromptDialog';
-import { PromptsModal } from './PromptsModal';
+import { PromptGraphModal } from './PromptGraphModal';
 import { ModelsModal } from './ModelsModal';
 import { ProjectsPanel } from './ProjectsPanel';
 import { WelcomeModal } from './WelcomeModal';
@@ -12,8 +12,7 @@ import { LogsModal } from './LogsModal';
 import { SettingsModal } from './SettingsModal';
 import { ProjectNodeModal } from './ProjectNodeModal';
 import { RepoPickerDialog } from './RepoPickerDialog';
-import { X, Volume2, Wand2, Shield, Save } from 'lucide-react';
-import { TextCommit, AIPrompt, ViewMode, PolishMode, Project } from '../types';
+import { X, Volume2, Shield, Save } from 'lucide-react';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
 
@@ -49,7 +48,7 @@ export function AppModals() {
     const {
         aiPrompts, createPrompt, updatePrompt, deletePrompt, resetBuiltIn,
         handleFactCheck, handleReadAloud,
-        handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
+        handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
         pendingPromptText, setPendingPromptText,
         selectedModel, setDefaultModel,
         selectedImageModel, setDefaultImageModel,
@@ -143,7 +142,7 @@ export function AppModals() {
             />
 
             {/* Prompts Management Modal */}
-            <PromptsModal
+            <PromptGraphModal
                 isOpen={showPromptsModal}
                 onClose={() => setShowPromptsModal(false)}
                 prompts={aiPrompts}
@@ -153,7 +152,6 @@ export function AppModals() {
                 onResetBuiltIn={resetBuiltIn}
                 defaultPromptId={activePromptId}
                 onSetDefault={setDefaultPrompt}
-                onFactCheck={handleFactCheck}
                 selectedModel={selectedModel}
                 selectedImageModel={selectedImageModel}
             />

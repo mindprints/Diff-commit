@@ -2,23 +2,16 @@
 import { AIPrompt, PolishMode } from "../types";
 import { Model } from "../constants/models";
 import { DEFAULT_PROMPTS, getPromptById } from "../constants/prompts";
+import { requestOpenRouterChatCompletions } from "./openRouterBridge";
 
 // API key cache for performance (avoid repeated IPC calls)
 let cachedApiKey: string | null = null;
 
 /**
- * Get the OpenRouter API key securely.
- * In Electron: Uses IPC to get the key from the secure main process storage.
- * In Web/Vite: Falls back to build-time environment variable.
+ * Get OpenRouter API key for browser-only fallback mode.
  */
 async function getOpenRouterApiKey(): Promise<string> {
     if (cachedApiKey !== null) return cachedApiKey;
-
-    // In Electron, use secure IPC handler
-    if (window.electron?.getApiKey) {
-        cachedApiKey = await window.electron.getApiKey('openrouter') || '';
-        return cachedApiKey;
-    }
 
     // Fallback for web/Vite development
     cachedApiKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
@@ -46,21 +39,78 @@ interface AIResponse {
     isCancelled?: boolean;
 }
 
+interface OpenRouterChatCompletionResponse {
+    choices?: Array<{
+        message?: {
+            content?: string;
+        };
+    }>;
+    usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+    };
+    error?: {
+        message?: string;
+    };
+}
+
+interface ParsedRangeResult {
+    id: string;
+    result: string;
+}
+
+function isParsedRangeResult(value: unknown): value is ParsedRangeResult {
+    return Boolean(
+        value &&
+        typeof value === 'object' &&
+        'id' in value &&
+        'result' in value &&
+        typeof (value as { id: unknown }).id === 'string' &&
+        typeof (value as { result: unknown }).result === 'string'
+    );
+}
+
+function isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === 'string') return error;
+    return 'Unknown error';
+}
+
+function shouldRetryWithoutResponseFormat(error: unknown): boolean {
+    const message = getErrorMessage(error).toLowerCase();
+    return (
+        message.includes('response_format') ||
+        message.includes('json_object') ||
+        (message.includes('unsupported') && message.includes('format')) ||
+        (message.includes('not supported') && message.includes('format'))
+    );
+}
+
 async function callOpenRouter(
     model: Model,
     messages: { role: string, content: string }[],
     temperature: number = 0.3,
-    responseFormat?: any,
+    responseFormat?: unknown,
     signal?: AbortSignal
 ): Promise<AIResponse> {
-    // Get API key securely at runtime
-    const apiKey = await getOpenRouterApiKey();
-    if (!apiKey) {
-        console.warn("OpenRouter API Key is missing.");
-        return { text: "API Key missing. Please configure your OpenRouter API key.", isError: true };
-    }
+    const makeRequest = async (format?: unknown): Promise<OpenRouterChatCompletionResponse> => {
+        if (window.electron?.openRouter?.chatCompletions) {
+            return requestOpenRouterChatCompletions({
+                model: model.id,
+                messages,
+                temperature,
+                response_format: format,
+            }, signal) as Promise<OpenRouterChatCompletionResponse>;
+        }
 
-    try {
+        const apiKey = await getOpenRouterApiKey();
+        if (!apiKey) {
+            throw new Error("API Key missing. Please configure your OpenRouter API key.");
+        }
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -73,49 +123,35 @@ async function callOpenRouter(
                 model: model.id,
                 messages: messages,
                 temperature: temperature,
-                response_format: responseFormat
+                response_format: format
             }),
-            signal // Pass abort signal to fetch
+            signal
         });
-
         if (!response.ok) {
             const errorText = await response.text();
-            console.error("OpenRouter API Error:", response.status, errorText);
-
-            // Try to extract a useful error message from the JSON response
-            let detailedMessage = "";
-            try {
-                const errorData = JSON.parse(errorText);
-                detailedMessage = errorData.error?.message || "";
-            } catch (e) { }
-
-            if (response.status === 404) {
-                return {
-                    text: `Model not found: ${model.name}. It might be temporarily offline or deprecated on OpenRouter.`,
-                    isError: true
-                };
-            }
-
-            if (response.status === 400) {
-                if (detailedMessage.toLowerCase().includes("json")) {
-                    return {
-                        text: `Model ${model.name} does not support JSON mode. Please try a different model or check your settings.`,
-                        isError: true
-                    };
-                }
-                return {
-                    text: detailedMessage || "The AI model rejected the request (400). This can happen if the prompt is too long or the model has specific restrictions.",
-                    isError: true
-                };
-            }
-            if (response.status === 429) {
-                return { text: "Rate limit exceeded. Please wait a moment before trying again.", isError: true };
-            }
-
-            return { text: detailedMessage || `Error: ${response.status} - ${response.statusText}`, isError: true };
+            throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
         }
 
-        const data = await response.json();
+        return response.json();
+    };
+
+    try {
+        let data: OpenRouterChatCompletionResponse;
+        try {
+            data = await makeRequest(responseFormat);
+        } catch (error: unknown) {
+            if (isAbortError(error)) {
+                console.log("AI request was cancelled.");
+                return { text: "Request cancelled.", isError: true, isCancelled: true };
+            }
+            if (responseFormat && shouldRetryWithoutResponseFormat(error)) {
+                console.warn('Model rejected response_format; retrying without response_format:', model.id);
+                data = await makeRequest(undefined);
+            } else {
+                throw error;
+            }
+        }
+
         const text = data.choices?.[0]?.message?.content || "";
         const usage = data.usage ? {
             inputTokens: data.usage.prompt_tokens,
@@ -129,13 +165,14 @@ async function callOpenRouter(
 
         return { text, usage };
 
-    } catch (error: any) {
-        if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+        if (isAbortError(error)) {
             console.log("AI request was cancelled.");
             return { text: "Request cancelled.", isError: true, isCancelled: true };
         }
-        console.error("Network Error:", error);
-        return { text: "Network error occurred. Please check your connection.", isError: true };
+        const message = getErrorMessage(error);
+        console.error("OpenRouter request failed:", error);
+        return { text: `Request failed: ${message}`, isError: true };
     }
 }
 
@@ -348,8 +385,8 @@ Important:
 
         // Ensure all results have required fields
         const validResults: RangeOutput[] = json.results
-            .filter((r: any) => r && typeof r.id === 'string' && typeof r.result === 'string')
-            .map((r: any) => ({ id: r.id, result: r.result }));
+            .filter(isParsedRangeResult)
+            .map((r: ParsedRangeResult) => ({ id: r.id, result: r.result }));
 
         return {
             results: validResults,
@@ -467,8 +504,8 @@ Important:
 
         // Ensure all results have required fields
         const validResults: RangeOutput[] = json.results
-            .filter((r: any) => r && typeof r.id === 'string' && typeof r.result === 'string')
-            .map((r: any) => ({ id: r.id, result: r.result }));
+            .filter(isParsedRangeResult)
+            .map((r: ParsedRangeResult) => ({ id: r.id, result: r.result }));
 
         return {
             results: validResults,

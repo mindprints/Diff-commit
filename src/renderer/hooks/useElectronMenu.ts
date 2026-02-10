@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { useUI, useProject, useAI, useEditor } from '../contexts';
+import { FontSize } from '../constants/ui';
+import { FontFamily } from '../types';
 
 export function useElectronMenu() {
     const {
@@ -10,7 +12,7 @@ export function useElectronMenu() {
 
     const {
         commits, setCommits, handleFileOpen, currentProject,
-        handleClearAll, openRepository, createRepository, handleNewProject
+        handleClearAll, createRepository, handleNewProject
     } = useProject();
 
     const {
@@ -25,108 +27,80 @@ export function useElectronMenu() {
 
     useEffect(() => {
         if (!window.electron) return;
+        const unsubscribers: Array<() => void> = [];
 
         // File menu handlers
-        window.electron.onFileOpened((content, _path) => {
+        unsubscribers.push(window.electron.onFileOpened((content, _path) => {
             handleFileOpen(content);
-        });
+        }));
 
-        window.electron.onRequestSave(async () => {
+        unsubscribers.push(window.electron.onRequestSave(async () => {
             const textToSave = getSaveText();
             if (textToSave.trim()) {
                 await window.electron.saveFile(textToSave, 'document.txt');
             }
-        });
+        }));
 
-        window.electron.onRequestExportVersions(async () => {
+        unsubscribers.push(window.electron.onRequestExportVersions(async () => {
             if (commits.length > 0) {
                 await window.electron.exportVersions(commits);
             }
-        });
+        }));
 
-        window.electron.onVersionsImported((importedCommits) => {
+        unsubscribers.push(window.electron.onVersionsImported((importedCommits) => {
             if (Array.isArray(importedCommits)) {
                 setCommits(prev => [...prev, ...importedCommits]);
             }
-        });
+        }));
 
-        window.electron.onMenuNewProject(() => handleNewProject());
-        window.electron.onMenuCreateRepository?.(() => {
+        unsubscribers.push(window.electron.onMenuNewProject(() => handleNewProject()));
+        unsubscribers.push(window.electron.onMenuCreateRepository?.(() => {
             createRepository();
             setShowProjectsPanel(true);
-        });
-        window.electron.onMenuOpenRepository(() => {
+        }) || (() => { }));
+        unsubscribers.push(window.electron.onMenuOpenRepository(() => {
             setShowRepoPicker(true);
             setShowProjectsPanel(true);
-        });
-        window.electron.onMenuSaveProject?.(async () => {
+        }));
+        unsubscribers.push(window.electron.onMenuSaveProject?.(async () => {
             if (currentProject?.path && window.electron?.saveProjectBundle) {
                 await window.electron.saveProjectBundle(currentProject.path);
             }
-        });
+        }) || (() => { }));
 
         // Edit menu handlers
-        window.electron.onMenuClearAll(() => handleClearAll());
+        unsubscribers.push(window.electron.onMenuClearAll(() => handleClearAll()));
 
         // View menu handlers
-        window.electron.onMenuToggleDark(() => setIsDarkMode(!isDarkMode));
-        window.electron.onMenuFontSize((size) => {
+        unsubscribers.push(window.electron.onMenuToggleDark(() => setIsDarkMode(!isDarkMode)));
+        unsubscribers.push(window.electron.onMenuFontSize((size) => {
             if (['sm', 'base', 'lg', 'xl'].includes(size)) {
-                setFontSize(size as any);
+                setFontSize(size as FontSize);
             }
-        });
-        window.electron.onMenuFontFamily((family) => {
+        }));
+        unsubscribers.push(window.electron.onMenuFontFamily((family) => {
             if (['sans', 'serif', 'mono'].includes(family)) {
-                setFontFamily(family as any);
+                setFontFamily(family as FontFamily);
             }
-        });
+        }));
 
         // Help menu handlers
-        window.electron.onMenuShowHelp(() => setShowHelp(true));
-        window.electron.onMenuShowLogs(() => setShowLogs(true));
-        window.electron.onMenuShowVersions(() => setShowCommitHistory(true));
+        unsubscribers.push(window.electron.onMenuShowHelp(() => setShowHelp(true)));
+        unsubscribers.push(window.electron.onMenuShowLogs(() => setShowLogs(true)));
+        unsubscribers.push(window.electron.onMenuShowVersions(() => setShowCommitHistory(true)));
 
         // Tools menu handlers (Web features triggered from native menu)
-        window.electron.onMenuToolsSpellingLocal(() => handleAIEdit('spelling_local'));
-        window.electron.onMenuToolsSpellingAI(() => handleAIEdit('spelling_ai'));
-        window.electron.onMenuToolsGrammar(() => handleAIEdit('grammar'));
-        window.electron.onMenuToolsPolish(() => handleAIEdit('polish'));
-        window.electron.onMenuToolsFactCheck(() => handleFactCheck());
-        window.electron.onMenuToolsPrompts(() => setShowPromptsModal(true));
-        window.electron.onMenuToolsProjects(() => setShowProjectsPanel(true));
-        window.electron.onMenuToolsModels(() => setShowModelsModal(true));
-        window.electron.onMenuToolsSettings?.(() => setShowSettingsModal(true));
+        unsubscribers.push(window.electron.onMenuToolsSpellingLocal(() => handleAIEdit('spelling_local')));
+        unsubscribers.push(window.electron.onMenuToolsSpellingAI(() => handleAIEdit('spelling_ai')));
+        unsubscribers.push(window.electron.onMenuToolsGrammar(() => handleAIEdit('grammar')));
+        unsubscribers.push(window.electron.onMenuToolsPolish(() => handleAIEdit('polish')));
+        unsubscribers.push(window.electron.onMenuToolsFactCheck(() => handleFactCheck()));
+        unsubscribers.push(window.electron.onMenuToolsPrompts(() => setShowPromptsModal(true)));
+        unsubscribers.push(window.electron.onMenuToolsProjects(() => setShowProjectsPanel(true)));
+        unsubscribers.push(window.electron.onMenuToolsModels(() => setShowModelsModal(true)));
+        unsubscribers.push(window.electron.onMenuToolsSettings?.(() => setShowSettingsModal(true)) || (() => { }));
 
         // Cleanup listeners on unmount
-        return () => {
-            if (window.electron?.removeAllListeners) {
-                window.electron.removeAllListeners('file-opened');
-                window.electron.removeAllListeners('request-save');
-                window.electron.removeAllListeners('request-export-versions');
-                window.electron.removeAllListeners('versions-imported');
-                window.electron.removeAllListeners('menu-new-project');
-                window.electron.removeAllListeners('menu-create-repository');
-                window.electron.removeAllListeners('menu-open-repository');
-                window.electron.removeAllListeners('menu-save-project');
-                window.electron.removeAllListeners('menu-clear-all');
-                window.electron.removeAllListeners('menu-toggle-dark');
-                window.electron.removeAllListeners('menu-font-size');
-                window.electron.removeAllListeners('menu-font-family');
-                window.electron.removeAllListeners('menu-show-help');
-                window.electron.removeAllListeners('menu-show-logs');
-                window.electron.removeAllListeners('menu-show-versions');
-
-                window.electron.removeAllListeners('menu-tools-spelling-local');
-                window.electron.removeAllListeners('menu-tools-spelling-ai');
-                window.electron.removeAllListeners('menu-tools-grammar');
-                window.electron.removeAllListeners('menu-tools-polish');
-                window.electron.removeAllListeners('menu-tools-factcheck');
-                window.electron.removeAllListeners('menu-tools-prompts');
-                window.electron.removeAllListeners('menu-tools-projects');
-                window.electron.removeAllListeners('menu-tools-models');
-                window.electron.removeAllListeners('menu-tools-settings');
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, openRepository, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
+        return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
 }

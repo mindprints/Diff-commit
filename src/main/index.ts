@@ -7,6 +7,12 @@ import fs from 'fs';
 import * as hierarchyService from './hierarchyService';
 import { AppFolderInitializer } from './AppFolderInitializer';
 import { registerHierarchyHandlers } from './hierarchy-ipc-handlers';
+import type { NodeType } from './hierarchyTypes';
+import {
+    assertProjectPath as assertProjectPathBase,
+    assertRepositoryPath as assertRepositoryPathBase,
+} from './pathValidators';
+import { readProjectBundleSource } from './projectBundle';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -248,7 +254,7 @@ function createMenu() {
                             const ext = path.extname(filePath).toLowerCase();
                             if (ext === '.html' || ext === '.htm') {
                                 try {
-                                    const TurndownService = require('turndown');
+                                    const { default: TurndownService } = await import('turndown');
                                     const turndown = new TurndownService({
                                         headingStyle: 'atx',
                                         codeBlockStyle: 'fenced',
@@ -461,10 +467,6 @@ app.whenReady().then(async () => {
     createMenu();
 
     // IPC Handlers for API Key (using secure storage)
-    ipcMain.handle('get-api-key', (event, provider) => {
-        return getSecureApiKey(provider);
-    });
-
     ipcMain.handle('set-api-key', (event, provider, apiKey) => {
         // Normalize provider to match getSecureApiKey
         const normalizedProvider = provider.toLowerCase();
@@ -478,6 +480,11 @@ app.whenReady().then(async () => {
 
         const encrypted = encryptApiKey(apiKey);
         store.set(`${canonicalProvider}ApiKey`, encrypted);
+    });
+
+    ipcMain.handle('get-api-key-configured', (event, provider) => {
+        const key = getSecureApiKey(provider);
+        return Boolean(key && key.trim().length > 0);
     });
 
     // Logging Handlers
@@ -656,6 +663,14 @@ app.whenReady().then(async () => {
         const relative = path.relative(rootPath, targetPath);
         if (!relative || relative.trim() === '') return false;
         return !relative.startsWith('..') && !path.isAbsolute(relative);
+    }
+
+    function assertRepositoryPath(repoPath: string): string {
+        return assertRepositoryPathBase(repoPath, getReposRootPath(), isRepositoryFolder);
+    }
+
+    function assertProjectPath(projectPath: string): string {
+        return assertProjectPathBase(projectPath, getReposRootPath(), isProjectFolder);
     }
 
     /**
@@ -916,17 +931,22 @@ app.whenReady().then(async () => {
     // Create New Project (create a folder with content.md and .diff-commit)
     ipcMain.handle('create-project', async (event, repoPath, projectName, initialContent = '') => {
         if (!repoPath || !projectName) return null;
+        const validatedRepoPath = assertRepositoryPath(repoPath);
+        const nameValidation = hierarchyService.validateName(projectName);
+        if (!nameValidation.valid) {
+            throw new Error(nameValidation.error || 'Invalid project name');
+        }
 
         // HIERARCHY VALIDATION: Check if repoPath is actually a repository
-        const parentType = hierarchyService.getNodeType(repoPath);
+        const parentType = hierarchyService.getNodeType(validatedRepoPath);
 
         if (parentType === 'root') {
             // Auto-promote root folder to repository
             console.log('[Hierarchy] Auto-promoting root folder to repository:', repoPath);
-            hierarchyService.writeHierarchyMeta(repoPath, {
+            hierarchyService.writeHierarchyMeta(validatedRepoPath, {
                 type: 'repository',
                 createdAt: Date.now(),
-                name: path.basename(repoPath)
+                name: path.basename(validatedRepoPath)
             });
         }
 
@@ -937,7 +957,7 @@ app.whenReady().then(async () => {
         }
 
         const now = Date.now();
-        const projectPath = path.join(repoPath, projectName);
+        const projectPath = path.join(validatedRepoPath, projectName);
         const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
         const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
         const commitsPath = path.join(diffCommitPath, COMMITS_FILE);
@@ -973,7 +993,7 @@ app.whenReady().then(async () => {
                 createdAt: now,
                 updatedAt: now,
                 path: projectPath,
-                repositoryPath: repoPath
+                repositoryPath: validatedRepoPath
             };
         } catch (e) {
             console.error('Failed to create project:', e);
@@ -984,6 +1004,7 @@ app.whenReady().then(async () => {
     // Rename Project (rename folder on disk)
     ipcMain.handle('rename-project', async (event, projectPath: string, newName: string) => {
         if (!projectPath || !newName) return null;
+        const validatedProjectPath = assertProjectPath(projectPath);
 
         // Helper to check if path exists
         const pathExists = async (p: string): Promise<boolean> => {
@@ -996,20 +1017,20 @@ app.whenReady().then(async () => {
         };
 
         // Validate that projectPath exists and is a directory
-        if (!(await pathExists(projectPath))) {
+        if (!(await pathExists(validatedProjectPath))) {
             throw new Error('Project folder does not exist');
         }
 
-        const stats = await fs.promises.stat(projectPath);
+        const stats = await fs.promises.stat(validatedProjectPath);
         if (!stats.isDirectory()) {
             throw new Error('Project path is not a directory');
         }
 
         // Validate this is actually a project folder by checking for project markers
         const [hasHierarchyMeta, hasDiffCommit, hasContentFile] = await Promise.all([
-            pathExists(path.join(projectPath, '.hierarchy-meta.json')),
-            pathExists(path.join(projectPath, '.diff-commit')),
-            pathExists(path.join(projectPath, 'content.md'))
+            pathExists(path.join(validatedProjectPath, '.hierarchy-meta.json')),
+            pathExists(path.join(validatedProjectPath, '.diff-commit')),
+            pathExists(path.join(validatedProjectPath, 'content.md'))
         ]);
 
         if (!hasHierarchyMeta && !hasDiffCommit && !hasContentFile) {
@@ -1018,12 +1039,12 @@ app.whenReady().then(async () => {
         const trimmedName = newName.trim();
         if (!trimmedName) return null;
 
-        const parentPath = path.dirname(projectPath);
+        const parentPath = path.dirname(validatedProjectPath);
         const newPath = path.join(parentPath, trimmedName);
 
         // Check if new name already exists
         // Allow case-only rename on Windows/Mac (case-insensitive FS)
-        const isSamePath = projectPath.toLowerCase() === newPath.toLowerCase();
+        const isSamePath = validatedProjectPath.toLowerCase() === newPath.toLowerCase();
 
         if (!isSamePath && (await pathExists(newPath))) {
             throw new Error(`A project named "${trimmedName}" already exists`);
@@ -1031,7 +1052,7 @@ app.whenReady().then(async () => {
 
         try {
             // Rename the folder (async)
-            await fs.promises.rename(projectPath, newPath);
+            await fs.promises.rename(validatedProjectPath, newPath);
 
             // Update hierarchy metadata with new name
             const metaPath = path.join(newPath, '.hierarchy-meta.json');
@@ -1051,7 +1072,7 @@ app.whenReady().then(async () => {
                 content = await fs.promises.readFile(contentPath, 'utf-8');
             }
 
-            console.log('[Project] Renamed project:', projectPath, '->', newPath);
+            console.log('[Project] Renamed project:', validatedProjectPath, '->', newPath);
 
             // Return complete project object
             return {
@@ -1073,7 +1094,8 @@ app.whenReady().then(async () => {
     ipcMain.handle('save-project-content', async (event, projectPath, content) => {
         if (!projectPath) return false;
         try {
-            const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+            const validatedProjectPath = assertProjectPath(projectPath);
+            const contentPath = path.join(validatedProjectPath, PROJECT_CONTENT_FILE);
             fs.writeFileSync(contentPath, content, 'utf-8');
             return true;
         } catch (e) {
@@ -1086,7 +1108,8 @@ app.whenReady().then(async () => {
     ipcMain.handle('load-project-content', async (event, projectPath) => {
         if (!projectPath) return '';
         try {
-            const contentPath = path.join(projectPath, PROJECT_CONTENT_FILE);
+            const validatedProjectPath = assertProjectPath(projectPath);
+            const contentPath = path.join(validatedProjectPath, PROJECT_CONTENT_FILE);
             if (fs.existsSync(contentPath)) {
                 return fs.readFileSync(contentPath, 'utf-8');
             }
@@ -1100,8 +1123,9 @@ app.whenReady().then(async () => {
     // Load Project Commits (from projectPath/.diff-commit/commits.json)
     ipcMain.handle('load-project-commits', async (event, projectPath) => {
         if (!projectPath) return [];
+        const validatedProjectPath = assertProjectPath(projectPath);
 
-        const commitsPath = path.join(projectPath, DIFF_COMMIT_DIR, COMMITS_FILE);
+        const commitsPath = path.join(validatedProjectPath, DIFF_COMMIT_DIR, COMMITS_FILE);
 
         try {
             if (fs.existsSync(commitsPath)) {
@@ -1118,8 +1142,9 @@ app.whenReady().then(async () => {
     // Save Project Commits (to projectPath/.diff-commit/commits.json)
     ipcMain.handle('save-project-commits', async (event, projectPath, commits) => {
         if (!projectPath) return false;
+        const validatedProjectPath = assertProjectPath(projectPath);
 
-        const diffCommitPath = path.join(projectPath, DIFF_COMMIT_DIR);
+        const diffCommitPath = path.join(validatedProjectPath, DIFF_COMMIT_DIR);
         const commitsPath = path.join(diffCommitPath, COMMITS_FILE);
 
         try {
@@ -1155,7 +1180,7 @@ app.whenReady().then(async () => {
             return { valid: false, error: 'Missing required parameters' };
         }
         try {
-            return hierarchyService.validateCreate(parentPath, name, childType as any);
+            return hierarchyService.validateCreate(parentPath, name, childType as NodeType);
         } catch (e) {
             console.error('[Hierarchy] Failed to validate create:', e);
             return { valid: false, error: String(e) };
@@ -1168,7 +1193,7 @@ app.whenReady().then(async () => {
             throw new Error('Missing required parameters');
         }
         try {
-            const result = hierarchyService.createNode(parentPath, name, nodeType as any);
+            const result = hierarchyService.createNode(parentPath, name, nodeType as NodeType);
             if (!result) throw new Error('Failed to create node');
 
             // Return the created node info
@@ -1204,7 +1229,6 @@ app.whenReady().then(async () => {
             title: 'Create New Repository Folder',
             defaultPath: defaultPath,
             buttonLabel: 'Create',
-            properties: ['createDirectory' as any],
             nameFieldLabel: 'Folder Name'
         });
 
@@ -1313,26 +1337,20 @@ app.whenReady().then(async () => {
     // Save Project Bundle (Export project content + commits as folder)
     ipcMain.handle('save-project-bundle', async (event, projectPath) => {
         if (!projectPath) return null;
-
-        const repoPath = path.dirname(projectPath);
-        const filename = path.basename(projectPath);
-        const displayName = filename.replace(/\.[^/.]+$/, '');
-        const diffCommitDir = path.join(repoPath, '.diff-commit');
-        const commitsFile = path.join(diffCommitDir, `${filename}.commits.json`);
-
-        // Read current content
-        const projectContent = fs.existsSync(projectPath)
-            ? fs.readFileSync(projectPath, 'utf-8')
-            : '';
-        const commitsContent = fs.existsSync(commitsFile)
-            ? fs.readFileSync(commitsFile, 'utf-8')
-            : '[]';
+        const validatedProjectPath = assertProjectPath(projectPath);
+        const bundleSource = readProjectBundleSource(
+            validatedProjectPath,
+            { existsSync: fs.existsSync, readFileSync: fs.readFileSync },
+            PROJECT_CONTENT_FILE,
+            DIFF_COMMIT_DIR,
+            COMMITS_FILE
+        );
 
         // Show save dialog for the bundle folder
         const docsPath = app.getPath('documents');
         const result = await dialog.showSaveDialog(mainWindow, {
             title: 'Save Project Bundle',
-            defaultPath: path.join(docsPath, `${displayName}-bundle`),
+            defaultPath: path.join(docsPath, `${bundleSource.projectName}-bundle`),
             buttonLabel: 'Save Bundle'
         });
 
@@ -1341,8 +1359,8 @@ app.whenReady().then(async () => {
         try {
             const bundleDir = result.filePath;
             fs.mkdirSync(bundleDir, { recursive: true });
-            fs.writeFileSync(path.join(bundleDir, filename), projectContent, 'utf-8');
-            fs.writeFileSync(path.join(bundleDir, `${filename}.commits.json`), commitsContent, 'utf-8');
+            fs.writeFileSync(path.join(bundleDir, PROJECT_CONTENT_FILE), bundleSource.projectContent, 'utf-8');
+            fs.writeFileSync(path.join(bundleDir, COMMITS_FILE), bundleSource.commitsContent, 'utf-8');
             return bundleDir;
         } catch (e) {
             console.error('Failed to save project bundle:', e);
@@ -1350,11 +1368,135 @@ app.whenReady().then(async () => {
         }
     });
 
+    const GRAPH_FILE = 'project-graph.json';
+    ipcMain.handle('graph:load', async (_event, repoPath: string) => {
+        const validatedRepoPath = assertRepositoryPath(repoPath);
+        const graphPath = path.join(validatedRepoPath, DIFF_COMMIT_DIR, GRAPH_FILE);
+
+        if (!fs.existsSync(graphPath)) {
+            return { nodes: [], edges: [] };
+        }
+
+        try {
+            const raw = fs.readFileSync(graphPath, 'utf-8');
+            const parsed = JSON.parse(raw);
+            const nodes = Array.isArray(parsed?.nodes) ? parsed.nodes : [];
+            const edges = Array.isArray(parsed?.edges) ? parsed.edges : [];
+            return { nodes, edges };
+        } catch (error) {
+            console.warn('[Graph] Failed to parse graph file, returning empty graph:', error);
+            return { nodes: [], edges: [] };
+        }
+    });
+
+    ipcMain.handle('graph:save', async (_event, repoPath: string, data: {
+        nodes?: Array<{ id?: unknown; x?: unknown; y?: unknown }>;
+        edges?: Array<{ from?: unknown; to?: unknown }>;
+    }) => {
+        const validatedRepoPath = assertRepositoryPath(repoPath);
+        const graphDir = path.join(validatedRepoPath, DIFF_COMMIT_DIR);
+        const graphPath = path.join(graphDir, GRAPH_FILE);
+
+        const nodes = Array.isArray(data?.nodes)
+            ? data.nodes
+                .filter((node): node is { id: string; x: number; y: number } =>
+                    typeof node?.id === 'string' &&
+                    typeof node?.x === 'number' &&
+                    Number.isFinite(node.x) &&
+                    typeof node?.y === 'number' &&
+                    Number.isFinite(node.y))
+                .map((node) => ({ id: node.id, x: node.x, y: node.y }))
+            : [];
+        const edges = Array.isArray(data?.edges)
+            ? data.edges
+                .filter((edge): edge is { from: string; to: string } =>
+                    typeof edge?.from === 'string' &&
+                    typeof edge?.to === 'string')
+                .map((edge) => ({ from: edge.from, to: edge.to }))
+            : [];
+
+        fs.mkdirSync(graphDir, { recursive: true });
+        fs.writeFileSync(graphPath, JSON.stringify({ nodes, edges }, null, 2), 'utf-8');
+        return true;
+    });
+
     // ========================================
     // OpenRouter API Handlers (Secure - key stays in main process)
     // ========================================
 
     const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
+    const openRouterRequests = new Map<string, AbortController>();
+
+    async function executeOpenRouterChatCompletion(
+        payload: {
+            model: string;
+            messages: Array<{ role: string; content: unknown }>;
+            temperature?: number;
+            response_format?: unknown;
+            generation_config?: unknown;
+            plugins?: Array<{ id: string; [key: string]: unknown }>;
+        },
+        controller?: AbortController
+    ): Promise<unknown> {
+        const apiKey = getSecureApiKey('openrouter');
+        if (!apiKey) {
+            throw new Error('OpenRouter API key not configured. Please set your API key in Settings.');
+        }
+
+        if (!payload?.model || !Array.isArray(payload.messages) || payload.messages.length === 0) {
+            throw new Error('Invalid OpenRouter payload');
+        }
+        if (payload.plugins !== undefined) {
+            if (!Array.isArray(payload.plugins)) {
+                throw new Error('Invalid OpenRouter plugins payload');
+            }
+            for (const plugin of payload.plugins) {
+                if (!plugin || typeof plugin !== 'object' || typeof plugin.id !== 'string' || plugin.id.trim().length === 0) {
+                    throw new Error('Invalid OpenRouter plugin entry');
+                }
+            }
+        }
+
+        const activeController = controller || new AbortController();
+        let didTimeout = false;
+        const timeoutId = setTimeout(() => {
+            didTimeout = true;
+            activeController.abort();
+        }, 60000);
+
+        try {
+            const response = await fetch(`${OPENROUTER_API_BASE}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+                signal: activeController.signal,
+            });
+
+            const contentType = response.headers.get('content-type') || '';
+            const body = contentType.includes('application/json')
+                ? await response.json()
+                : await response.text();
+
+            if (!response.ok) {
+                const errorDetails = typeof body === 'string'
+                    ? body
+                    : JSON.stringify(body);
+                throw new Error(`OpenRouter API error: ${response.status} - ${errorDetails}`);
+            }
+
+            return body;
+        } catch (error) {
+            if (didTimeout) {
+                throw new Error('OpenRouter request timed out after 60 seconds');
+            }
+            throw error;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
 
     /**
      * Fetch all available models from OpenRouter
@@ -1448,7 +1590,7 @@ app.whenReady().then(async () => {
 
             const data = await response.json();
             const models = data.data || [];
-            const model = models.find((m: any) => m.id === modelId);
+            const model = models.find((m: { id?: string }) => m.id === modelId);
 
             if (!model) {
                 throw new Error(`Model not found: ${modelId}`);
@@ -1462,6 +1604,52 @@ app.whenReady().then(async () => {
             console.error('[OpenRouter] Failed to fetch pricing:', e);
             throw e;
         }
+    });
+
+    ipcMain.handle('openrouter:chat-completions', async (_event, payload: {
+        model: string;
+        messages: Array<{ role: string; content: unknown }>;
+        temperature?: number;
+        response_format?: unknown;
+        generation_config?: unknown;
+        plugins?: Array<{ id: string; [key: string]: unknown }>;
+    }) => executeOpenRouterChatCompletion(payload));
+
+    ipcMain.handle('openrouter:chat-completions-start', async (_event, requestId: string, payload: {
+        model: string;
+        messages: Array<{ role: string; content: unknown }>;
+        temperature?: number;
+        response_format?: unknown;
+        generation_config?: unknown;
+        plugins?: Array<{ id: string; [key: string]: unknown }>;
+    }) => {
+        if (!requestId || typeof requestId !== 'string') {
+            throw new Error('Invalid request ID');
+        }
+        if (openRouterRequests.has(requestId)) {
+            throw new Error('Duplicate OpenRouter request ID');
+        }
+
+        const controller = new AbortController();
+        openRouterRequests.set(requestId, controller);
+        try {
+            return await executeOpenRouterChatCompletion(payload, controller);
+        } finally {
+            openRouterRequests.delete(requestId);
+        }
+    });
+
+    ipcMain.handle('openrouter:chat-completions-cancel', async (_event, requestId: string) => {
+        if (!requestId || typeof requestId !== 'string') {
+            return false;
+        }
+        const controller = openRouterRequests.get(requestId);
+        if (!controller) {
+            return false;
+        }
+        controller.abort();
+        openRouterRequests.delete(requestId);
+        return true;
     });
 
     // Helper: Extract provider name from model ID

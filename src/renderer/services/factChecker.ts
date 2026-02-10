@@ -1,6 +1,8 @@
 
 import { FactClaim, VerificationResult, FactCheckSession, ConfidenceLevel, VerificationStatus, FactClaimCategory } from '../types';
-import { Model, MODELS } from '../constants/models';
+import { MODELS } from '../constants/models';
+import { requestOpenRouterChatCompletions } from './openRouterBridge';
+import { applySearchModeToPayload, getFactCheckSearchMode, OpenRouterChatPayloadWithPlugins } from './openRouterSearch';
 
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
 const SITE_URL = 'http://localhost:5173';
@@ -29,6 +31,64 @@ interface ClaimExtractionResult {
 interface VerificationApiResult {
     result: VerificationResult;
     usage: { inputTokens: number; outputTokens: number };
+}
+
+interface OpenRouterChatCompletionResponse {
+    choices?: Array<{
+        message?: {
+            content?: string;
+        };
+    }>;
+    usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+    };
+}
+
+function isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
+}
+
+async function requestChatCompletions(payload: {
+    model: string;
+    messages: Array<{ role: string; content: string }>;
+    temperature: number;
+    plugins?: Array<{ id: string; [key: string]: unknown }>;
+}, signal?: AbortSignal, useSearch = false): Promise<OpenRouterChatCompletionResponse> {
+    const searchMode = useSearch ? getFactCheckSearchMode() : 'off';
+    const effectivePayload = useSearch
+        ? applySearchModeToPayload(payload as OpenRouterChatPayloadWithPlugins, searchMode)
+        : payload;
+
+    if (useSearch) {
+        console.info('[FactCheck] Search mode:', searchMode, 'Model:', effectivePayload.model);
+    }
+
+    if (window.electron?.openRouter?.chatCompletions) {
+        return requestOpenRouterChatCompletions(effectivePayload, signal) as Promise<OpenRouterChatCompletionResponse>;
+    }
+
+    if (!OPENROUTER_API_KEY) {
+        throw new Error('API Key missing. Check .env configuration.');
+    }
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+            "HTTP-Referer": SITE_URL,
+            "X-Title": SITE_NAME,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(effectivePayload),
+        signal,
+    });
+
+    if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.status}`);
+    }
+
+    return response.json();
 }
 
 /**
@@ -79,27 +139,12 @@ Respond with ONLY a valid JSON array. Extract ALL verifiable assertions, includi
 
 If no verifiable claims are found, respond with: []`;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-            "HTTP-Referer": SITE_URL,
-            "X-Title": SITE_NAME,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: EXTRACTION_MODEL.id,
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.1
-        }),
-        signal
-    });
-
-    if (!response.ok) {
-        throw new Error(`Extraction API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const data = await requestChatCompletions({
+        model: EXTRACTION_MODEL.id,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+    }, signal, false);
     const content = data.choices?.[0]?.message?.content || '[]';
     const usage = data.usage ? {
         inputTokens: data.usage.prompt_tokens,
@@ -111,8 +156,12 @@ If no verifiable claims are found, respond with: []`;
     try {
         const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            claims = parsed.map((c: any, i: number) => ({
+            const parsed = JSON.parse(jsonMatch[0]) as Array<{
+                claim?: string;
+                category?: string;
+                context?: string;
+            }>;
+            claims = parsed.map((c, i: number) => ({
                 id: `claim-${i}`,
                 claim: c.claim || '',
                 category: (c.category || 'other') as FactClaimCategory,
@@ -182,27 +231,12 @@ Respond with ONLY a valid JSON object:
 Valid status values: verified, incorrect, outdated, misleading, unverifiable
 Valid confidence values: high, medium, low`;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-            "HTTP-Referer": SITE_URL,
-            "X-Title": SITE_NAME,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: VERIFICATION_MODEL.id,
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.2
-        }),
-        signal
-    });
-
-    if (!response.ok) {
-        throw new Error(`Verification API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const data = await requestChatCompletions({
+        model: VERIFICATION_MODEL.id,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+    }, signal, true);
     const content = data.choices?.[0]?.message?.content || '{}';
     const usage = data.usage ? {
         inputTokens: data.usage.prompt_tokens,
@@ -343,7 +377,7 @@ export async function runFactCheck(
     onProgress?: (stage: string, percent: number) => void,
     signal?: AbortSignal
 ): Promise<FactCheckResponse> {
-    if (!OPENROUTER_API_KEY) {
+    if (!window.electron?.openRouter?.chatCompletions && !OPENROUTER_API_KEY) {
         return {
             session: { claims: [], verifications: [], report: 'API Key missing.' },
             usage: { inputTokens: 0, outputTokens: 0 },
@@ -352,7 +386,7 @@ export async function runFactCheck(
         };
     }
 
-    let totalUsage = { inputTokens: 0, outputTokens: 0 };
+    const totalUsage = { inputTokens: 0, outputTokens: 0 };
 
     try {
         // Stage 1: Extract claims
@@ -398,8 +432,8 @@ export async function runFactCheck(
                 totalUsage.inputTokens += verifyUsage.inputTokens;
                 totalUsage.outputTokens += verifyUsage.outputTokens;
                 verifications.push(result);
-            } catch (error: any) {
-                if (error.name === 'AbortError') {
+            } catch (error: unknown) {
+                if (isAbortError(error)) {
                     return {
                         session: { claims, verifications, report: 'Cancelled.' },
                         usage: totalUsage,
@@ -434,8 +468,8 @@ export async function runFactCheck(
             isError: false
         };
 
-    } catch (error: any) {
-        if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+        if (isAbortError(error)) {
             return {
                 session: { claims: [], verifications: [], report: 'Cancelled.' },
                 usage: totalUsage,
@@ -448,7 +482,7 @@ export async function runFactCheck(
             session: { claims: [], verifications: [], report: 'An error occurred.' },
             usage: totalUsage,
             isError: true,
-            errorMessage: error.message || 'Fact check failed.'
+            errorMessage: error instanceof Error ? error.message : 'Fact check failed.'
         };
     }
 }

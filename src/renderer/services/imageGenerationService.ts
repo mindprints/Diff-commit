@@ -4,6 +4,7 @@
  */
 
 import { Model } from '../constants/models';
+import { requestOpenRouterChatCompletions } from './openRouterBridge';
 
 /**
  * Known image-capable model IDs from OpenRouter
@@ -96,6 +97,33 @@ export interface ImageGenerationResponse {
     errorMessage?: string;
 }
 
+interface ImageMessagePart {
+    type?: string;
+    text?: string;
+    image?: string;
+    image_url?: { url?: string };
+    inline_data?: { mime_type?: string; data?: string };
+    inlineData?: { mimeType?: string; data?: string };
+    b64_json?: string;
+    url?: string;
+}
+
+interface OpenRouterImageResponse {
+    choices?: Array<{
+        message?: {
+            content?: string | ImageMessagePart[];
+            images?: Array<{ image_url?: { url?: string } }>;
+        };
+    }>;
+    data?: Array<{ url?: string; b64_json?: string }>;
+    images?: Array<string | { b64_json?: string; url?: string }>;
+    candidates?: Array<{ content?: { parts?: ImageMessagePart[] } }>;
+    usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+    };
+}
+
 /**
  * Generate an image using OpenRouter's image generation API
  * 
@@ -115,8 +143,8 @@ export async function generateImage(
     signal?: AbortSignal
 ): Promise<ImageGenerationResponse> {
     const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
-
-    if (!apiKey) {
+    const hasElectronProxy = Boolean(window.electron?.openRouter?.chatCompletions);
+    if (!hasElectronProxy && !apiKey) {
         return {
             imageData: null,
             isError: true,
@@ -132,14 +160,10 @@ export async function generateImage(
     }
 
     console.log('[ImageGen] Making request to model:', model.id);
-    console.log('[ImageGen] Prompt:', fullPrompt);
-    if (base64Image) {
-        console.log('[ImageGen] Including base image for modification, length:', base64Image.length);
-    }
 
     try {
         // Construct the message content. If we have a base image, use multi-modal format.
-        const messageContent: any[] = [
+        const messageContent: ImageMessagePart[] = [
             {
                 type: 'text',
                 text: fullPrompt,
@@ -175,35 +199,40 @@ export async function generateImage(
             };
         }
 
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': import.meta.env.VITE_APP_URL || window.location.origin,
-                'X-Title': 'Diff & Commit AI',
-            },
-            body: JSON.stringify(requestBody),
-            signal,
-        });
-        if (signal?.aborted) {
-            return { imageData: null, isCancelled: true };
+        let data: OpenRouterImageResponse;
+        if (hasElectronProxy && window.electron?.openRouter?.chatCompletions) {
+            data = await requestOpenRouterChatCompletions(requestBody as {
+                model: string;
+                messages: Array<{ role: string; content: unknown }>;
+                generation_config?: unknown;
+            }, signal);
+        } else {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': import.meta.env.VITE_APP_URL || window.location.origin,
+                    'X-Title': 'Diff & Commit AI',
+                },
+                body: JSON.stringify(requestBody),
+                signal,
+            });
+            if (signal?.aborted) {
+                return { imageData: null, isCancelled: true };
+            }
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[ImageGen] API error:', response.status, errorText);
+                return {
+                    imageData: null,
+                    isError: true,
+                    errorMessage: `Image generation failed: ${response.status} - ${errorText}`,
+                };
+            }
+            data = await response.json();
         }
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[ImageGen] API error:', response.status, errorText);
-            return {
-                imageData: null,
-                isError: true,
-                errorMessage: `Image generation failed: ${response.status} - ${errorText}`,
-            };
-        }
-
-        const data = await response.json();
-
-        // Debug: Log full response structure
-        console.log('[ImageGen] Full response:', JSON.stringify(data, null, 2));
 
         // Extract image from response - providers return images in various formats
         const message = data.choices?.[0]?.message;
@@ -212,20 +241,13 @@ export async function generateImage(
         // Check for images array in message (OpenRouter/Gemini format)
         // Format: message.images[0].image_url.url contains the data URL
         if (message?.images && Array.isArray(message.images) && message.images.length > 0) {
-            console.log('[ImageGen] Found message.images array with', message.images.length, 'images');
             const firstImage = message.images[0];
             if (firstImage?.image_url?.url) {
                 imageData = firstImage.image_url.url;
-                console.log('[ImageGen] Extracted image from message.images[0].image_url.url');
-            } else if (firstImage?.type === 'image_url' && firstImage?.image_url?.url) {
-                imageData = firstImage.image_url.url;
-                console.log('[ImageGen] Extracted image from message.images[0] (image_url type)');
             }
         }
 
         if (!imageData && message?.content) {
-            console.log('[ImageGen] Message content type:', typeof message.content);
-
             // Content might be a string with a data URL or an array of content parts
             if (typeof message.content === 'string') {
                 // Check if it's a data URL
@@ -237,7 +259,6 @@ export async function generateImage(
                     imageData = `data:image/png;base64,${message.content}`;
                 }
             } else if (Array.isArray(message.content)) {
-                console.log('[ImageGen] Content array:', message.content);
                 // Look for image in various formats within the content array
                 for (const part of message.content) {
                     // OpenAI/OpenRouter format: image_url type
@@ -299,7 +320,6 @@ export async function generateImage(
 
         // Check for raw Gemini candidates format (in case OpenRouter passes through)
         if (!imageData && data.candidates?.[0]?.content?.parts) {
-            console.log('[ImageGen] Found Gemini candidates format');
             for (const part of data.candidates[0].content.parts) {
                 if (part.inlineData?.data) {
                     const mimeType = part.inlineData.mimeType || 'image/png';
@@ -315,8 +335,7 @@ export async function generateImage(
         }
 
         if (!imageData) {
-            console.error('[ImageGen] No image found in response. Message content:', message?.content);
-            console.error('[ImageGen] Full response structure keys:', Object.keys(data));
+            console.error('[ImageGen] No image found in response.');
             return {
                 imageData: null,
                 isError: true,

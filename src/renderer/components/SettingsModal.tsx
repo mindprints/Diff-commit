@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Key, Save, Check, AlertCircle, Eye, EyeOff, ExternalLink, FolderOpen } from 'lucide-react';
+import { getFactCheckSearchMode, OpenRouterSearchMode, setFactCheckSearchMode } from '../services/openRouterSearch';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -34,6 +35,7 @@ const API_KEY_FIELDS: ApiKeyField[] = [
 
 export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsModalProps) {
     const [keys, setKeys] = useState<Record<string, string>>({});
+    const [configured, setConfigured] = useState<Record<string, boolean>>({});
     const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -44,6 +46,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
     const [workspaceSaving, setWorkspaceSaving] = useState(false);
     const [workspaceSaved, setWorkspaceSaved] = useState(false);
     const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+    const [factCheckSearchMode, setFactCheckSearchModeState] = useState<OpenRouterSearchMode>('off');
 
     // Refs for cleanup
     const isMounted = useRef(true);
@@ -69,6 +72,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         if (isOpen) {
             loadKeys();
             loadWorkspace();
+            setFactCheckSearchModeState(getFactCheckSearchMode());
         }
     }, [isOpen]);
 
@@ -77,15 +81,16 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         setError(null);
         try {
             const loadedKeys: Record<string, string> = {};
-            // Check once outside loop for efficiency
-            if (window.electron?.getApiKey) {
+            const configuredState: Record<string, boolean> = {};
+            if (window.electron?.getApiKeyConfigured) {
                 for (const field of API_KEY_FIELDS) {
-                    const key = await window.electron.getApiKey(field.provider);
-                    loadedKeys[field.provider] = key || '';
+                    configuredState[field.provider] = await window.electron.getApiKeyConfigured(field.provider);
+                    loadedKeys[field.provider] = '';
                 }
             }
             if (isMounted.current) {
                 setKeys(loadedKeys);
+                setConfigured(configuredState);
             }
         } catch (e) {
             console.error('Failed to load API keys:', e);
@@ -117,9 +122,10 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         setSaved(false);
 
         try {
+            const nextConfigured = { ...configured };
             // Validate required keys
             const missingRequired = API_KEY_FIELDS
-                .filter(f => f.required && !keys[f.provider]?.trim())
+                .filter((f) => f.required && !keys[f.provider]?.trim() && !nextConfigured[f.provider])
                 .map(f => f.label);
 
             if (missingRequired.length > 0) {
@@ -133,6 +139,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                 const key = keys[field.provider]?.trim();
                 if (key && window.electron?.setApiKey) {
                     await window.electron.setApiKey(field.provider, key);
+                    nextConfigured[field.provider] = true;
                 }
             }
 
@@ -141,6 +148,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
             clearApiKeyCache();
 
             if (isMounted.current) {
+                setConfigured(nextConfigured);
                 setSaved(true);
                 // Clear any existing timeout before setting new one
                 if (saveTimeoutRef.current) {
@@ -247,7 +255,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
 
     if (!isOpen) return null;
 
-    const canClose = !isFirstRun || (keys['openrouter']?.trim());
+    const canClose = !isFirstRun || (keys['openrouter']?.trim()) || configured['openrouter'];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -315,7 +323,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                                             type={showKeys[field.provider] ? 'text' : 'password'}
                                             value={keys[field.provider] || ''}
                                             onChange={(e) => handleKeyChange(field.provider, e.target.value)}
-                                            placeholder={field.placeholder}
+                                            placeholder={configured[field.provider] ? 'Configured (enter to replace)' : field.placeholder}
                                             className="w-full px-4 py-2.5 pr-10 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                                         />
                                         <button
@@ -338,6 +346,37 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                                 <Key className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                                 <p className="text-xs text-green-700 dark:text-green-300">
                                     Your API keys are encrypted and stored securely using your operating system's credential manager.
+                                </p>
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700 pt-4" />
+
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+                                        <Key className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Fact-check Web Search</h3>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">Controls how OpenRouter search is applied during claim verification.</p>
+                                    </div>
+                                </div>
+                                <select
+                                    value={factCheckSearchMode}
+                                    onChange={(e) => {
+                                        const mode = e.target.value as OpenRouterSearchMode;
+                                        setFactCheckSearchModeState(mode);
+                                        setFactCheckSearchMode(mode);
+                                    }}
+                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                >
+                                    <option value="off">Off (default)</option>
+                                    <option value="auto">Auto (native search else :online)</option>
+                                    <option value="online_suffix">Force :online suffix</option>
+                                    <option value="web_plugin">Force web plugin</option>
+                                </select>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Applies to fact-check verification requests only.
                                 </p>
                             </div>
 
