@@ -116,3 +116,45 @@
 ## Caution
 - The repository remains a dirty worktree with unrelated pre-existing changes.
 - Do not use destructive reset/revert against unrelated files without explicit user approval.
+
+## Update - 2026-02-12 (Presentation deployment prep)
+
+### Validation executed today
+- `npx tsc --noEmit` -> pass
+- `npx vitest run src/renderer/services/factChecker.searchMode.test.ts src/renderer/services/openRouterBridge.test.ts` -> pass (2 files, 6 tests)
+- `npx eslint` on touched/targeted handoff files -> pass
+- `npx eslint src --max-warnings=0` -> fail due to pre-existing repo-wide issues (not introduced by this handoff update)
+
+### Deployment assets added
+- `Dockerfile.web` (multi-stage build, serves `dist/` via nginx)
+- `nginx.web.conf` (SPA fallback + `/healthz` endpoint)
+- `.dockerignore` (reduces build context)
+
+### Git refs created for deployment
+- Validated checkpoint tag: `presentation-2026-02-12-57e5968`
+- Deployment commit: `4bd9b0d`
+- Deployment tag (Dokploy target): `presentation-deploy-2026-02-12`
+- Deployment branch (Dokploy target): `presentation-2026-02-12`
+
+### Push/cutover notes
+- Push to `origin/main` was rejected (remote advanced). No force push was used.
+- Deployment was published through dedicated branch/tag to avoid rebasing local uncommitted work.
+- Local uncommitted files still present:
+  - `package.json`
+  - `package-lock.json`
+
+### Dokploy runtime settings used/recommended
+1. Source ref: `presentation-deploy-2026-02-12` (preferred immutable tag) or `presentation-2026-02-12`
+2. Dockerfile path: `Dockerfile.web`
+3. Exposed port: `80`
+4. Healthcheck path: `/healthz`
+5. Keep prior stable service routed for immediate rollback until smoke checks pass
+
+### Post-deploy smoke script (executed manually)
+1. Load app and verify first paint with no critical console/network errors.
+2. Prompt graph CRUD and default prompt behavior.
+3. Hover and persistent tooltip behavior on prompt nodes.
+4. Project graph drag/edge create-delete/rename flow.
+5. Run AI prompt and verify diff output behavior.
+6. Trigger Perplexity/Sonar path and verify specific failure messaging.
+7. Confirm `/healthz` returns `200 ok`.
