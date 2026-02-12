@@ -6,6 +6,14 @@
 - Fact-check search mode is test-covered for all four modes.
 - OpenRouter/Perplexity failure visibility improved (less generic error masking).
 
+## Snapshot metadata (for reproducibility)
+- Repository: `Diff-commit`
+- Branch: `main`
+- HEAD (short SHA): `57e5968`
+- Worktree state at handoff update:
+  - Modified: `package.json`
+  - Modified: `package-lock.json`
+
 ## Primary files touched in this session
 - `src/renderer/components/AppModals.tsx`
 - `src/renderer/components/EditorPanel.tsx`
@@ -55,6 +63,55 @@
 - `npx tsc --noEmit`
 - `npx eslint <targeted files>`
 - `npx vitest run src/renderer/services/factChecker.searchMode.test.ts src/renderer/services/openRouterBridge.test.ts`
+
+## Validation summary (latest known)
+- Type check: pass (`npx tsc --noEmit`)
+- Lint (targeted): pass (`npx eslint <targeted files>`)
+- Tests (targeted): pass
+  - `src/renderer/services/factChecker.searchMode.test.ts`
+  - `src/renderer/services/openRouterBridge.test.ts`
+- Notes:
+  - This is a targeted validation set, not full-repo test coverage.
+  - Re-run before presentation if additional changes are made.
+
+## Open issues and explicit TODO state
+- Known blocking bugs: none documented in this handoff.
+- Known non-blocking issues: none documented in this handoff.
+- TODO for next session:
+  - Confirm no regressions in prompt default selection after any final UI polish.
+  - Add unit tests for extracted graph primitives (see refactor candidates).
+
+## Environment assumptions
+- Node/npm toolchain available locally.
+- Network access available for model provider calls (OpenRouter/Perplexity).
+- For deployment path, Docker-capable host available (Dokploy VPS target).
+
+## Presentation checklist (this evening)
+1. Run pre-demo checks:
+   - `npx tsc --noEmit`
+   - `npx eslint <targeted files>`
+   - `npx vitest run src/renderer/services/factChecker.searchMode.test.ts src/renderer/services/openRouterBridge.test.ts`
+2. Demo flow:
+   - Prompt graph CRUD from context menu.
+   - Hover preview + persistent selected tooltip behavior.
+   - Project graph navigation and commit drill-down path.
+   - Perplexity/Sonar error specificity and fallback behavior.
+3. Prepare rollback:
+   - Keep previous stable image/tag ready on VPS.
+   - Confirm current production route can be switched back quickly in Dokploy.
+
+## Dokploy migration notes (multi-app VPS)
+- Goal: deploy without disrupting existing Docker workloads.
+- Recommended approach:
+  1. Use unique service/container names and non-overlapping ports.
+  2. Reuse existing Dokploy reverse proxy routing (domain/subdomain path).
+  3. Inject env vars via Dokploy secrets; do not bake keys into image.
+  4. Start with single replica and healthcheck before enabling traffic.
+  5. Validate logs and provider connectivity, then promote.
+- Minimum preflight on VPS:
+  - Port availability against currently running apps.
+  - CPU/RAM headroom for new container.
+  - Persistent volume mapping if runtime state/log retention is needed.
 
 ## Caution
 - The repository remains a dirty worktree with unrelated pre-existing changes.
