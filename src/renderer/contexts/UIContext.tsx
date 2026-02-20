@@ -49,6 +49,8 @@ interface UIContextType {
     setShowSettingsModal: (show: boolean) => void;
     showRepoPicker: boolean;
     setShowRepoPicker: (show: boolean) => void;
+    showGraphModal: boolean;
+    setShowGraphModal: (show: boolean) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);

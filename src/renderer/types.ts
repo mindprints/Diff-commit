@@ -78,6 +78,7 @@ export interface AIPrompt {
   color?: string;           // Tailwind color class for dot indicator
   isLocal?: boolean;        // If true, runs locally without API
   isImageMode?: boolean;    // If true, this prompt triggers image generation mode
+  pinned?: boolean;         // If true, appears in the header dropdown selector
 }
 
 // Project system for organizing text documents

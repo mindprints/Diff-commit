@@ -63,6 +63,10 @@ export function AIPromptPanel() {
                         type: 'error',
                         message: UNKNOWN_COMMAND_MESSAGE
                     });
+                    statusTimeoutRef.current = setTimeout(() => {
+                        setStatus(null);
+                        statusTimeoutRef.current = null;
+                    }, 6000);
                     return;
                 }
             } else {

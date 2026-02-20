@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AIPrompt } from '../types';
 import { Model } from '../constants/models';
-import { ArrowLeft, Check, Edit3, Plus, RotateCcw, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Edit3, Pin, PinOff, Plus, RotateCcw, Star, Trash2 } from 'lucide-react';
 import { Button } from './Button';
 import clsx from 'clsx';
 import { GraphModalShell } from './graph/GraphModalShell';
@@ -21,6 +21,7 @@ interface PromptGraphModalProps {
     onResetBuiltIn: (id: string) => Promise<void>;
     defaultPromptId: string;
     onSetDefault: (id: string) => void;
+    onEditInEditor?: (prompt: AIPrompt) => void;
     selectedModel?: Model;
     selectedImageModel?: Model | null;
 }
@@ -119,6 +120,7 @@ export function PromptGraphModal({
     onResetBuiltIn,
     defaultPromptId,
     onSetDefault,
+    onEditInEditor,
     selectedModel,
     selectedImageModel,
 }: PromptGraphModalProps) {
@@ -139,6 +141,13 @@ export function PromptGraphModal({
     const [formState, setFormState] = useState<PromptFormState>(EMPTY_FORM);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Drop zone hover states
+    const [dropZoneHighlight, setDropZoneHighlight] = useState<'pin' | 'trash' | 'edit' | null>(null);
+
+    // Refs for drop zone hit-testing (use actual DOM positions)
+    const pinZoneRef = useRef<HTMLDivElement>(null);
+    const trashZoneRef = useRef<HTMLDivElement>(null);
+    const editZoneRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLDivElement>(null);
 
     const promptsById = useMemo(() => {
@@ -148,6 +157,8 @@ export function PromptGraphModal({
         }
         return map;
     }, [prompts]);
+
+    const pinnedPrompts = useMemo(() => prompts.filter(p => p.pinned), [prompts]);
 
     const filteredNodeIds = useMemo(() => {
         const q = searchTerm.trim().toLowerCase();
@@ -210,6 +221,19 @@ export function PromptGraphModal({
         return () => canvas.removeEventListener('wheel', handleWheel);
     }, [isOpen]);
 
+    // Hit-test against actual DOM rects of drop-zone refs
+    const getDropZone = useCallback((clientX: number, clientY: number): 'pin' | 'trash' | 'edit' | null => {
+        const hitTest = (ref: React.RefObject<HTMLDivElement | null>) => {
+            if (!ref.current) return false;
+            const r = ref.current.getBoundingClientRect();
+            return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+        };
+        if (hitTest(pinZoneRef)) return 'pin';
+        if (hitTest(trashZoneRef)) return 'trash';
+        if (hitTest(editZoneRef)) return 'edit';
+        return null;
+    }, []);
+
     const handleMouseDown = useCallback((e: React.MouseEvent, nodeId: string | null) => {
         if (e.button !== 0) return;
 
@@ -244,34 +268,52 @@ export function PromptGraphModal({
                         : n
                 )
             );
+            // Check drop zones
+            setDropZoneHighlight(getDropZone(e.clientX, e.clientY));
         } else if (draggingCanvas) {
             setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
         }
-    }, [dragStart, draggingCanvas, draggingNode]);
+    }, [dragStart, draggingCanvas, draggingNode, getDropZone]);
 
-    const handleMouseUp = useCallback(() => {
+    const handleMouseUp = useCallback(async (e: React.MouseEvent) => {
+        if (draggingNode) {
+            const zone = getDropZone(e.clientX, e.clientY);
+            const prompt = promptsById.get(draggingNode);
+
+            if (zone === 'pin' && prompt) {
+                await onUpdatePrompt(prompt.id, { pinned: !prompt.pinned });
+            } else if (zone === 'trash' && prompt) {
+                if (prompt.isBuiltIn) {
+                    if (confirm(`Reset "${prompt.name}" to default values?`)) {
+                        await onResetBuiltIn(prompt.id);
+                    }
+                } else {
+                    if (confirm(`Delete prompt "${prompt.name}"?`)) {
+                        await onDeletePrompt(prompt.id);
+                    }
+                }
+            } else if (zone === 'edit' && prompt) {
+                handleEditInFrontpageEditor(prompt);
+            }
+        }
         setDraggingNode(null);
         setDraggingCanvas(false);
-    }, []);
+        setDropZoneHighlight(null);
+    }, [draggingNode, getDropZone, promptsById, onUpdatePrompt, onDeletePrompt, onResetBuiltIn]);
+
+    // Send prompt to frontpage editor for editing (shared by drag-to-edit-zone + edit icon click)
+    const handleEditInFrontpageEditor = useCallback((prompt: AIPrompt) => {
+        if (onEditInEditor) {
+            onEditInEditor(prompt);
+            onClose();
+        }
+    }, [onEditInEditor, onClose]);
 
     const handleStartCreate = useCallback(() => {
         setIsCreating(true);
         setIsEditing(false);
         setSelectedId(null);
         setFormState(EMPTY_FORM);
-    }, []);
-
-    const handleStartEdit = useCallback((prompt: AIPrompt) => {
-        setIsCreating(false);
-        setIsEditing(true);
-        setSelectedId(prompt.id);
-        setFormState({
-            name: prompt.name,
-            systemInstruction: prompt.systemInstruction,
-            promptTask: prompt.promptTask,
-            color: prompt.color || 'bg-gray-400',
-            isImageMode: Boolean(prompt.isImageMode),
-        });
     }, []);
 
     const handleSave = useCallback(async () => {
@@ -319,6 +361,10 @@ export function PromptGraphModal({
         await onResetBuiltIn(prompt.id);
     }, [onResetBuiltIn]);
 
+    const handleTogglePin = useCallback(async (prompt: AIPrompt) => {
+        await onUpdatePrompt(prompt.id, { pinned: !prompt.pinned });
+    }, [onUpdatePrompt]);
+
     if (!isOpen) return null;
 
     return (
@@ -365,13 +411,16 @@ export function PromptGraphModal({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
             >
+                {/* Prompt node cards */}
                 {nodes
                     .filter((n) => filteredNodeIds.has(n.id))
                     .map((node) => {
                         const prompt = promptsById.get(node.id);
                         if (!prompt) return null;
                         const isDefault = prompt.id === defaultPromptId;
+                        const isPinned = prompt.pinned;
                         const badge = modelBadge(prompt, selectedModel, selectedImageModel);
+                        const isDragging = draggingNode === node.id;
 
                         return (
                             <GraphNodeCard
@@ -379,13 +428,17 @@ export function PromptGraphModal({
                                 x={node.x}
                                 y={node.y}
                                 className={clsx(
+                                    // Distinct prompt pill background colors (different from project pills)
+                                    'prompt-node-pill',
                                     prompt.isBuiltIn
-                                        ? 'border-indigo-300 dark:border-indigo-700'
-                                        : 'border-emerald-300 dark:border-emerald-700',
-                                    selectedId === node.id && 'selected'
+                                        ? 'border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-950/30'
+                                        : 'border-teal-300 dark:border-teal-700 bg-teal-50/60 dark:bg-teal-950/30',
+                                    selectedId === node.id && 'selected ring-2 ring-indigo-400 dark:ring-indigo-500',
+                                    isPinned && 'ring-1 ring-amber-300 dark:ring-amber-600',
+                                    isDragging && 'opacity-70 scale-105'
                                 )}
                                 onMouseDown={(e) => handleMouseDown(e, node.id)}
-                                onMouseEnter={() => setHoveredId(node.id)}
+                                onMouseEnter={() => { if (!draggingNode) setHoveredId(node.id); }}
                                 onMouseLeave={() => setHoveredId(null)}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
@@ -410,27 +463,136 @@ export function PromptGraphModal({
                                         <div title={badge} className="truncate">{badge}</div>
                                     </div>
                                 }
-                                overlay={isDefault ? (
-                                    <div className="absolute top-2 right-2 text-amber-500">
-                                        <Star className="w-4 h-4 fill-current" />
+                                overlay={
+                                    <div className="absolute top-2 right-2 flex items-center gap-1">
+                                        {isPinned && (
+                                            <Pin className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                        )}
+                                        {isDefault && (
+                                            <Star className="w-4 h-4 text-amber-500 fill-current" />
+                                        )}
+                                        {/* Quick action: trash icon — deletes custom prompts */}
+                                        {!prompt.isBuiltIn && (
+                                            <button
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-all"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDelete(prompt);
+                                                }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                title="Delete prompt"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
+                                            </button>
+                                        )}
+                                        {/* Quick action: edit icon — opens in frontpage editor */}
+                                        <button
+                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded transition-all"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEditInFrontpageEditor(prompt);
+                                            }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            title="Edit in editor"
+                                        >
+                                            <Edit3 className="w-3.5 h-3.5 text-indigo-400 hover:text-indigo-600" />
+                                        </button>
                                     </div>
-                                ) : undefined}
-                                tooltip={(hoveredId === node.id || selectedId === node.id) ? (
-                                    <GraphNodeTooltip
-                                        title={selectedId === node.id ? 'Full Prompt' : 'Prompt Preview'}
-                                        subtitle={selectedId === node.id ? 'Selected' : 'Hover Preview'}
-                                        persistent={selectedId === node.id}
-                                    >
-                                        <div className="text-[11px] font-semibold mb-1">System</div>
-                                        <div className="mb-2 whitespace-pre-wrap">{prompt.systemInstruction}</div>
-                                        <div className="text-[11px] font-semibold mb-1">Task</div>
-                                        <div className="whitespace-pre-wrap">{prompt.promptTask}</div>
-                                    </GraphNodeTooltip>
-                                ) : undefined}
+                                }
+                                tooltip={
+                                    // Hide tooltip while dragging to keep dragging clean
+                                    !draggingNode && (hoveredId === node.id || selectedId === node.id) ? (
+                                        <GraphNodeTooltip
+                                            title={selectedId === node.id ? 'Full Prompt' : 'Prompt Preview'}
+                                            subtitle={selectedId === node.id ? 'Selected' : 'Hover Preview'}
+                                            persistent={selectedId === node.id}
+                                        >
+                                            <div className="text-[11px] font-semibold mb-1">System</div>
+                                            <div className="mb-2 whitespace-pre-wrap">{prompt.systemInstruction}</div>
+                                            <div className="text-[11px] font-semibold mb-1">Task</div>
+                                            <div className="whitespace-pre-wrap">{prompt.promptTask}</div>
+                                        </GraphNodeTooltip>
+                                    ) : undefined}
                             />
                         );
                     })}
             </GraphCanvas>
+
+            {/* Drop zones — fixed position overlays, OUTSIDE the canvas transform */}
+            <div className="absolute right-6 top-28 bottom-6 z-[60] flex flex-col gap-3 pointer-events-none">
+                {/* Pin Zone */}
+                <div
+                    ref={pinZoneRef}
+                    className={clsx(
+                        'w-52 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto',
+                        dropZoneHighlight === 'pin'
+                            ? 'border-amber-400 bg-amber-50/90 dark:bg-amber-900/40 scale-105 shadow-lg shadow-amber-200/50'
+                            : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
+                    )}
+                >
+                    <div className="flex items-center gap-2 mb-2">
+                        <Pin className={clsx("w-4 h-4", dropZoneHighlight === 'pin' ? 'text-amber-500' : 'text-gray-400 dark:text-slate-500')} />
+                        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">Pin Zone</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
+                        Drag prompts here to pin/unpin them in the header dropdown
+                    </p>
+                    {pinnedPrompts.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                            {pinnedPrompts.map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => handleTogglePin(p)}
+                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-[10px] text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/40 transition-colors"
+                                    title={`Unpin ${p.name}`}
+                                >
+                                    <span className={clsx('w-1.5 h-1.5 rounded-full', p.color || 'bg-gray-400')} />
+                                    {p.name}
+                                    <PinOff className="w-2.5 h-2.5 opacity-60" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Trash Zone */}
+                <div
+                    ref={trashZoneRef}
+                    className={clsx(
+                        'w-52 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto',
+                        dropZoneHighlight === 'trash'
+                            ? 'border-red-400 bg-red-50/90 dark:bg-red-900/40 scale-105 shadow-lg shadow-red-200/50'
+                            : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
+                    )}
+                >
+                    <div className="flex items-center gap-2 mb-2">
+                        <Trash2 className={clsx("w-4 h-4", dropZoneHighlight === 'trash' ? 'text-red-500' : 'text-gray-400 dark:text-slate-500')} />
+                        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">Delete</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
+                        Drag custom prompts here to delete them
+                    </p>
+                </div>
+
+                {/* Edit Zone */}
+                <div
+                    ref={editZoneRef}
+                    className={clsx(
+                        'w-52 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto',
+                        dropZoneHighlight === 'edit'
+                            ? 'border-indigo-400 bg-indigo-50/90 dark:bg-indigo-900/40 scale-105 shadow-lg shadow-indigo-200/50'
+                            : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
+                    )}
+                >
+                    <div className="flex items-center gap-2 mb-2">
+                        <Edit3 className={clsx("w-4 h-4", dropZoneHighlight === 'edit' ? 'text-indigo-500' : 'text-gray-400 dark:text-slate-500')} />
+                        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">Edit</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
+                        Drag a prompt here to edit it in the main editor
+                    </p>
+                </div>
+            </div>
 
             {(isCreating || isEditing) && (
                 <div className="fixed left-6 bottom-6 z-50 w-[min(560px,calc(100vw-3rem))] max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-4 space-y-3">
@@ -542,11 +704,20 @@ export function PromptGraphModal({
                                     },
                                 },
                                 {
+                                    key: 'pin',
+                                    label: prompt.pinned ? 'Unpin from Dropdown' : 'Pin to Dropdown',
+                                    icon: prompt.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />,
+                                    onClick: async () => {
+                                        await handleTogglePin(prompt);
+                                        setContextMenu(null);
+                                    },
+                                },
+                                {
                                     key: 'edit',
-                                    label: 'Edit',
+                                    label: 'Edit in Editor',
                                     icon: <Edit3 className="w-3.5 h-3.5" />,
                                     onClick: () => {
-                                        handleStartEdit(prompt);
+                                        handleEditInFrontpageEditor(prompt);
                                         setContextMenu(null);
                                     },
                                 },
@@ -564,7 +735,7 @@ export function PromptGraphModal({
                                         key: 'delete',
                                         label: 'Delete',
                                         icon: <Trash2 className="w-3.5 h-3.5" />,
-                                        tone: 'danger',
+                                        tone: 'danger' as const,
                                         onClick: async () => {
                                             await handleDelete(prompt);
                                             setContextMenu(null);

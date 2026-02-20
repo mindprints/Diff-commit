@@ -24,15 +24,15 @@
   }
 
   .dark {
-    /* Dark Mode Variables */
-    --bg-app: hsl(var(--app-hue), 20%, 8%);
-    --bg-header: hsl(var(--app-hue), 15%, 10%);
-    --bg-panel: hsl(var(--app-hue), 15%, 12%);
-    --bg-muted: hsl(var(--app-hue), 10%, 15%);
-    --bg-surface: hsl(var(--app-hue), 12%, 18%);
-    --border-color: hsl(var(--app-hue), 10%, 25%);
+    /* Dark Mode Variables - Higher saturation for richer, more intense backgrounds */
+    --bg-app: hsl(var(--app-hue), 30%, 7%);
+    --bg-header: hsl(var(--app-hue), 25%, 9%);
+    --bg-panel: hsl(var(--app-hue), 25%, 11%);
+    --bg-muted: hsl(var(--app-hue), 20%, 14%);
+    --bg-surface: hsl(var(--app-hue), 22%, 17%);
+    --border-color: hsl(var(--app-hue), 18%, 24%);
 
-    --selection-bg: hsla(var(--app-hue), 80%, 60%, 0.2);
+    --selection-bg: hsla(var(--app-hue), 85%, 60%, 0.25);
 
     body {
       @apply text-slate-200;

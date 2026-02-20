@@ -37,9 +37,9 @@ interface AIContextType {
     customPrompts: AIPrompt[];
     getPrompt: (id: string) => AIPrompt | undefined;
     createPrompt: (prompt: Partial<AIPrompt>) => Promise<AIPrompt>;
-    updatePrompt: (prompt: AIPrompt) => Promise<void>;
+    updatePrompt: (id: string, updates: Partial<AIPrompt>) => Promise<void>;
     deletePrompt: (id: string) => Promise<void>;
-    resetBuiltIn: () => void;
+    resetBuiltIn: (id: string) => Promise<void>;
     promptsLoading: boolean;
 
     // useAsyncAI

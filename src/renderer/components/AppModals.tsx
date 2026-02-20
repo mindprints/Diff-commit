@@ -147,13 +147,19 @@ export function AppModals() {
                 onClose={() => setShowPromptsModal(false)}
                 prompts={aiPrompts}
                 onCreatePrompt={createPrompt}
-                onUpdatePrompt={(id, updates) => updatePrompt({ ...updates, id })}
+                onUpdatePrompt={updatePrompt}
                 onDeletePrompt={deletePrompt}
                 onResetBuiltIn={resetBuiltIn}
                 defaultPromptId={activePromptId}
                 onSetDefault={setDefaultPrompt}
                 selectedModel={selectedModel}
                 selectedImageModel={selectedImageModel}
+                onEditInEditor={(prompt) => {
+                    // Load prompt content into the main editor for modification
+                    const content = `[PROMPT: ${prompt.name}]\n\n--- System Instruction ---\n${prompt.systemInstruction}\n\n--- Task ---\n${prompt.promptTask}`;
+                    const event = new CustomEvent('load-prompt-to-editor', { detail: { prompt, content } });
+                    window.dispatchEvent(event);
+                }}
             />
 
             {/* Models Manager Modal */}

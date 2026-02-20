@@ -14,6 +14,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         order: 1,
         color: 'bg-green-400',
         isLocal: true,
+        pinned: true,
     },
     {
         id: 'spelling_ai',
@@ -23,6 +24,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         isBuiltIn: true,
         order: 2,
         color: 'bg-green-500',
+        pinned: true,
     },
     {
         id: 'grammar',
@@ -32,6 +34,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         isBuiltIn: true,
         order: 2,
         color: 'bg-blue-400',
+        pinned: true,
     },
     {
         id: 'polish',
@@ -41,6 +44,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         isBuiltIn: true,
         order: 3,
         color: 'bg-purple-400',
+        pinned: true,
     },
     {
         id: 'prompt',
@@ -50,6 +54,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         isBuiltIn: true,
         order: 4,
         color: 'bg-amber-400',
+        pinned: true,
     },
     {
         id: 'execute',
@@ -59,6 +64,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         isBuiltIn: true,
         order: 5,
         color: 'bg-rose-400',
+        pinned: true,
     },
     {
         id: 'create_image',
@@ -69,6 +75,7 @@ export const DEFAULT_PROMPTS: AIPrompt[] = [
         order: 6,
         color: 'bg-pink-500',
         isImageMode: true,
+        pinned: true,
     },
 ];
 

@@ -160,7 +160,7 @@ export function matchBenchmark(
 
     for (const benchmark of benchmarks) {
         const creatorLower = benchmark.creator.toLowerCase();
-        const creatorMatch = creatorLower.includes(provider) || provider.includes(creatorLower);
+        const creatorMatch = provider.length > 0 && (creatorLower.includes(provider) || provider.includes(creatorLower));
         const nameSimilarity = calculateSimilarity(modelName, benchmark.modelName);
         const score = creatorMatch ? nameSimilarity * 1.2 : nameSimilarity;
 

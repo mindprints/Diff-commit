@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { X, ClipboardCopy, FileSearch, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, ClipboardCopy, FileSearch, CheckCircle2, Check, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
 
 export interface AnalysisArtifactView {
@@ -18,13 +18,15 @@ interface AIResultsViewerProps {
 }
 
 export function AIResultsViewer({ artifact, onClose, onUseAsContext }: AIResultsViewerProps) {
+    const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
     useEffect(() => {
+        if (!artifact) return;
         const onEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', onEscape);
         return () => window.removeEventListener('keydown', onEscape);
-    }, [onClose]);
+    }, [artifact, onClose]);
 
     if (!artifact) return null;
 
@@ -83,15 +85,24 @@ export function AIResultsViewer({ artifact, onClose, onUseAsContext }: AIResults
             >
                 <button
                     onClick={async () => {
-                        await navigator.clipboard.writeText(artifact.content);
+                        try {
+                            await navigator.clipboard.writeText(artifact.content);
+                            setCopyStatus('success');
+                        } catch (err) {
+                            console.error('Failed to copy to clipboard:', err);
+                            setCopyStatus('error');
+                        }
+                        setTimeout(() => setCopyStatus('idle'), 2000);
                     }}
                     className={clsx(
                         "flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-colors",
-                        "bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-600"
+                        copyStatus === 'success' && "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300",
+                        copyStatus === 'error' && "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
+                        copyStatus === 'idle' && "bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-600"
                     )}
                 >
-                    <ClipboardCopy className="w-4 h-4" />
-                    Copy Report
+                    {copyStatus === 'success' ? <Check className="w-4 h-4" /> : copyStatus === 'error' ? <AlertCircle className="w-4 h-4" /> : <ClipboardCopy className="w-4 h-4" />}
+                    {copyStatus === 'success' ? 'Copied!' : copyStatus === 'error' ? 'Failed!' : 'Copy Report'}
                 </button>
                 <button
                     onClick={onUseAsContext}
