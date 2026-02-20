@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, FolderPlus, FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { X, FolderPlus, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import './CreateNodeDialog.css';

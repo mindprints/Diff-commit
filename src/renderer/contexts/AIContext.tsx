@@ -5,9 +5,9 @@ import { useEditor } from './EditorContext';
 import { useUI } from './UIContext';
 import { useModels } from '../hooks/useModels';
 import { MODELS, Model } from '../constants/models';
-import { runFactCheck, getFactCheckModels } from '../services/factChecker';
+import { runFactCheck, resolveFactCheckModels } from '../services/factChecker';
 import { checkSpelling } from '../services/spellChecker';
-import { polishMultipleRanges } from '../services/ai';
+import { polishMultipleRanges, runAnalysisInstruction } from '../services/ai';
 import { expandToWordBoundaries } from '../utils/textUtils';
 import { ViewMode, AILogEntry, PolishMode, AIPrompt } from '../types';
 import {
@@ -15,12 +15,20 @@ import {
     extractImagePrompt,
     isImageCapableModel,
     generateImage,
-    generateFilename,
-    KNOWN_IMAGE_MODELS,
-    ImageGenerationResponse
+    generateFilename
 } from '../services/imageGenerationService';
 
 const IMAGE_ONLY_MODEL_ERROR = "Your chosen AI model doesn't perform this task. Please select a text-capable model from the Model Manager.";
+
+export interface AnalysisArtifact {
+    id: string;
+    type: 'fact_check' | 'critical_review' | 'analysis';
+    title: string;
+    content: string;
+    modelId?: string;
+    modelName?: string;
+    createdAt: number;
+}
 
 interface AIContextType {
     // usePrompts
@@ -63,7 +71,9 @@ interface AIContextType {
     activePrompt: AIPrompt | null;
 
     // Handlers
-    handleAIEdit: (promptId: string) => Promise<void>;
+    handleAIEdit: (promptId: string, options?: { autoSave?: boolean }) => Promise<void>;
+    handlePromptPanelInstruction: (instruction: string, useAnalysisContext: boolean) => Promise<void>;
+    handleAnalysisInstruction: (instruction: string, title?: string, type?: 'critical_review' | 'analysis') => Promise<void>;
     handleFactCheck: () => Promise<void>;
     handleLocalSpellCheck: () => Promise<void>;
     handleReadAloud: () => void;
@@ -80,23 +90,43 @@ interface AIContextType {
     handleImageRegenerate: (additionalInstructions?: string) => Promise<void>;
     handleImageSave: () => Promise<void>;
     clearGeneratedImage: () => void;
+
+    // Analysis results
+    analysisArtifacts: AnalysisArtifact[];
+    latestAnalysisArtifact: AnalysisArtifact | null;
+    promptPanelUseAnalysisContext: boolean;
+    setPromptPanelUseAnalysisContext: (enabled: boolean) => void;
+    closeAnalysisViewer: () => void;
+    openLatestAnalysisViewer: () => void;
 }
 
 const AIContext = createContext<AIContextType | undefined>(undefined);
 
 export function AIProvider({ children }: { children: ReactNode }) {
     const {
-        previewText, setPreviewText, originalText, setOriginalText, modifiedText, setModifiedText,
+        setPreviewText, originalText, setOriginalText, setModifiedText,
         performDiff, setMode, originalTextRef, previewTextRef, modifiedTextRef, previewTextareaRef,
         frozenSelection, setFrozenSelection
     } = useEditor();
     const {
         setErrorMessage, setActiveLogId, contextMenu, setSavePromptDialogOpen,
         setContextMenu, setIsSpeaking, isSpeaking, setShowPromptsModal,
-        setShowImageViewer
+        setShowImageViewer, setShowAnalysisViewer
     } = useUI();
 
     const { models: importedModels } = useModels();
+    const allAvailableModels = useMemo(() => {
+        const byId = new Map<string, Model>();
+        for (const baseModel of MODELS) {
+            byId.set(baseModel.id, baseModel);
+        }
+        for (const imported of importedModels) {
+            if (!byId.has(imported.id)) {
+                byId.set(imported.id, imported);
+            }
+        }
+        return Array.from(byId.values());
+    }, [importedModels]);
 
     // Initialize text model from localStorage or fallback to first model
     const getInitialModel = (): Model => {
@@ -172,6 +202,8 @@ export function AIProvider({ children }: { children: ReactNode }) {
     // Image generation state
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<{ data: string; prompt: string } | null>(null);
+    const [analysisArtifacts, setAnalysisArtifacts] = useState<AnalysisArtifact[]>([]);
+    const [promptPanelUseAnalysisContext, setPromptPanelUseAnalysisContext] = useState(false);
     const lastImagePromptRef = useRef<string>('');
     // Ref to break circular dependency - handleQuickSend needs to call handleImageGeneration
     const handleImageGenerationRef = useRef<(prompt: string, base64Image?: string) => Promise<void>>(async () => { });
@@ -321,7 +353,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             } else {
                 try {
                     const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: any[] = stored ? JSON.parse(stored) : [];
+                    const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
                     logs.push(logEntry);
                     if (logs.length > 1000) logs.shift();
                     localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
@@ -366,6 +398,30 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setIsGeneratingImage(false);
         setFactCheckProgress('');
     }, [cancelAsyncOperations]);
+
+    const latestAnalysisArtifact = useMemo<AnalysisArtifact | null>(
+        () => analysisArtifacts[0] || null,
+        [analysisArtifacts]
+    );
+
+    const addAnalysisArtifact = useCallback((artifact: Omit<AnalysisArtifact, 'id' | 'createdAt'>) => {
+        const next: AnalysisArtifact = {
+            ...artifact,
+            id: crypto.randomUUID(),
+            createdAt: Date.now()
+        };
+        setAnalysisArtifacts((prev) => [next, ...prev].slice(0, 20));
+        return next;
+    }, []);
+
+    const closeAnalysisViewer = useCallback(() => {
+        setShowAnalysisViewer(false);
+    }, [setShowAnalysisViewer]);
+
+    const openLatestAnalysisViewer = useCallback(() => {
+        if (!latestAnalysisArtifact) return;
+        setShowAnalysisViewer(true);
+    }, [latestAnalysisArtifact, setShowAnalysisViewer]);
 
     const handleLocalSpellCheck = useCallback(async () => {
         try {
@@ -413,7 +469,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         }
     }, [previewTextRef, previewTextareaRef, setErrorMessage, setOriginalText, setModifiedText, performDiff, setMode, getSourceTextForAI]);
 
-    const handleAIEdit = useCallback(async (promptIdOrInstruction: string) => {
+    const handleAIEdit = useCallback(async (promptIdOrInstruction: string, options?: { autoSave?: boolean }) => {
         setErrorMessage(null);
         if (promptIdOrInstruction === 'spelling_local') {
             return handleLocalSpellCheck();
@@ -498,17 +554,130 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 setFrozenSelection(null);
 
                 // Proactively add to custom prompts for reuse
-                createPrompt({
-                    name: promptIdOrInstruction.length > 30 ? promptIdOrInstruction.substring(0, 27) + "..." : promptIdOrInstruction,
-                    systemInstruction: customPrompt.systemInstruction,
-                    promptTask: promptIdOrInstruction,
-                    color: 'bg-indigo-400'
-                }).catch(e => console.warn('Failed to auto-save custom prompt:', e));
+                if (options?.autoSave !== false) {
+                    createPrompt({
+                        name: promptIdOrInstruction.length > 30 ? promptIdOrInstruction.substring(0, 27) + "..." : promptIdOrInstruction,
+                        systemInstruction: customPrompt.systemInstruction,
+                        promptTask: promptIdOrInstruction,
+                        color: 'bg-indigo-400'
+                    }).catch(e => console.warn('Failed to auto-save custom prompt:', e));
+                }
             } catch (e) {
                 console.error('Failed to start custom AI instruction:', e);
             }
         }
     }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt, isImageOnlyModel, selectedModel]);
+
+    const handlePromptPanelInstruction = useCallback(async (instruction: string, useAnalysisContext: boolean) => {
+        if (!useAnalysisContext || !latestAnalysisArtifact) {
+            await handleAIEdit(instruction);
+            return;
+        }
+
+        const contextualInstruction = `Use the analysis report below as guidance while editing the text.
+Keep the author's tone and intent unless the instruction explicitly says otherwise.
+Do not output a report. Return only revised text.
+
+Analysis Report:
+${latestAnalysisArtifact.content}
+
+User Instruction:
+${instruction}`;
+
+        await handleAIEdit(contextualInstruction, { autoSave: false });
+    }, [handleAIEdit, latestAnalysisArtifact]);
+
+    const handleAnalysisInstruction = useCallback(async (
+        instruction: string,
+        title = 'Analysis',
+        type: 'critical_review' | 'analysis' = 'analysis'
+    ) => {
+        if (isImageOnlyModel(selectedModel)) {
+            setErrorMessage(IMAGE_ONLY_MODEL_ERROR);
+            return;
+        }
+
+        cancelAIOperation();
+        const { sourceText } = getSourceTextForAI();
+        if (!sourceText.trim()) {
+            setErrorMessage('Please enter some text first.');
+            return;
+        }
+
+        abortControllerRef.current = new AbortController();
+        setIsPolishing(true);
+        setErrorMessage(null);
+
+        try {
+            const startTime = Date.now();
+            const response = await runAnalysisInstruction(
+                sourceText,
+                instruction,
+                selectedModel,
+                abortControllerRef.current.signal
+            );
+            const durationMs = Date.now() - startTime;
+
+            if (response.isCancelled) {
+                return;
+            }
+            if (response.isError) {
+                setErrorMessage(response.text || 'Analysis failed.');
+                return;
+            }
+
+            const artifact = addAnalysisArtifact({
+                type,
+                title: `${title} (${new Date().toLocaleTimeString()})`,
+                content: response.text,
+                modelId: selectedModel.id,
+                modelName: selectedModel.name
+            });
+            if (artifact) {
+                setShowAnalysisViewer(true);
+            }
+
+            if (response.usage) {
+                updateCost(response.usage);
+                const cost = (response.usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
+                    (response.usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
+                const logEntry: AILogEntry = {
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    modelId: selectedModel.id,
+                    modelName: selectedModel.name,
+                    taskType: type === 'critical_review' ? 'critical-review' : 'analysis',
+                    inputTokens: response.usage.inputTokens,
+                    outputTokens: response.usage.outputTokens,
+                    cost,
+                    durationMs
+                };
+                try {
+                    if (window.electron && window.electron.logUsage) {
+                        await window.electron.logUsage(logEntry);
+                    } else {
+                        const stored = localStorage.getItem('diff-commit-logs');
+                        const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
+                        logs.push(logEntry);
+                        if (logs.length > 1000) logs.shift();
+                        localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+                    }
+                    setActiveLogId(logEntry.id);
+                } catch (e) {
+                    console.warn('Failed to persist analysis log:', e);
+                }
+            }
+        } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                return;
+            }
+            console.error('Analysis failed:', error);
+            setErrorMessage(error instanceof Error ? error.message : 'Analysis failed.');
+        } finally {
+            setIsPolishing(false);
+            abortControllerRef.current = null;
+        }
+    }, [isImageOnlyModel, selectedModel, cancelAIOperation, getSourceTextForAI, setErrorMessage, addAnalysisArtifact, setShowAnalysisViewer, updateCost, setActiveLogId]);
 
     const handleQuickSend = useCallback((promptId?: string) => {
         setErrorMessage(null);
@@ -589,78 +758,100 @@ export function AIProvider({ children }: { children: ReactNode }) {
         setIsFactChecking(true);
         setFactCheckProgress('Starting fact check...');
         setErrorMessage(null);
+        try {
+            const factCheckModels = resolveFactCheckModels(allAvailableModels);
+            const { session, usage, stageUsage, models, isError, isCancelled, errorMessage } = await runFactCheck(
+                sourceText,
+                (stage) => setFactCheckProgress(stage),
+                abortControllerRef.current.signal,
+                {
+                    extractionModel: factCheckModels.extraction,
+                    verificationModel: factCheckModels.verification
+                }
+            );
 
-        const { usage, isError, isCancelled, errorMessage } = await runFactCheck(
-            sourceText,
-            (stage) => setFactCheckProgress(stage),
-            abortControllerRef.current.signal
-        );
+            if (isCancelled) {
+                return;
+            }
 
-        if (isCancelled) return;
+            if (isError) {
+                setErrorMessage(errorMessage || 'Fact check failed.');
+                return;
+            }
 
-        if (isError) {
-            setErrorMessage(errorMessage || 'Fact check failed.');
-            setIsFactChecking(false);
-            setFactCheckProgress('');
-            return;
-        }
+            setErrorMessage(null);
 
-        setErrorMessage(null);
+            if (usage) {
+                const resolvedModels = models || factCheckModels;
+                const extractionTokens = stageUsage?.extraction || { inputTokens: Math.round(usage.inputTokens * 0.2), outputTokens: Math.round(usage.outputTokens * 0.2) };
+                const verificationTokens = stageUsage?.verification || { inputTokens: usage.inputTokens - extractionTokens.inputTokens, outputTokens: usage.outputTokens - extractionTokens.outputTokens };
+                const extractionCost = (extractionTokens.inputTokens / 1_000_000 * resolvedModels.extraction.inputPrice) +
+                    (extractionTokens.outputTokens / 1_000_000 * resolvedModels.extraction.outputPrice);
+                const verificationCost = (verificationTokens.inputTokens / 1_000_000 * resolvedModels.verification.inputPrice) +
+                    (verificationTokens.outputTokens / 1_000_000 * resolvedModels.verification.outputPrice);
+                setSessionCost(prev => prev + extractionCost + verificationCost);
 
-        if (usage) {
-            const models = getFactCheckModels();
-            const extractionCost = (usage.inputTokens * 0.2 / 1_000_000 * models.extraction.inputPrice) +
-                (usage.outputTokens * 0.2 / 1_000_000 * models.extraction.outputPrice);
-            const verificationCost = (usage.inputTokens * 0.8 / 1_000_000 * models.verification.inputPrice) +
-                (usage.outputTokens * 0.8 / 1_000_000 * models.verification.outputPrice);
-            setSessionCost(prev => prev + extractionCost + verificationCost);
+                const sessionId = crypto.randomUUID();
+                const extractionLog: AILogEntry = {
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    modelId: resolvedModels.extraction.id,
+                    modelName: resolvedModels.extraction.name,
+                    taskType: 'fact-check-extraction',
+                    inputTokens: extractionTokens.inputTokens,
+                    outputTokens: extractionTokens.outputTokens,
+                    cost: extractionCost,
+                    sessionId
+                };
 
-            const sessionId = crypto.randomUUID();
-            const extractionLog: AILogEntry = {
-                id: crypto.randomUUID(),
-                timestamp: Date.now(),
-                modelId: models.extraction.id,
-                modelName: models.extraction.name,
-                taskType: 'fact-check-extraction',
-                inputTokens: Math.round(usage.inputTokens * 0.2),
-                outputTokens: Math.round(usage.outputTokens * 0.2),
-                cost: extractionCost,
-                sessionId
-            };
+                const verificationLog: AILogEntry = {
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    modelId: resolvedModels.verification.id,
+                    modelName: resolvedModels.verification.name,
+                    taskType: 'fact-check-verification',
+                    inputTokens: verificationTokens.inputTokens,
+                    outputTokens: verificationTokens.outputTokens,
+                    cost: verificationCost,
+                    sessionId
+                };
 
-            const verificationLog: AILogEntry = {
-                id: crypto.randomUUID(),
-                timestamp: Date.now(),
-                modelId: models.verification.id,
-                modelName: models.verification.name,
-                taskType: 'fact-check-verification',
-                inputTokens: Math.round(usage.inputTokens * 0.8),
-                outputTokens: Math.round(usage.outputTokens * 0.8),
-                cost: verificationCost,
-                sessionId
-            };
-
-            if (window.electron && window.electron.logUsage) {
-                await window.electron.logUsage(extractionLog);
-                await window.electron.logUsage(verificationLog);
-            } else {
                 try {
-                    const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: any[] = stored ? JSON.parse(stored) : [];
-                    logs.push(extractionLog, verificationLog);
-                    while (logs.length > 1000) logs.shift();
-                    localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+                    if (window.electron && window.electron.logUsage) {
+                        await window.electron.logUsage(extractionLog);
+                        await window.electron.logUsage(verificationLog);
+                    } else {
+                        const stored = localStorage.getItem('diff-commit-logs');
+                        const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
+                        logs.push(extractionLog, verificationLog);
+                        while (logs.length > 1000) logs.shift();
+                        localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+                    }
+                    setActiveLogId(verificationLog.id);
                 } catch (e) {
-                    console.warn('Failed to save log to localStorage:', e);
+                    console.warn('Failed to persist fact-check logs:', e);
                 }
             }
-            setActiveLogId(verificationLog.id);
-        }
 
-        setIsFactChecking(false);
-        setFactCheckProgress('');
-        abortControllerRef.current = null;
-    }, [cancelAIOperation, getSourceTextForAI, setErrorMessage, setFactCheckProgress, setIsFactChecking, setSessionCost, setActiveLogId, isImageOnlyModel, selectedModel]);
+            const artifact = addAnalysisArtifact({
+                type: 'fact_check',
+                title: `Fact Check (${new Date().toLocaleTimeString()})`,
+                content: session.report,
+                modelId: factCheckModels.verification.id,
+                modelName: factCheckModels.verification.name
+            });
+            if (artifact) {
+                setShowAnalysisViewer(true);
+            }
+        } catch (error) {
+            console.error('Fact-check run failed:', error);
+            setErrorMessage(error instanceof Error ? error.message : 'Fact check failed.');
+        } finally {
+            setIsFactChecking(false);
+            setFactCheckProgress('');
+            abortControllerRef.current = null;
+        }
+    }, [cancelAIOperation, getSourceTextForAI, setErrorMessage, setFactCheckProgress, setIsFactChecking, setSessionCost, setActiveLogId, isImageOnlyModel, selectedModel, allAvailableModels, addAnalysisArtifact, setShowAnalysisViewer]);
 
     const handleReadAloud = useCallback(() => {
         if (isSpeaking) {
@@ -769,7 +960,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             } else {
                 try {
                     const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: any[] = stored ? JSON.parse(stored) : [];
+                    const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
                     logs.push(logEntry);
                     if (logs.length > 1000) logs.shift();
                     localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
@@ -948,7 +1139,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
             } else {
                 try {
                     const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: any[] = stored ? JSON.parse(stored) : [];
+                    const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
                     logs.push(logEntry);
                     if (logs.length > 1000) logs.shift();
                     localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
@@ -1036,11 +1227,13 @@ export function AIProvider({ children }: { children: ReactNode }) {
             activePromptId, setActivePromptId, setDefaultPrompt, activePrompt,
             selectedModel, setSelectedModel, setDefaultModel, selectedImageModel, setDefaultImageModel, sessionCost, setSessionCost, updateCost,
             handleAIEdit, handleFactCheck, handleLocalSpellCheck, handleReadAloud, cancelAIOperation,
-            handleQuickSend,
+            handleQuickSend, handlePromptPanelInstruction, handleAnalysisInstruction,
             handlePolishSelection, handleSaveAsPrompt, handleSavePromptSubmit, handleRate,
             // Image generation
             isGeneratingImage, generatedImage,
-            handleImageGeneration, handleImageRegenerate, handleImageSave, clearGeneratedImage
+            handleImageGeneration, handleImageRegenerate, handleImageSave, clearGeneratedImage,
+            // Analysis results
+            analysisArtifacts, latestAnalysisArtifact, promptPanelUseAnalysisContext, setPromptPanelUseAnalysisContext, closeAnalysisViewer, openLatestAnalysisViewer
         }}>
             {children}
         </AIContext.Provider>

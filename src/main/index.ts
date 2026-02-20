@@ -13,6 +13,11 @@ import {
     assertRepositoryPath as assertRepositoryPathBase,
 } from './pathValidators';
 import { readProjectBundleSource } from './projectBundle';
+import {
+    normalizeOpenRouterModel,
+    tokenPriceToMillionPrice,
+    type OpenRouterModel,
+} from '../shared/openRouterModels';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -390,6 +395,11 @@ function createMenu() {
                 {
                     label: 'Fact Check',
                     click: () => sendToRenderer('menu-tools-factcheck')
+                },
+                { type: 'separator' },
+                {
+                    label: 'Slash Command Manual',
+                    click: () => sendToRenderer('menu-show-help')
                 },
                 { type: 'separator' },
                 {
@@ -1527,30 +1537,13 @@ app.whenReady().then(async () => {
             }
 
             const data = await response.json();
-            const models = Array.isArray(data?.data) ? data.data : [];
+            const models = Array.isArray(data?.data) ? data.data as OpenRouterModel[] : [];
 
             if (models.length === 0) {
                 console.warn('[OpenRouter] No models returned from API');
             }
 
-            // Parse models for the renderer
-            return models.map((model: {
-                id: string;
-                name: string;
-                context_length?: number;
-                pricing?: { prompt?: string; completion?: string };
-                architecture?: { modality?: string };
-                description?: string;
-            }) => ({
-                id: model.id,
-                name: model.name,
-                provider: extractProviderName(model.id),
-                contextWindow: model.context_length,
-                inputPrice: parseFloat(model.pricing?.prompt || '0') * 1_000_000,
-                outputPrice: parseFloat(model.pricing?.completion || '0') * 1_000_000,
-                modality: parseModality(model.architecture?.modality),
-                description: model.description,
-            }));
+            return models.map(normalizeOpenRouterModel);
         } catch (e) {
             console.error('[OpenRouter] Failed to fetch models:', e);
             throw e;
@@ -1589,16 +1582,16 @@ app.whenReady().then(async () => {
             }
 
             const data = await response.json();
-            const models = data.data || [];
-            const model = models.find((m: { id?: string }) => m.id === modelId);
+            const models = Array.isArray(data?.data) ? data.data as OpenRouterModel[] : [];
+            const model = models.find((m) => m.id === modelId);
 
             if (!model) {
                 throw new Error(`Model not found: ${modelId}`);
             }
 
             return {
-                inputPrice: parseFloat(model.pricing?.prompt || '0') * 1_000_000,
-                outputPrice: parseFloat(model.pricing?.completion || '0') * 1_000_000,
+                inputPrice: tokenPriceToMillionPrice(model.pricing?.prompt),
+                outputPrice: tokenPriceToMillionPrice(model.pricing?.completion),
             };
         } catch (e) {
             console.error('[OpenRouter] Failed to fetch pricing:', e);
@@ -1651,39 +1644,6 @@ app.whenReady().then(async () => {
         openRouterRequests.delete(requestId);
         return true;
     });
-
-    // Helper: Extract provider name from model ID
-    function extractProviderName(modelId: string): string {
-        const parts = modelId.split('/');
-        if (parts.length < 2) return 'Unknown';
-
-        const providerSlug = parts[0];
-        const providerMap: Record<string, string> = {
-            'openai': 'OpenAI',
-            'anthropic': 'Anthropic',
-            'google': 'Google',
-            'meta-llama': 'Meta',
-            'mistralai': 'Mistral',
-            'cohere': 'Cohere',
-            'deepseek': 'DeepSeek',
-            'perplexity': 'Perplexity',
-            'x-ai': 'xAI',
-            'amazon': 'Amazon',
-            'microsoft': 'Microsoft',
-            'nvidia': 'NVIDIA',
-            'qwen': 'Qwen',
-        };
-
-        return providerMap[providerSlug.toLowerCase()] ||
-            providerSlug.charAt(0).toUpperCase() + providerSlug.slice(1);
-    }
-
-    // Helper: Parse modality string
-    function parseModality(modality?: string): string {
-        if (!modality) return 'text';
-        const inputPart = modality.split('->')[0] || modality;
-        return inputPart.toLowerCase();
-    }
 
     // ========================================
     // Artificial Analysis API Handlers (Secure - key stays in main process)

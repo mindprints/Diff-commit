@@ -43,6 +43,8 @@ interface UIContextType {
     setIsHeaderVisible: (visible: boolean) => void;
     showImageViewer: boolean;
     setShowImageViewer: (show: boolean) => void;
+    showAnalysisViewer: boolean;
+    setShowAnalysisViewer: (show: boolean) => void;
     showSettingsModal: boolean;
     setShowSettingsModal: (show: boolean) => void;
     showRepoPicker: boolean;
@@ -72,6 +74,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [isPromptPanelVisible, setIsPromptPanelVisible] = useState(true);
     const [isHeaderVisible, setIsHeaderVisible] = useState(true);
     const [showImageViewer, setShowImageViewer] = useState(false);
+    const [showAnalysisViewer, setShowAnalysisViewer] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [showRepoPicker, setShowRepoPicker] = useState(false);
 
@@ -121,7 +124,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
         };
     }, [handleResize, stopResizing]);
 
-    const handleOpenContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>, previewText: string) => {
+    const handleOpenContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>, _previewText: string) => {
         e.preventDefault();
         const textarea = e.currentTarget;
         const start = textarea.selectionStart;
@@ -157,6 +160,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
             isPromptPanelVisible, setIsPromptPanelVisible,
             isHeaderVisible, setIsHeaderVisible,
             showImageViewer, setShowImageViewer,
+            showAnalysisViewer, setShowAnalysisViewer,
             showSettingsModal, setShowSettingsModal,
             showGraphModal, setShowGraphModal,
             showRepoPicker, setShowRepoPicker,

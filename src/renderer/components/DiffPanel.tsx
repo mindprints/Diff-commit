@@ -2,14 +2,14 @@ import React from 'react';
 import { FileText } from 'lucide-react';
 import clsx from 'clsx';
 import { DiffSegment as DiffSegmentComponent } from './DiffSegment';
-import { DiffSegment, FontFamily } from '../types';
-import { FontSize, fontClasses, sizeClasses } from '../constants/ui';
+import { fontClasses, sizeClasses } from '../constants/ui';
 import { ImageViewer } from './ImageViewer';
+import { AIResultsViewer } from './AIResultsViewer';
 
 import { useUI, useEditor, useAI } from '../contexts';
 
 export function DiffPanel() {
-    const { leftPanelWidth, showImageViewer } = useUI();
+    const { showImageViewer, showAnalysisViewer } = useUI();
     const {
         handleAcceptAll, handleRejectAll,
         leftContainerRef, handleScrollSync,
@@ -21,11 +21,15 @@ export function DiffPanel() {
         generatedImage,
         handleImageRegenerate,
         handleImageSave,
-        clearGeneratedImage
+        clearGeneratedImage,
+        latestAnalysisArtifact,
+        closeAnalysisViewer,
+        setPromptPanelUseAnalysisContext
     } = useAI();
 
     // Show ImageViewer when generating or when we have an image
     const shouldShowImageViewer = showImageViewer || isGeneratingImage || generatedImage !== null;
+    const shouldShowAnalysisViewer = showAnalysisViewer && latestAnalysisArtifact !== null;
 
     return (
         <div
@@ -41,6 +45,23 @@ export function DiffPanel() {
                     onSave={handleImageSave}
                     onRegenerate={handleImageRegenerate}
                     onClose={clearGeneratedImage}
+                />
+            )}
+            {shouldShowAnalysisViewer && (
+                <AIResultsViewer
+                    artifact={latestAnalysisArtifact ? {
+                        id: latestAnalysisArtifact.id,
+                        type: latestAnalysisArtifact.type,
+                        title: latestAnalysisArtifact.title,
+                        content: latestAnalysisArtifact.content,
+                        modelName: latestAnalysisArtifact.modelName,
+                        createdAt: latestAnalysisArtifact.createdAt
+                    } : null}
+                    onClose={closeAnalysisViewer}
+                    onUseAsContext={() => {
+                        setPromptPanelUseAnalysisContext(true);
+                        closeAnalysisViewer();
+                    }}
                 />
             )}
 

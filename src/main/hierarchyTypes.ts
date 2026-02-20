@@ -37,4 +37,5 @@ export const RESERVED_NAMES = [
 ];
 
 // Characters not allowed in folder names
+// eslint-disable-next-line no-control-regex
 export const INVALID_CHARS = /[<>:"/\\|?*\x00-\x1F]/;

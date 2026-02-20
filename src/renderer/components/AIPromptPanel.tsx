@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, Send } from 'lucide-react';
+import { Send, FileSearch } from 'lucide-react';
 import { useAI } from '../contexts';
 
+const UNKNOWN_COMMAND_MESSAGE = 'Unknown slash command. Use /review, /critique, /analyze, /factcheck, /rewrite, /compress, /expand, or /edit.';
+
 export function AIPromptPanel() {
-    const { handleAIEdit } = useAI();
+    const {
+        handleFactCheck,
+        handlePromptPanelInstruction,
+        handleAnalysisInstruction,
+        latestAnalysisArtifact,
+        promptPanelUseAnalysisContext,
+        setPromptPanelUseAnalysisContext,
+        openLatestAnalysisViewer
+    } = useAI();
     const [instruction, setInstruction] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -19,6 +29,8 @@ export function AIPromptPanel() {
 
     const handleExecute = async () => {
         if (!instruction.trim() || isLoading) return;
+        const raw = instruction.trim();
+        const match = raw.match(/^\/([a-z-]+)(?:\s+([\s\S]*))?$/i);
 
         setIsLoading(true);
         if (statusTimeoutRef.current) {
@@ -27,10 +39,37 @@ export function AIPromptPanel() {
         }
 
         try {
-            await handleAIEdit(instruction);
+            if (match) {
+                const cmd = match[1].toLowerCase();
+                const args = (match[2] || '').trim();
+
+                if (cmd === 'factcheck') {
+                    await handleFactCheck();
+                } else if (cmd === 'review' || cmd === 'critique' || cmd === 'analyze') {
+                    const reviewInstruction = args || 'Provide a critical review of this text. Identify weaknesses, unclear claims, unsupported assertions, structure issues, and actionable improvements.';
+                    const type = (cmd === 'review' || cmd === 'critique') ? 'critical_review' : 'analysis';
+                    const title = cmd === 'analyze' ? 'Analysis' : 'Critical Review';
+                    await handleAnalysisInstruction(reviewInstruction, title, type);
+                } else if (cmd === 'rewrite' || cmd === 'compress' || cmd === 'expand' || cmd === 'edit') {
+                    const mappedInstruction =
+                        cmd === 'compress'
+                            ? `Compress the text while preserving key meaning and tone. ${args}`.trim()
+                            : cmd === 'expand'
+                                ? `Expand the text with additional useful detail while preserving author intent. ${args}`.trim()
+                                : args || 'Edit the text according to best writing practices.';
+                    await handlePromptPanelInstruction(mappedInstruction, promptPanelUseAnalysisContext);
+                } else {
+                    setStatus({
+                        type: 'error',
+                        message: UNKNOWN_COMMAND_MESSAGE
+                    });
+                    return;
+                }
+            } else {
+                await handlePromptPanelInstruction(raw, promptPanelUseAnalysisContext);
+            }
             setInstruction('');
             setStatus({ type: 'success', message: 'Command processed successfully.' });
-            // Auto-clear success message after 3 seconds
             statusTimeoutRef.current = setTimeout(() => {
                 setStatus(null);
                 statusTimeoutRef.current = null;
@@ -38,7 +77,6 @@ export function AIPromptPanel() {
         } catch (err) {
             console.error('AI instruction failed:', err);
             setStatus({ type: 'error', message: 'Failed to process command. Please try again.' });
-            // Auto-clear error message after 6 seconds (longer than success)
             statusTimeoutRef.current = setTimeout(() => {
                 setStatus(null);
                 statusTimeoutRef.current = null;
@@ -57,8 +95,6 @@ export function AIPromptPanel() {
 
     return (
         <div data-prompt-panel className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--bg-panel)' }}>
-
-
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--bg-muted)' }}>
                 <div className="flex-1 m-4 relative flex flex-col rounded-xl shadow-sm overflow-hidden transition-colors duration-200" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
                     <textarea
@@ -66,9 +102,32 @@ export function AIPromptPanel() {
                         onChange={(e) => setInstruction(e.target.value)}
                         onKeyDown={handleKeyDown}
                         disabled={isLoading}
-                        placeholder="Describe an action you want to carry out on the text..."
-                        className="flex-1 w-full p-4 pb-12 focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none border-none bg-transparent transition-all disabled:opacity-50"
+                        placeholder="Use slash commands (/review, /factcheck, /compress) or enter a plain edit instruction."
+                        className="flex-1 w-full p-4 pb-14 focus:ring-2 focus:ring-indigo-500/50 text-sm text-gray-700 dark:text-slate-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 resize-none outline-none border-none bg-transparent transition-all disabled:opacity-50"
                     />
+                    <div className="absolute left-3 bottom-3 flex items-center gap-2">
+                        <label className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-slate-400">
+                            <input
+                                type="checkbox"
+                                checked={promptPanelUseAnalysisContext}
+                                onChange={(e) => setPromptPanelUseAnalysisContext(e.target.checked)}
+                                disabled={!latestAnalysisArtifact}
+                                className="rounded border-gray-300 dark:border-gray-600 text-cyan-600 focus:ring-cyan-500"
+                            />
+                            Use latest analysis context
+                        </label>
+                        {latestAnalysisArtifact && (
+                            <button
+                                type="button"
+                                onClick={openLatestAnalysisViewer}
+                                className="text-[10px] px-2 py-1 rounded border border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 flex items-center gap-1"
+                                title="Open latest analysis report"
+                            >
+                                <FileSearch className="w-3 h-3" />
+                                View
+                            </button>
+                        )}
+                    </div>
                     <div className="absolute bottom-3 right-3 flex items-center gap-2">
                         <span className="text-[10px] text-gray-400 dark:text-slate-500 font-medium">
                             Press Enter to Run

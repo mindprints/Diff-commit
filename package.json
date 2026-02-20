@@ -1,6 +1,6 @@
 {
   "name": "diff-commit-ai",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "description": "A modern, interactive desktop application for comparing, reviewing, and refining text versions with AI-powered enhancements.",
   "author": "Diff & Commit AI Team",
   "main": "./out/main/index.js",
@@ -11,7 +11,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "build:win": "electron-vite build && electron-builder --win --x64",
-    "build:web": "vite build src/renderer"
+    "build:web": "vite build src/renderer",
+    "build:model-intel-core": "npm --prefix packages/model-intel-core run build"
   },
   "build": {
     "appId": "com.yourcompany.diffcommitai",

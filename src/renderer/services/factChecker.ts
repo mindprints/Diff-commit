@@ -1,6 +1,7 @@
 
 import { FactClaim, VerificationResult, FactCheckSession, ConfidenceLevel, VerificationStatus, FactClaimCategory } from '../types';
 import { MODELS } from '../constants/models';
+import type { Model } from '../constants/models';
 import { requestOpenRouterChatCompletions } from './openRouterBridge';
 import { applySearchModeToPayload, getFactCheckSearchMode, OpenRouterChatPayloadWithPlugins } from './openRouterSearch';
 
@@ -9,14 +10,24 @@ const SITE_URL = 'http://localhost:5173';
 const SITE_NAME = 'Diff & Commit AI';
 
 // Models for fact-checking
-const EXTRACTION_MODEL = MODELS[0]; // DeepSeek v3.2 - cheap and fast
-const VERIFICATION_MODEL = MODELS.find(m => m.id === 'perplexity/sonar-pro') || MODELS[0];
+const DEFAULT_EXTRACTION_MODEL = MODELS[0]; // DeepSeek v3.2 - cheap and fast
+const DEFAULT_VERIFICATION_MODEL = MODELS.find(m => m.id === 'perplexity/sonar-pro') || MODELS[0];
+const FACTCHECK_EXTRACTION_MODEL_KEY = 'diff-commit-factcheck-extraction-model';
+const FACTCHECK_VERIFICATION_MODEL_KEY = 'diff-commit-factcheck-verification-model';
 
 interface FactCheckResponse {
     session: FactCheckSession;
     usage: {
         inputTokens: number;
         outputTokens: number;
+    };
+    stageUsage?: {
+        extraction: { inputTokens: number; outputTokens: number };
+        verification: { inputTokens: number; outputTokens: number };
+    };
+    models?: {
+        extraction: Model;
+        verification: Model;
     };
     isError?: boolean;
     isCancelled?: boolean;
@@ -45,8 +56,159 @@ interface OpenRouterChatCompletionResponse {
     };
 }
 
+interface RawFactClaim {
+    claim?: string;
+    statement?: string;
+    category?: string;
+    context?: string;
+    verifiable?: boolean;
+}
+
+interface FactCheckModelOptions {
+    extractionModel?: Model;
+    verificationModel?: Model;
+}
+
 function isAbortError(error: unknown): boolean {
     return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function normalizeCategory(category: string | undefined): FactClaimCategory {
+    const normalized = (category || 'other').toLowerCase();
+    const allowedCategories: Set<FactClaimCategory> = new Set([
+        'causal',
+        'frequency',
+        'effectiveness',
+        'conspiracy',
+        'medical',
+        'date',
+        'statistic',
+        'name',
+        'place',
+        'event',
+        'quote',
+        'other'
+    ]);
+    return allowedCategories.has(normalized as FactClaimCategory)
+        ? normalized as FactClaimCategory
+        : 'other';
+}
+
+function normalizeClaimText(text: string | undefined): string {
+    if (!text) return '';
+    return text
+        .replace(/^["'`]+|["'`]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function canonicalKey(text: string): string {
+    return text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function isLikelySubjectiveOrPersonal(claimText: string): boolean {
+    const lowered = claimText.toLowerCase();
+    if (/\b(i|we|me|us|my|our|mine|ours)\b/i.test(lowered)) {
+        return true;
+    }
+
+    const subjectivePhrases = [
+        'great time',
+        'delicious',
+        'tasty',
+        'fun',
+        'enjoyed',
+        'loved',
+        'hated',
+        'felt',
+        'i think',
+        'i believe',
+        'in my opinion'
+    ];
+    return subjectivePhrases.some((phrase) => lowered.includes(phrase));
+}
+
+function filterAndNormalizeClaims(rawClaims: RawFactClaim[]): FactClaim[] {
+    const dedupe = new Set<string>();
+    const normalized: FactClaim[] = [];
+
+    for (const raw of rawClaims) {
+        if (raw.verifiable === false) {
+            continue;
+        }
+
+        const claimText = normalizeClaimText(raw.statement || raw.claim);
+        if (!claimText || claimText.length < 6) {
+            continue;
+        }
+
+        if (isLikelySubjectiveOrPersonal(claimText)) {
+            continue;
+        }
+
+        const key = canonicalKey(claimText);
+        if (!key || dedupe.has(key)) {
+            continue;
+        }
+        dedupe.add(key);
+
+        normalized.push({
+            id: `claim-${normalized.length}`,
+            claim: claimText,
+            category: normalizeCategory(raw.category),
+            context: normalizeClaimText(raw.context) || claimText.slice(0, 120)
+        });
+    }
+
+    return normalized;
+}
+
+function getConfiguredModelId(key: string, fallbackId: string): string {
+    try {
+        const stored = localStorage.getItem(key)?.trim();
+        if (stored) return stored;
+    } catch (error) {
+        console.warn('[FactCheck] Failed to read model preference:', error);
+    }
+    return fallbackId;
+}
+
+function setConfiguredModelId(key: string, modelId: string): void {
+    try {
+        localStorage.setItem(key, modelId);
+    } catch (error) {
+        console.warn('[FactCheck] Failed to store model preference:', error);
+    }
+}
+
+export function getFactCheckExtractionModelId(): string {
+    return getConfiguredModelId(FACTCHECK_EXTRACTION_MODEL_KEY, DEFAULT_EXTRACTION_MODEL.id);
+}
+
+export function setFactCheckExtractionModelId(modelId: string): void {
+    setConfiguredModelId(FACTCHECK_EXTRACTION_MODEL_KEY, modelId);
+}
+
+export function getFactCheckVerificationModelId(): string {
+    return getConfiguredModelId(FACTCHECK_VERIFICATION_MODEL_KEY, DEFAULT_VERIFICATION_MODEL.id);
+}
+
+export function setFactCheckVerificationModelId(modelId: string): void {
+    setConfiguredModelId(FACTCHECK_VERIFICATION_MODEL_KEY, modelId);
+}
+
+function resolveModelById(modelId: string | undefined, fallback: Model, availableModels: Model[]): Model {
+    if (!modelId) return fallback;
+    const fromAvailable = availableModels.find((m) => m.id === modelId);
+    if (fromAvailable) return fromAvailable;
+    const fromBuiltIn = MODELS.find((m) => m.id === modelId);
+    return fromBuiltIn || fallback;
+}
+
+export function resolveFactCheckModels(availableModels: Model[] = MODELS): { extraction: Model; verification: Model } {
+    const extraction = resolveModelById(getFactCheckExtractionModelId(), DEFAULT_EXTRACTION_MODEL, availableModels);
+    const verification = resolveModelById(getFactCheckVerificationModelId(), DEFAULT_VERIFICATION_MODEL, availableModels);
+    return { extraction, verification };
 }
 
 async function requestChatCompletions(payload: {
@@ -96,52 +258,39 @@ async function requestChatCompletions(payload: {
  */
 async function extractClaims(
     text: string,
+    extractionModel: Model,
     signal?: AbortSignal
 ): Promise<ClaimExtractionResult> {
-    const prompt = `Extract ALL verifiable claims from the following text, including both explicit facts AND implicit assertions. Look for:
+    const prompt = `Extract verifiable factual claims from this text.
 
-EXPLICIT FACTS:
-- Specific dates and timeframes
-- Names of people, organizations, places
-- Statistics and numbers
-- Historical events
-- Quotes attributed to people
-- Scientific or technical facts
+Rules:
+- Return ONLY objective claims that can be checked against public sources.
+- Exclude opinions, preferences, personal feelings, private experiences, and non-verifiable statements.
+- Rewrite each result into a short standalone statement.
+- If a sentence contains multiple factual assertions, split into separate statements.
 
-IMPLICIT ASSERTIONS (very important - these are often where misinformation hides):
-- Causal claims: "X causes Y", "X leads to Y", "X results in Y"
-- Frequency claims: "always", "never", "all the time", "everyone knows"
-- Effectiveness claims: "doesn't work", "is safe", "is dangerous", "proven to"
-- Comparative claims: "better than", "worse than", "more effective"
-- Conspiracy theories: unverified narratives about hidden agendas
-- Medical/health claims: claims about treatments, side effects, cures
-- Risk/benefit claims: assertions about outcomes or consequences
+Output format (JSON array only):
+[
+  {
+    "statement": "The Louvre has moved to Berlin.",
+    "category": "event",
+    "context": "Couldn't visit the Louvre because it has moved to Berlin.",
+    "verifiable": true
+  }
+]
 
-EXAMPLES of what to extract:
-- "vaccines cause autism" → Extract as causal/medical claim
-- "happens all the time" → Extract as frequency claim  
-- "this treatment doesn't work" → Extract as effectiveness claim
-- "X was born in Paris" → Extract as name/place claim
-- "the war started in 1914" → Extract as date/event claim
-
-For each claim, provide:
-1. The exact claim text (the specific assertion, may be a phrase or sentence)
-2. Category: causal, frequency, effectiveness, conspiracy, medical, date, statistic, name, place, event, quote, or other
-3. Brief surrounding context (a few words for context)
+Valid categories: causal, frequency, effectiveness, conspiracy, medical, date, statistic, name, place, event, quote, other.
 
 Text to analyze:
 """
 ${text.substring(0, 5000)}
 """
 
-Respond with ONLY a valid JSON array. Extract ALL verifiable assertions, including controversial ones:
-[{"claim": "example claim", "category": "causal", "context": "surrounding words"}]
-
-If no verifiable claims are found, respond with: []`;
+If no verifiable claims exist, return: []`;
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const data = await requestChatCompletions({
-        model: EXTRACTION_MODEL.id,
+        model: extractionModel.id,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.1,
     }, signal, false);
@@ -156,17 +305,8 @@ If no verifiable claims are found, respond with: []`;
     try {
         const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]) as Array<{
-                claim?: string;
-                category?: string;
-                context?: string;
-            }>;
-            claims = parsed.map((c, i: number) => ({
-                id: `claim-${i}`,
-                claim: c.claim || '',
-                category: (c.category || 'other') as FactClaimCategory,
-                context: c.context || ''
-            }));
+            const parsed = JSON.parse(jsonMatch[0]) as RawFactClaim[];
+            claims = filterAndNormalizeClaims(parsed);
         }
     } catch (e) {
         console.warn('Failed to parse claims JSON:', e);
@@ -180,6 +320,7 @@ If no verifiable claims are found, respond with: []`;
  */
 async function verifySingleClaim(
     claim: FactClaim,
+    verificationModel: Model,
     signal?: AbortSignal
 ): Promise<VerificationApiResult> {
     const prompt = `Verify this claim using current, reliable web sources:
@@ -233,7 +374,7 @@ Valid confidence values: high, medium, low`;
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const data = await requestChatCompletions({
-        model: VERIFICATION_MODEL.id,
+        model: verificationModel.id,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
     }, signal, true);
@@ -375,7 +516,8 @@ function generateReport(verifications: VerificationResult[]): string {
 export async function runFactCheck(
     text: string,
     onProgress?: (stage: string, percent: number) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    modelOptions?: FactCheckModelOptions
 ): Promise<FactCheckResponse> {
     if (!window.electron?.openRouter?.chatCompletions && !OPENROUTER_API_KEY) {
         return {
@@ -387,14 +529,22 @@ export async function runFactCheck(
     }
 
     const totalUsage = { inputTokens: 0, outputTokens: 0 };
+    const extractionUsage = { inputTokens: 0, outputTokens: 0 };
+    const verificationUsage = { inputTokens: 0, outputTokens: 0 };
+    const activeModels = {
+        extraction: modelOptions?.extractionModel || resolveFactCheckModels().extraction,
+        verification: modelOptions?.verificationModel || resolveFactCheckModels().verification
+    };
 
     try {
         // Stage 1: Extract claims
         onProgress?.('Extracting factual claims...', 10);
 
-        const { claims, usage: extractionUsage } = await extractClaims(text, signal);
-        totalUsage.inputTokens += extractionUsage.inputTokens;
-        totalUsage.outputTokens += extractionUsage.outputTokens;
+        const { claims, usage: extractionStageUsage } = await extractClaims(text, activeModels.extraction, signal);
+        extractionUsage.inputTokens += extractionStageUsage.inputTokens;
+        extractionUsage.outputTokens += extractionStageUsage.outputTokens;
+        totalUsage.inputTokens += extractionStageUsage.inputTokens;
+        totalUsage.outputTokens += extractionStageUsage.outputTokens;
 
         if (claims.length === 0) {
             return {
@@ -404,6 +554,11 @@ export async function runFactCheck(
                     report: '📊 Fact Check Report\n══════════════════\n\nNo factual claims found to verify in the text.'
                 },
                 usage: totalUsage,
+                stageUsage: {
+                    extraction: extractionUsage,
+                    verification: verificationUsage
+                },
+                models: activeModels,
                 isError: false
             };
         }
@@ -428,7 +583,9 @@ export async function runFactCheck(
             onProgress?.(`Verifying: "${claim.claim.substring(0, 40)}..."`, progress);
 
             try {
-                const { result, usage: verifyUsage } = await verifySingleClaim(claim, signal);
+                const { result, usage: verifyUsage } = await verifySingleClaim(claim, activeModels.verification, signal);
+                verificationUsage.inputTokens += verifyUsage.inputTokens;
+                verificationUsage.outputTokens += verifyUsage.outputTokens;
                 totalUsage.inputTokens += verifyUsage.inputTokens;
                 totalUsage.outputTokens += verifyUsage.outputTokens;
                 verifications.push(result);
@@ -465,6 +622,11 @@ export async function runFactCheck(
         return {
             session: { claims, verifications, report },
             usage: totalUsage,
+            stageUsage: {
+                extraction: extractionUsage,
+                verification: verificationUsage
+            },
+            models: activeModels,
             isError: false
         };
 
@@ -491,8 +653,5 @@ export async function runFactCheck(
  * Get the models used for fact-checking (for cost display)
  */
 export function getFactCheckModels() {
-    return {
-        extraction: EXTRACTION_MODEL,
-        verification: VERIFICATION_MODEL
-    };
+    return resolveFactCheckModels(MODELS);
 }

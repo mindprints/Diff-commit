@@ -12,9 +12,9 @@ export const HelpModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200 dark:border-slate-700">
         <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-slate-800">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">How to use</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Instructions</h3>
           <button
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
@@ -23,7 +23,7 @@ export const HelpModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(85vh-132px)]">
           <section>
             <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-200 uppercase tracking-wide mb-3">Understanding the Colors</h4>
             <div className="space-y-3">
@@ -70,6 +70,60 @@ export const HelpModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <li>Edit the text directly in the <strong>Committed Preview</strong> panel to make final manual tweaks.</li>
               <li>Use <strong>AI Edit</strong> to polish, fix grammar, or fact-check your text.</li>
             </ul>
+          </section>
+
+          <section>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-200 uppercase tracking-wide mb-3">Slash Command Manual</h4>
+            <div className="space-y-3 text-sm text-gray-700 dark:text-slate-300">
+              <p>Use slash commands in the Prompt Panel for deterministic routing.</p>
+              <div className="rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 dark:bg-slate-800/60">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Command</th>
+                      <th className="px-3 py-2 font-semibold">Behavior</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/factcheck</td>
+                      <td className="px-3 py-2">Runs fact-check pipeline and opens analysis report panel.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/review [optional focus]</td>
+                      <td className="px-3 py-2">Generates a critical review report in the analysis viewer.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/critique [optional focus]</td>
+                      <td className="px-3 py-2">Alias of <span className="font-mono">/review</span>.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/analyze [instruction]</td>
+                      <td className="px-3 py-2">Runs general analysis and opens report panel.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/edit [instruction]</td>
+                      <td className="px-3 py-2">Edits source text and returns rewrite to diff/editor flow.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/rewrite [instruction]</td>
+                      <td className="px-3 py-2">Rewrite-oriented edit mode.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/compress [optional focus]</td>
+                      <td className="px-3 py-2">Shortens text while preserving core meaning and tone.</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-mono">/expand [optional focus]</td>
+                      <td className="px-3 py-2">Expands text with additional detail while preserving intent.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Tip: use “Use latest analysis context” before <span className="font-mono">/edit</span> to apply review/fact-check findings.
+              </p>
+            </div>
           </section>
         </div>
 

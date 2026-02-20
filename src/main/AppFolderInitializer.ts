@@ -178,7 +178,7 @@ Created: ${new Date().toLocaleString()}
                 }
             } catch (err) {
                 // If it doesn't exist (ENOENT), we create it
-                if ((err as any).code === 'ENOENT') {
+                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
                     await fs.promises.mkdir(absolutePath, { recursive: true });
                     console.log(`Created folder: ${absolutePath}`);
                     return { success: true, path: absolutePath };

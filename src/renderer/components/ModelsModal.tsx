@@ -645,6 +645,7 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
                                 const isSelected = model.id === selectedModel.id;
                                 const isImageSelected = selectedImageModel?.id === model.id;
                                 const isImageCapable = supportsImageGeneration(model.modality, model.id, model.name, model.capabilities);
+                                const isSearchCapable = supportsSearchCapability(model.id, model.name, model.capabilities, model.supportedParams);
                                 const tierColor = getCostTierColor(model);
                                 const isRefreshing = refreshingId === model.id;
                                 const isPinging = pingingId === model.id;
@@ -718,6 +719,20 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
                                                     {supportsAudio(model.modality) && (
                                                         <Mic className="w-3.5 h-3.5 text-green-500" title="Audio" />
                                                     )}
+                                                    <span
+                                                        className={clsx(
+                                                            "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border",
+                                                            isSearchCapable
+                                                                ? "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700"
+                                                                : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700"
+                                                        )}
+                                                        title={isSearchCapable
+                                                            ? "Likely supports web/search capability"
+                                                            : "Search support is unclear; may fail with fact-check search mode"}
+                                                    >
+                                                        <Search className="w-2.5 h-2.5" />
+                                                        {isSearchCapable ? "Search" : "Search?"}
+                                                    </span>
                                                 </div>
                                                 <div className="text-xs text-gray-500 dark:text-slate-400">
                                                     {model.provider}
@@ -841,7 +856,8 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
                             <Star className="inline w-3 h-3 mx-1 text-amber-500" /> Text Default •
                             <Palette className="inline w-3 h-3 mx-1 text-pink-500" /> Image Default •
                             <Eye className="inline w-3 h-3 mx-1 text-purple-500" /> Vision •
-                            <Mic className="inline w-3 h-3 mx-1 text-green-500" /> Audio
+                            <Mic className="inline w-3 h-3 mx-1 text-green-500" /> Audio •
+                            <Search className="inline w-3 h-3 mx-1 text-cyan-500" /> Search
                         </p>
                     </div>
                 </div>

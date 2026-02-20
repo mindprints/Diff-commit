@@ -28,7 +28,7 @@ interface EditorContextType {
 
     // Scroll sync
     leftContainerRef: React.RefObject<HTMLDivElement>;
-    previewTextareaRef: React.RefObject<any>;
+    previewTextareaRef: React.RefObject<{ getTextarea: () => HTMLTextAreaElement | null }>;
     handleScrollSync: (source: 'left' | 'right') => void;
     isScrollSyncEnabled: boolean;
     setIsScrollSyncEnabled: (enabled: boolean) => void;
@@ -96,7 +96,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     } = useDiffState();
 
     const leftContainerRef = useRef<HTMLDivElement>(null);
-    const previewTextareaRef = useRef<any>(null);
+    const previewTextareaRef = useRef<{ getTextarea: () => HTMLTextAreaElement | null }>(null);
 
     const {
         isScrollSyncEnabled,

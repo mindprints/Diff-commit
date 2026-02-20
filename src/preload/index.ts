@@ -27,6 +27,8 @@ interface OpenRouterAPI {
         outputPrice: number;
         modality?: string;
         description?: string;
+        supportedParams?: string[];
+        capabilities?: string[];
     }>>;
     fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
     chatCompletions: (payload: {

@@ -3,21 +3,21 @@ import { useProjects } from '../hooks/useProjects';
 import { useCommitHistory } from '../hooks/useCommitHistory';
 import { useEditor } from './EditorContext';
 import { useUI } from './UIContext';
-import { TextCommit, ViewMode } from '../types';
+import { Project, TextCommit, ViewMode } from '../types';
 
 interface ProjectContextType {
     // useProjects
-    projects: any[];
-    currentProject: any;
-    loadProject: (id: string) => Promise<any>;
+    projects: Project[];
+    currentProject: Project | null;
+    loadProject: (id: string) => Promise<Project | null>;
     saveCurrentProject: (content: string) => Promise<void>;
-    createNewProject: (name: string, content: string) => Promise<any>;
-    handleLoadProject: (id: string) => Promise<any>;
-    handleCreateProject: (name: string) => Promise<any>;
+    createNewProject: (name: string, content: string) => Promise<Project>;
+    handleLoadProject: (id: string) => Promise<Project | null | undefined>;
+    handleCreateProject: (name: string) => Promise<Project>;
     deleteProject: (id: string) => Promise<void>;
-    renameProject: (id: string, newName: string) => Promise<any | null>;
+    renameProject: (id: string, newName: string) => Promise<Project | null>;
     openRepository: () => Promise<void>;
-    loadRepositoryByPath: (repoPath: string) => Promise<any | null>;
+    loadRepositoryByPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
     createRepository: () => Promise<void>;
     repositoryPath: string | null;
     getRepoHandle: () => FileSystemDirectoryHandle | null;
@@ -49,7 +49,7 @@ interface ProjectContextType {
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-    const { setOriginalText, setPreviewText, setModifiedText, resetDiffState, mode, setMode, originalText, previewText, performDiff } = useEditor();
+    const { setOriginalText, setPreviewText, setModifiedText, resetDiffState, setMode, originalText, previewText, performDiff } = useEditor();
     const { setShowProjectsPanel, setErrorMessage, isShiftHeld, setShowRepoPicker } = useUI();
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const lastLoadedProjectIdRef = useRef<string | null>(null);
@@ -101,7 +101,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const browserSaveCommits = useMemo(() => {
         if (!currentProject?.name) return undefined;
-        return async (commits: any[]) => {
+        return async (commits: TextCommit[]) => {
             const handle = getRepoHandle();
             if (handle && currentProject.name) {
                 const { saveProjectCommits } = await import('../services/browserFileSystem');
@@ -269,6 +269,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const isValidCommit = (obj: any): obj is TextCommit => {
                 return (
                     obj &&

@@ -1,4 +1,4 @@
-export const BOUNDARY_CHARS = /[\s.,;:!?'"()\[\]{}<>\/\\|@#$%^&*+=~`\-_\n\r\t]/;
+export const BOUNDARY_CHARS = /[\s.,;:!?'"()[\]{}/<>\\|@#$%^&*+=~`\-_\n\r\t]/;
 
 /**
  * Expand a selection range to the nearest word boundaries.

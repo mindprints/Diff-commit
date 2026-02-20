@@ -188,6 +188,8 @@ export function MenuBar() {
                 <MenuItem separator />
                 <MenuItem label="Fact Check" onClick={handleFactCheck} />
                 <MenuItem separator />
+                <MenuItem label="Slash Command Manual" onClick={() => setShowHelp(true)} />
+                <MenuItem separator />
                 <MenuItem label="Manage Prompts..." onClick={() => setShowPromptsModal(true)} />
                 <MenuItem label="Project Manager..." onClick={() => setShowProjectsPanel(true)} />
                 <MenuItem label="Model Manager..." onClick={() => setShowModelsModal(true)} />

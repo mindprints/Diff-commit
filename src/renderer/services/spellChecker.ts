@@ -15,9 +15,7 @@ let initPromise: Promise<void> | null = null;
 // Dictionary paths - handle both Electron (extraResources) and browser (relative path)
 function getDictionaryPath(filename: string): string {
     // In packaged Electron, dictionaries are in resourcesPath/dictionaries/
-    // @ts-ignore - window.electron is defined via preload
     if (typeof window !== 'undefined' && window.electron?.resourcesPath) {
-        // @ts-ignore
         return `file://${window.electron.resourcesPath}/dictionaries/${filename}`;
     }
     // In dev or browser, use relative path

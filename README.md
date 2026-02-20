@@ -12,11 +12,14 @@ Unlike generic chat interfaces, this tool is built for *merging*: it visualizes 
 *   **Split-Button Execution**: A dual-action button in the header allows you to either select a new active prompt or immediately execute the current one.
 *   **Integrated Prompt Panel**: Direct content generation and modification via custom instructions in the side panel.
 
-### 🛡️ Fact Checker (Perplexity)
-Verify claims with real-time web search.
-*   **Deep Extraction**: Identifies causal, statistical, and historical claims.
-*   **Verification**: Checks each claim against live web sources using Perplexity Sonar Pro.
-*   **Categorization**: Tags claims (e.g., 'Medical', 'Political', 'Statistical').
+### 🛡️ Fact Checker (Configurable Models + Search Modes)
+Verify claims with model-configurable extraction and verification.
+*   **Two-Stage Pipeline**: Extracts verifiable claims first, then verifies each claim independently.
+*   **Configurable Models**: Choose extraction and verification models from Settings.
+*   **Search Modes**: Run verification with `off`, `auto`, `online_suffix`, or `web_plugin` behavior.
+*   **Structured Report Output**: Fact-check results open in a dedicated analysis viewer instead of directly rewriting editor text.
+
+> See [docs/fact-checking-logic.md](docs/fact-checking-logic.md) for implementation details.
 
 ### 🔍 Multi-Panel Layout & Merge
 *   **3-Panel Workflow**: Editor, AI Prompt Library, and Diff View all side-by-side for maximum productivity.
@@ -69,6 +72,12 @@ Verify claims with real-time web search.
 *   **Context-Aware**: Include editor content as context for more relevant image generation.
 
 > See [docs/image-generation.md](docs/image-generation.md) for detailed documentation.
+
+### 📄 Analysis Results + Slash Commands
+*   **Analysis Viewer**: Fact checks and critical reviews render in a dedicated report panel.
+*   **Prompt Panel Slash Commands**: Deterministic command routing for analysis vs rewrite workflows.
+*   **Workflow**: Run `/factcheck`, `/review`, or `/analyze`, then apply outcomes via `/edit` with “Use latest analysis context”.
+*   **Built-in Manual**: Open `Tools -> Slash Command Manual` for in-app command docs.
 
 ### 🎨 Theme & Personalization
 *   **Dynamic Hue Slider**: Adjust the application's accent color in real-time with a compact hue slider (0-360°).

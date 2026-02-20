@@ -11,6 +11,8 @@ const STORAGE_KEY = 'diff-commit-models';
 export interface ExtendedModel extends Model {
     modality?: string;
     description?: string;
+    supportedParams?: string[];
+    capabilities?: string[];
     isImported?: boolean;
     // Benchmark data from Artificial Analysis
     intelligenceIndex?: number;
@@ -48,12 +50,14 @@ function parsedToExtended(parsed: ParsedModel): ExtendedModel {
         outputPrice: parsed.outputPrice,
         modality: parsed.modality,
         description: parsed.description,
+        supportedParams: parsed.supportedParams,
+        capabilities: parsed.capabilities,
         isImported: true,
     };
 }
 
 function seedToExtended(model: Model): ExtendedModel {
-    return { ...model, modality: 'text', isImported: false };
+    return { ...model, modality: 'text->text', isImported: false };
 }
 
 function loadModels(): ExtendedModel[] {

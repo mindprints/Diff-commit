@@ -38,6 +38,7 @@ export function EditorPanel() {
 
     const [justSaved, setJustSaved] = useState(false);
     const factCheckSearchMode = getFactCheckSearchMode();
+    const hasPendingAsyncOperations = pendingOperations.some((op) => op.status === 'pending');
 
     // Shift+Enter keyboard shortcut to commit with save
     useEffect(() => {
@@ -109,13 +110,13 @@ export function EditorPanel() {
                             variant="outline"
                             size="sm"
                             onClick={() => setShowPromptsModal(true)}
-                            disabled={isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0}
+                            disabled={isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations}
                             className={clsx(
                                 "gap-2 min-w-[8rem] justify-between",
-                                (isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && "opacity-60"
+                                (isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations) && "opacity-60"
                             )}
                         >
-                            {(isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && (
+                            {(isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations) && (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                             )}
                             <span className="truncate max-w-[100px]">
@@ -125,17 +126,17 @@ export function EditorPanel() {
                                         ? 'Checking...'
                                         : isGeneratingImage
                                             ? 'Generating...'
-                                            : pendingOperations.length > 0
+                                            : hasPendingAsyncOperations
                                                 ? 'Processing...'
                                                 : (activePrompt?.name || 'Select Prompt')}
                             </span>
-                            {!(isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && (
+                            {!(isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations) && (
                                 <svg className="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
                             )}
                         </Button>
-                        {(isPolishing || isFactChecking || isGeneratingImage || pendingOperations.length > 0) && (
+                        {(isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations) && (
                             <Button
                                 variant="outline"
                                 size="sm"

@@ -521,3 +521,33 @@ Important:
     }
 }
 
+/**
+ * Analysis-only execution for report-style outputs (no direct text replacement).
+ */
+export const runAnalysisInstruction = async (
+    text: string,
+    instruction: string,
+    model: Model,
+    signal?: AbortSignal
+): Promise<AIResponse> => {
+    const safeText = text.substring(0, 10000);
+    const systemInstruction = `You are a strict analysis assistant.
+Return analysis/report content only. Do not rewrite the source text into a corrected version.
+Use concise headings and bullet points where helpful.`;
+
+    const userContent = `Analyze the following text according to the instruction.
+
+Instruction:
+${instruction}
+
+Source text:
+"""
+${safeText}
+"""`;
+
+    return callOpenRouter(model, [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: userContent }
+    ], 0.2, undefined, signal);
+};
+
