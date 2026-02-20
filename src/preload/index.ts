@@ -37,7 +37,7 @@ interface OpenRouterAPI {
         temperature?: number;
         response_format?: unknown;
         generation_config?: unknown;
-        plugins?: Array<{ id: string; [key: string]: unknown }>;
+        plugins?: Array<{ id: string;[key: string]: unknown }>;
     }) => Promise<unknown>;
     chatCompletionsStart: (requestId: string, payload: {
         model: string;
@@ -45,7 +45,7 @@ interface OpenRouterAPI {
         temperature?: number;
         response_format?: unknown;
         generation_config?: unknown;
-        plugins?: Array<{ id: string; [key: string]: unknown }>;
+        plugins?: Array<{ id: string;[key: string]: unknown }>;
     }) => Promise<unknown>;
     chatCompletionsCancel: (requestId: string) => Promise<boolean>;
 }
@@ -86,7 +86,7 @@ export interface ElectronAPI {
     clearVersions: () => Promise<boolean>;
 
     // File Operations
-    saveFile: (content: string, defaultName?: string) => Promise<string | null>;
+    saveFile: (content: string, defaultName?: string, format?: 'md' | 'html' | 'txt') => Promise<string | null>;
     exportVersions: (commits: TextCommit[]) => Promise<string | null>;
     saveImage: (base64Data: string, defaultName: string) => Promise<string | null>;
 
@@ -121,7 +121,7 @@ export interface ElectronAPI {
 
     // Menu event listeners (from main process)
     onFileOpened: (callback: (content: string, path: string) => void) => () => void;
-    onRequestSave: (callback: () => void) => () => void;
+    onRequestSave: (callback: (format: 'md' | 'html' | 'txt') => void) => () => void;
     onRequestExportVersions: (callback: () => void) => () => void;
     onVersionsImported: (callback: (versions: TextCommit[]) => void) => () => void;
     onMenuUndo: (callback: () => void) => () => void;
@@ -186,7 +186,7 @@ const electronAPI: ElectronAPI = {
     clearVersions: () => ipcRenderer.invoke('clear-versions'),
 
     // File Operations
-    saveFile: (content: string, defaultName?: string) => ipcRenderer.invoke('save-file', content, defaultName),
+    saveFile: (content: string, defaultName?: string, format?: 'md' | 'html' | 'txt') => ipcRenderer.invoke('save-file', content, defaultName, format ?? 'md'),
     exportVersions: (commits: TextCommit[]) => ipcRenderer.invoke('export-versions', commits),
     saveImage: (base64Data: string, defaultName: string) => ipcRenderer.invoke('save-image', base64Data, defaultName),
 
@@ -236,7 +236,7 @@ const electronAPI: ElectronAPI = {
     onFileOpened: (callback: (content: string, path: string) => void) => {
         return subscribeIpcChannel(ipcRenderer, 'file-opened', callback);
     },
-    onRequestSave: (callback: () => void) => {
+    onRequestSave: (callback: (format: 'md' | 'html' | 'txt') => void) => {
         return subscribeIpcChannel(ipcRenderer, 'request-save', callback);
     },
     onRequestExportVersions: (callback: () => void) => {

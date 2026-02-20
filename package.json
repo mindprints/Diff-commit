@@ -54,6 +54,7 @@
     "dotenv": "^17.2.3",
     "electron-store": "^11.0.2",
     "lucide-react": "^0.555.0",
+    "mammoth": "^1.11.0",
     "markdown-to-txt": "^2.0.1",
     "marked": "^17.0.1",
     "react": "^19.2.0",

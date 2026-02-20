@@ -6,7 +6,7 @@ export default defineConfig({
     main: {
         build: {
             rollupOptions: {
-                external: ['electron-store', 'dotenv']
+                external: ['electron-store', 'dotenv', 'mammoth', 'marked', 'markdown-to-txt']
             }
         }
     },

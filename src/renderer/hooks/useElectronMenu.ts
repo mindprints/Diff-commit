@@ -34,10 +34,10 @@ export function useElectronMenu() {
             handleFileOpen(content);
         }));
 
-        unsubscribers.push(window.electron.onRequestSave(async () => {
+        unsubscribers.push(window.electron.onRequestSave(async (format) => {
             const textToSave = getSaveText();
             if (textToSave.trim()) {
-                await window.electron.saveFile(textToSave, 'document.txt');
+                await window.electron.saveFile(textToSave, 'document', format ?? 'md');
             }
         }));
 

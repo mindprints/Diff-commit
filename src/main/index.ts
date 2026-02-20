@@ -242,34 +242,65 @@ function createMenu() {
                     label: 'Import File...',
                     accelerator: 'CmdOrCtrl+O',
                     click: async () => {
-                        const result = await dialog.showOpenDialog(mainWindow, {
+                        const openResult = await dialog.showOpenDialog(mainWindow, {
                             properties: ['openFile'],
                             filters: [
-                                { name: 'Supported Files', extensions: ['txt', 'md', 'html', 'htm', 'json'] },
+                                { name: 'Supported Files', extensions: ['txt', 'md', 'docx', 'html', 'htm'] },
+                                { name: 'Word Documents (.docx)', extensions: ['docx'] },
                                 { name: 'HTML Files', extensions: ['html', 'htm'] },
-                                { name: 'Text Files', extensions: ['txt', 'md'] },
+                                { name: 'Text / Markdown', extensions: ['txt', 'md'] },
                                 { name: 'All Files', extensions: ['*'] }
                             ]
                         });
-                        if (!result.canceled && result.filePaths.length > 0) {
-                            const filePath = result.filePaths[0];
-                            let content = fs.readFileSync(filePath, 'utf-8');
-
-                            // Convert HTML to Markdown if needed
+                        if (!openResult.canceled && openResult.filePaths.length > 0) {
+                            const filePath = openResult.filePaths[0];
                             const ext = path.extname(filePath).toLowerCase();
-                            if (ext === '.html' || ext === '.htm') {
+                            let content = '';
+
+                            if (ext === '.docx') {
+                                // DOCX → HTML (mammoth) → Markdown (Turndown)
                                 try {
+                                    // mammoth is CJS — access via .default when imported as ESM
+                                    const mammothMod = await import('mammoth');
+                                    const mammoth = (mammothMod as unknown as { default: typeof mammothMod }).default ?? mammothMod;
+                                    const { default: TurndownService } = await import('turndown');
+                                    const mammothResult = await mammoth.convertToHtml({ path: filePath });
+                                    const turndown = new TurndownService({
+                                        headingStyle: 'atx',
+                                        codeBlockStyle: 'fenced',
+                                        bulletListMarker: '-',
+                                        strongDelimiter: '**',
+                                        emDelimiter: '*',
+                                    });
+                                    content = turndown.turndown(mammothResult.value);
+                                    if (mammothResult.messages.length > 0) {
+                                        console.warn('[Import DOCX] Mammoth warnings:', mammothResult.messages);
+                                    }
+                                } catch (e) {
+                                    console.error('[Import DOCX] Failed:', e);
+                                    dialog.showErrorBox('Import Failed', 'Could not read the Word document. The file may be corrupted or an unsupported variant.');
+                                    return;
+                                }
+                            } else if (ext === '.html' || ext === '.htm') {
+                                // HTML → Markdown (Turndown)
+                                try {
+                                    const rawHtml = fs.readFileSync(filePath, 'utf-8');
                                     const { default: TurndownService } = await import('turndown');
                                     const turndown = new TurndownService({
                                         headingStyle: 'atx',
                                         codeBlockStyle: 'fenced',
-                                        bulletListMarker: '-'
+                                        bulletListMarker: '-',
+                                        strongDelimiter: '**',
+                                        emDelimiter: '*',
                                     });
-                                    content = turndown.turndown(content);
+                                    content = turndown.turndown(rawHtml);
                                 } catch (e) {
-                                    console.error('Failed to convert HTML to Markdown:', e);
-                                    // Fall back to raw content if conversion fails
+                                    console.error('[Import HTML] Failed:', e);
+                                    content = fs.readFileSync(filePath, 'utf-8');
                                 }
+                            } else {
+                                // Plain text / Markdown — pass through
+                                content = fs.readFileSync(filePath, 'utf-8');
                             }
 
                             sendToRenderer('file-opened', content, filePath);
@@ -277,11 +308,22 @@ function createMenu() {
                     }
                 },
                 {
-                    label: 'Save Preview As...',
+                    label: 'Export Preview As',
                     accelerator: 'CmdOrCtrl+S',
-                    click: async () => {
-                        sendToRenderer('request-save');
-                    }
+                    submenu: [
+                        {
+                            label: 'Markdown (.md)...',
+                            click: () => sendToRenderer('request-save', 'md')
+                        },
+                        {
+                            label: 'HTML (.html)...',
+                            click: () => sendToRenderer('request-save', 'html')
+                        },
+                        {
+                            label: 'Plain Text (.txt)...',
+                            click: () => sendToRenderer('request-save', 'txt')
+                        },
+                    ]
                 },
                 {
                     label: 'Save Project...',
@@ -552,19 +594,75 @@ app.whenReady().then(async () => {
         return true;
     });
 
-    // File save handler
-    ipcMain.handle('save-file', async (event, content, defaultName) => {
+    // File save handler — format-aware export.
+    // format argument ('md' | 'html' | 'txt') is supplied by the submenu click.
+    // The extension is pre-filled in defaultPath and appended if absent after dialog.
+    ipcMain.handle('save-file', async (event, content, defaultName, format: 'md' | 'html' | 'txt' = 'md') => {
+        const formatExt = format === 'html' ? 'html' : format === 'txt' ? 'txt' : 'md';
+        const baseName = (defaultName as string | undefined)?.replace(/\.[^.]+$/, '') || 'untitled';
+        const defaultPath = `${baseName}.${formatExt}`;
+
+        const formatFilters: Record<string, { name: string; extensions: string[] }> = {
+            md: { name: 'Markdown', extensions: ['md'] },
+            html: { name: 'HTML', extensions: ['html'] },
+            txt: { name: 'Plain Text', extensions: ['txt'] },
+        };
+
         const result = await dialog.showSaveDialog(mainWindow, {
-            defaultPath: defaultName || 'untitled.txt',
+            defaultPath,
             filters: [
-                { name: 'Text Files', extensions: ['txt'] },
-                { name: 'Markdown', extensions: ['md'] },
+                formatFilters[formatExt],
                 { name: 'All Files', extensions: ['*'] }
             ]
         });
+
         if (!result.canceled && result.filePath) {
-            fs.writeFileSync(result.filePath, content, 'utf-8');
-            return result.filePath;
+            // Ensure the correct extension is present (Windows doesn't always add it)
+            let savePath = result.filePath;
+            if (!path.extname(savePath)) {
+                savePath = `${savePath}.${formatExt}`;
+            }
+
+            let output = content as string;
+            const ext = path.extname(savePath).toLowerCase();
+
+            if (ext === '.html') {
+                try {
+                    const { marked } = await import('marked');
+                    const body = await marked(output);
+                    output = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Export</title>
+  <style>
+    body { font-family: Georgia, serif; max-width: 720px; margin: 3rem auto; line-height: 1.7; color: #222; }
+    h1,h2,h3 { line-height: 1.3; margin-top: 2rem; }
+    strong { font-weight: 700; }
+    em { font-style: italic; }
+    p { margin: 1em 0; }
+  </style>
+</head>
+<body>
+${body}
+</body>
+</html>`;
+                } catch (e) {
+                    console.error('[Export HTML] marked failed:', e);
+                }
+            } else if (ext === '.txt') {
+                try {
+                    const { markdownToTxt } = await import('markdown-to-txt');
+                    output = markdownToTxt(output);
+                } catch (e) {
+                    console.error('[Export TXT] markdown-to-txt failed:', e);
+                }
+            }
+            // .md and everything else: write as-is
+
+            fs.writeFileSync(savePath, output, 'utf-8');
+            return savePath;
         }
         return null;
     });
@@ -1444,7 +1542,7 @@ app.whenReady().then(async () => {
             temperature?: number;
             response_format?: unknown;
             generation_config?: unknown;
-            plugins?: Array<{ id: string; [key: string]: unknown }>;
+            plugins?: Array<{ id: string;[key: string]: unknown }>;
         },
         controller?: AbortController
     ): Promise<unknown> {
@@ -1605,7 +1703,7 @@ app.whenReady().then(async () => {
         temperature?: number;
         response_format?: unknown;
         generation_config?: unknown;
-        plugins?: Array<{ id: string; [key: string]: unknown }>;
+        plugins?: Array<{ id: string;[key: string]: unknown }>;
     }) => executeOpenRouterChatCompletion(payload));
 
     ipcMain.handle('openrouter:chat-completions-start', async (_event, requestId: string, payload: {
@@ -1614,7 +1712,7 @@ app.whenReady().then(async () => {
         temperature?: number;
         response_format?: unknown;
         generation_config?: unknown;
-        plugins?: Array<{ id: string; [key: string]: unknown }>;
+        plugins?: Array<{ id: string;[key: string]: unknown }>;
     }) => {
         if (!requestId || typeof requestId !== 'string') {
             throw new Error('Invalid request ID');

@@ -21,6 +21,94 @@ interface PromptEditSession {
 // Separator used to delimit prompt sections in the editor
 const SECTION_SEPARATOR = '\n\n════════════════════════════════\n\n';
 
+/**
+ * Wrap the textarea's current selection with a prefix/suffix marker pair (e.g. **bold**).
+ *
+ * Key whitespace rule (CommonMark §6.2): a right-flanking delimiter run cannot be
+ * preceded by Unicode whitespace. So `*Jill *` is NOT italic — the space before the
+ * closing `*` disqualifies it. We therefore strip leading/trailing whitespace from the
+ * selected text and place it OUTSIDE the markers:
+ *   selection "Jill "  →  *Jill* (trailing space moved outside)
+ *
+ * If nothing is selected, the markers are inserted at the cursor with the cursor
+ * positioned between them, ready to type.
+ *
+ * Directly mutates the DOM value so the cursor/selection position is preserved, then
+ * calls onChangeValue to sync React controlled state.
+ */
+function wrapSelection(
+    textarea: HTMLTextAreaElement,
+    marker: string,
+    onChangeValue: (v: string) => void
+): void {
+    const { selectionStart: start, selectionEnd: end, value } = textarea;
+    const selected = value.slice(start, end);
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+
+    if (selected.length === 0) {
+        // No selection: insert paired markers and place cursor between them.
+        // Toggle check: if cursor is already sitting between two markers, remove them.
+        if (before.endsWith(marker) && after.startsWith(marker)) {
+            const newValue =
+                value.slice(0, start - marker.length) +
+                value.slice(end + marker.length);
+            textarea.value = newValue;
+            textarea.selectionStart = start - marker.length;
+            textarea.selectionEnd = start - marker.length;
+            onChangeValue(newValue);
+            return;
+        }
+        const newValue = before + marker + marker + after;
+        textarea.value = newValue;
+        textarea.selectionStart = start + marker.length;
+        textarea.selectionEnd = start + marker.length;
+        onChangeValue(newValue);
+        return;
+    }
+
+    // Strip leading/trailing whitespace from the selection so the markers are
+    // always adjacent to non-whitespace characters (required by CommonMark §6.2).
+    const leadingSpace = selected.match(/^\s*/)?.[0] ?? '';
+    const trailingSpace = selected.match(/\s*$/)?.[0] ?? '';
+    const inner = selected.slice(
+        leadingSpace.length,
+        selected.length - trailingSpace.length
+    );
+
+    if (inner.length === 0) {
+        // Selection is only whitespace — nothing meaningful to wrap, ignore.
+        return;
+    }
+
+    // Toggle: check if the trimmed inner text is already surrounded by markers.
+    const innerStart = start + leadingSpace.length;
+    const innerEnd = end - trailingSpace.length;
+    const charsBefore = value.slice(0, innerStart);
+    const charsAfter = value.slice(innerEnd);
+    if (charsBefore.endsWith(marker) && charsAfter.startsWith(marker)) {
+        // Unwrap: remove the markers, keep the surrounding whitespace in place.
+        const newValue =
+            value.slice(0, innerStart - marker.length) +
+            leadingSpace + inner + trailingSpace +
+            value.slice(innerEnd + marker.length);
+        textarea.value = newValue;
+        textarea.selectionStart = start;
+        textarea.selectionEnd = end - marker.length * 2;
+        onChangeValue(newValue);
+        return;
+    }
+
+    // Wrap: leadingSpace + *inner* + trailingSpace
+    const newValue =
+        before + leadingSpace + marker + inner + marker + trailingSpace + after;
+    textarea.value = newValue;
+    // Keep the visible selection spanning the wrapped inner text.
+    textarea.selectionStart = innerStart + marker.length;
+    textarea.selectionEnd = innerEnd + marker.length;
+    onChangeValue(newValue);
+}
+
 function formatPromptForEditor(prompt: AIPrompt): string {
     return `SYSTEM INSTRUCTION:\n${prompt.systemInstruction}${SECTION_SEPARATOR}TASK:\n${prompt.promptTask}`;
 }
@@ -154,9 +242,23 @@ export function EditorPanel() {
         setPromptEditSession(null);
     }, [promptEditSession, setPreviewText, setOriginalText, setModifiedText, resetDiffState]);
 
-    // Shift+Enter keyboard shortcut to commit with save
+    // Shift+Enter / Escape / Ctrl+B / Ctrl+I keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Ctrl+B — bold, Ctrl+I — italic (only when main editor textarea is focused)
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'b' || e.key === 'i')) {
+                const textarea = previewTextareaRef.current?.getTextarea();
+                if (textarea && document.activeElement === textarea) {
+                    e.preventDefault();
+                    // Use ** for bold, * for italic.
+                    // We use * (not _) for italic because * works unconditionally per
+                    // CommonMark — _ requires alphanumeric-free word boundaries.
+                    const marker = e.key === 'b' ? '**' : '*';
+                    wrapSelection(textarea, marker, setPreviewText);
+                }
+                return;
+            }
+
             // Shift+Enter to save commit (same as Shift+Click)
             if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.altKey) {
                 // Only trigger if not in an input/textarea that needs Shift+Enter
@@ -188,7 +290,7 @@ export function EditorPanel() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleCommitClick, previewText, promptEditSession, handleSavePromptEdit, handleCancelPromptEdit]);
+    }, [handleCommitClick, previewText, previewTextareaRef, setPreviewText, promptEditSession, handleSavePromptEdit, handleCancelPromptEdit]);
 
     // Wrap handleCommitClick to add blue flash animation on successful save
     const handleCommitWithFlash = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {

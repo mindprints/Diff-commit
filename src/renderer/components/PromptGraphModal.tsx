@@ -136,7 +136,6 @@ export function PromptGraphModal({
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string } | null>(null);
-    const [isEditing, setIsEditing] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [formState, setFormState] = useState<PromptFormState>(EMPTY_FORM);
     const [isSaving, setIsSaving] = useState(false);
@@ -177,7 +176,6 @@ export function PromptGraphModal({
         );
     }, [prompts, searchTerm]);
 
-    const selectedPrompt = selectedId ? promptsById.get(selectedId) || null : null;
 
     useEffect(() => {
         if (!isOpen) return;
@@ -192,7 +190,6 @@ export function PromptGraphModal({
         setOffset({ x: 0, y: 0 });
         setSelectedId(null);
         setHoveredId(null);
-        setIsEditing(false);
         setIsCreating(false);
         setFormState(EMPTY_FORM);
     }, [isOpen, prompts, promptsById]);
@@ -311,12 +308,12 @@ export function PromptGraphModal({
 
     const handleStartCreate = useCallback(() => {
         setIsCreating(true);
-        setIsEditing(false);
         setSelectedId(null);
         setFormState(EMPTY_FORM);
     }, []);
 
     const handleSave = useCallback(async () => {
+        if (!isCreating) return;
         const payload = {
             name: formState.name.trim(),
             systemInstruction: formState.systemInstruction.trim(),
@@ -328,31 +325,19 @@ export function PromptGraphModal({
 
         setIsSaving(true);
         try {
-            if (isCreating) {
-                await onCreatePrompt(payload);
-                setIsCreating(false);
-                setFormState(EMPTY_FORM);
-                return;
-            }
-
-            if (isEditing && selectedPrompt) {
-                await onUpdatePrompt(selectedPrompt.id, payload);
-                setIsEditing(false);
-                setFormState(EMPTY_FORM);
-            }
+            await onCreatePrompt(payload);
+            setIsCreating(false);
+            setFormState(EMPTY_FORM);
         } finally {
             setIsSaving(false);
         }
-    }, [formState, isCreating, isEditing, onCreatePrompt, onUpdatePrompt, selectedPrompt]);
+    }, [formState, isCreating, onCreatePrompt]);
 
     const handleDelete = useCallback(async (prompt: AIPrompt) => {
         if (prompt.isBuiltIn) return;
         if (!confirm(`Delete prompt "${prompt.name}"?`)) return;
         await onDeletePrompt(prompt.id);
-        if (selectedId === prompt.id) {
-            setSelectedId(null);
-            setIsEditing(false);
-        }
+        if (selectedId === prompt.id) setSelectedId(null);
     }, [onDeletePrompt, selectedId]);
 
     const handleReset = useCallback(async (prompt: AIPrompt) => {
@@ -594,18 +579,12 @@ export function PromptGraphModal({
                 </div>
             </div>
 
-            {(isCreating || isEditing) && (
+            {isCreating && (
                 <div className="fixed left-6 bottom-6 z-50 w-[min(560px,calc(100vw-3rem))] max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            {isCreating ? 'Create Prompt' : `Edit Prompt${selectedPrompt ? `: ${selectedPrompt.name}` : ''}`}
-                        </h3>
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Create Prompt</h3>
                         <button
-                            onClick={() => {
-                                setIsCreating(false);
-                                setIsEditing(false);
-                                setFormState(EMPTY_FORM);
-                            }}
+                            onClick={() => { setIsCreating(false); setFormState(EMPTY_FORM); }}
                             className="text-xs text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
                         >
                             Close
@@ -660,11 +639,7 @@ export function PromptGraphModal({
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                                setIsCreating(false);
-                                setIsEditing(false);
-                                setFormState(EMPTY_FORM);
-                            }}
+                            onClick={() => { setIsCreating(false); setFormState(EMPTY_FORM); }}
                         >
                             Cancel
                         </Button>
@@ -676,7 +651,7 @@ export function PromptGraphModal({
                             disabled={!formState.name.trim() || !formState.systemInstruction.trim() || !formState.promptTask.trim()}
                             icon={<Check className="w-3 h-3" />}
                         >
-                            {isCreating ? 'Create' : 'Save'}
+                            Create
                         </Button>
                     </div>
                 </div>

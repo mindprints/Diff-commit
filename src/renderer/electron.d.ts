@@ -29,7 +29,7 @@ export interface IElectronAPI {
     deleteProject?: (id: string) => Promise<boolean>;
 
     // File Operations
-    saveFile: (content: string, defaultName?: string) => Promise<string | null>;
+    saveFile: (content: string, defaultName?: string, format?: 'md' | 'html' | 'txt') => Promise<string | null>;
     exportVersions: (versions: TextCommit[]) => Promise<string | null>;
 
     /**
@@ -139,7 +139,7 @@ export interface IElectronAPI {
             temperature?: number;
             response_format?: unknown;
             generation_config?: unknown;
-            plugins?: Array<{ id: string; [key: string]: unknown }>;
+            plugins?: Array<{ id: string;[key: string]: unknown }>;
         }) => Promise<unknown>;
         chatCompletionsStart?: (requestId: string, payload: {
             model: string;
@@ -147,14 +147,14 @@ export interface IElectronAPI {
             temperature?: number;
             response_format?: unknown;
             generation_config?: unknown;
-            plugins?: Array<{ id: string; [key: string]: unknown }>;
+            plugins?: Array<{ id: string;[key: string]: unknown }>;
         }) => Promise<unknown>;
         chatCompletionsCancel?: (requestId: string) => Promise<boolean>;
     };
 
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => () => void;
-    onRequestSave: (callback: () => void) => () => void;
+    onRequestSave: (callback: (format: 'md' | 'html' | 'txt') => void) => () => void;
     onRequestExportVersions: (callback: () => void) => () => void;
     onVersionsImported: (callback: (versions: TextCommit[]) => void) => () => void;
     onMenuUndo: (callback: () => void) => () => void;
