@@ -283,8 +283,8 @@ function createMenu() {
                                 }
                             } else if (ext === '.html' || ext === '.htm') {
                                 // HTML → Markdown (Turndown)
+                                const rawHtml = fs.readFileSync(filePath, 'utf-8');
                                 try {
-                                    const rawHtml = fs.readFileSync(filePath, 'utf-8');
                                     const { default: TurndownService } = await import('turndown');
                                     const turndown = new TurndownService({
                                         headingStyle: 'atx',
@@ -296,7 +296,7 @@ function createMenu() {
                                     content = turndown.turndown(rawHtml);
                                 } catch (e) {
                                     console.error('[Import HTML] Failed:', e);
-                                    content = fs.readFileSync(filePath, 'utf-8');
+                                    content = rawHtml;
                                 }
                             } else {
                                 // Plain text / Markdown — pass through
@@ -599,7 +599,10 @@ app.whenReady().then(async () => {
     // The extension is pre-filled in defaultPath and appended if absent after dialog.
     ipcMain.handle('save-file', async (event, content, defaultName, format: 'md' | 'html' | 'txt' = 'md') => {
         const formatExt = format === 'html' ? 'html' : format === 'txt' ? 'txt' : 'md';
-        const baseName = (defaultName as string | undefined)?.replace(/\.[^.]+$/, '') || 'untitled';
+        // Runtime type guard: only call .replace() when defaultName is genuinely a non-empty string.
+        const baseName = (typeof defaultName === 'string' && defaultName.length > 0)
+            ? defaultName.replace(/\.[^.]+$/, '')
+            : 'untitled';
         const defaultPath = `${baseName}.${formatExt}`;
 
         const formatFilters: Record<string, { name: string; extensions: string[] }> = {
@@ -650,6 +653,12 @@ ${body}
 </html>`;
                 } catch (e) {
                     console.error('[Export HTML] marked failed:', e);
+                    dialog.showErrorBox(
+                        'Export Failed',
+                        'Could not convert the document to HTML. The file was not saved.\n\n' +
+                        (e instanceof Error ? e.message : String(e))
+                    );
+                    return null;
                 }
             } else if (ext === '.txt') {
                 try {
@@ -657,6 +666,12 @@ ${body}
                     output = markdownToTxt(output);
                 } catch (e) {
                     console.error('[Export TXT] markdown-to-txt failed:', e);
+                    dialog.showErrorBox(
+                        'Export Failed',
+                        'Could not strip Markdown formatting for plain-text export. The file was not saved.\n\n' +
+                        (e instanceof Error ? e.message : String(e))
+                    );
+                    return null;
                 }
             }
             // .md and everything else: write as-is

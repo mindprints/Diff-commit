@@ -93,8 +93,16 @@ function wrapSelection(
             leadingSpace + inner + trailingSpace +
             value.slice(innerEnd + marker.length);
         textarea.value = newValue;
-        textarea.selectionStart = start;
-        textarea.selectionEnd = end - marker.length * 2;
+        // After removing both markers the text shifts left.
+        // Leading marker was at [innerStart-marker.length .. innerStart), so
+        // anything at or after that position moves left by marker.length.
+        // start >= innerStart - marker.length always (start = innerStart - leadingSpace.length),
+        // so selectionStart shifts left by (marker.length - leadingSpace.length).
+        const newLen = newValue.length;
+        const newSelStart = Math.max(0, Math.min(start - (marker.length - leadingSpace.length), newLen));
+        const newSelEnd = Math.max(0, Math.min(end - marker.length * 2, newLen));
+        textarea.selectionStart = newSelStart;
+        textarea.selectionEnd = newSelEnd;
         onChangeValue(newValue);
         return;
     }

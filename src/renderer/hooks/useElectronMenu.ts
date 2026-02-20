@@ -37,7 +37,7 @@ export function useElectronMenu() {
         unsubscribers.push(window.electron.onRequestSave(async (format) => {
             const textToSave = getSaveText();
             if (textToSave.trim()) {
-                await window.electron.saveFile(textToSave, 'document', format ?? 'md');
+                await window.electron.saveFile(textToSave, 'document', format || 'md');
             }
         }));
 

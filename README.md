@@ -183,6 +183,44 @@ To avoid confusion during development:
 
 ---
 
+## 📝 Changelog (v1.5.0)
+
+### New Features
+
+#### ✍️ Formatting Shortcuts
+*   **`Ctrl+B`** — Wraps selected text in `**...**` (bold). Pressing again unwraps.
+*   **`Ctrl+I`** — Wraps selected text in `*...*` (italic). Pressing again unwraps.
+*   **No selection**: Inserts the marker pair with the cursor between them, ready to type.
+*   Shortcuts only activate when the main editor textarea is focused.
+*   Uses `*` (not `_`) for italic: `*` renders at any text position; `_` silently fails adjacent to alphanumeric chars (CommonMark §6.2).
+*   Leading/trailing whitespace in the selection is moved **outside** the markers so the closing delimiter is never preceded by a space.
+
+#### 📥 Extended Import (`File → Import File...`)
+*   **DOCX** (`.docx`) — Converted via `mammoth` → HTML, then `turndown` → Markdown. Headings, bold, italic survive.
+*   **HTML** (`.html`, `.htm`) — Converted to Markdown via `turndown`.
+*   **Markdown & plain text** — Passed through unchanged.
+*   Import failures show a native error dialog.
+
+#### 📤 Format-Aware Export (`File → Export Preview As`)
+*   Submenu with three explicit format choices:
+    *   **Markdown (.md)** — Native format, saved as-is.
+    *   **HTML (.html)** — Rendered to a clean styled HTML document via `marked`.
+    *   **Plain Text (.txt)** — Markdown syntax stripped via `markdown-to-txt`.
+*   Correct extension is pre-filled in the save dialog and auto-appended if cleared.
+*   Conversion failures show a native error dialog and abort — no silently corrupt files.
+
+### Bug Fixes & Hardening
+*   `mammoth`, `marked`, `markdown-to-txt` added to Vite externals (prevents bundling failures).
+*   Mammoth CJS interop fixed: `(mammothMod.default ?? mammothMod)` used for API access.
+*   Variable shadowing in import handler (`result`) resolved to `openResult`/`mammothResult`.
+*   `rawHtml` hoisted outside `try` so the `catch` fallback is in scope.
+*   `save-file` IPC: `defaultName` validated with `typeof === 'string'` before `.replace()`.
+*   Export catch blocks: now show error dialog and return `null` instead of writing corrupt output.
+*   Unwrap cursor: `selectionStart` correctly shifted after marker removal.
+*   Format fallback: `??` → `||` to also catch empty-string formats.
+
+---
+
 ## 📝 Changelog (v1.4.0)
 
 ### New Features
