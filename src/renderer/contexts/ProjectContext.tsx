@@ -131,6 +131,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         handleCommit,
         handleDeleteCommit,
         handleClearAllCommits,
+        saveCommits,
     } = useCommitHistory({
         getCommitText,
         onAfterCommit,
@@ -191,28 +192,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
             // If draft content is empty, try to load the latest commit
             if (!contentToLoad.trim()) {
+                let projectCommits: TextCommit[] = [];
                 if (window.electron?.loadProjectCommits && project.path) {
                     try {
-                        const commits = await window.electron.loadProjectCommits(project.path);
-                        if (commits && commits.length > 0) {
-                            contentToLoad = commits[commits.length - 1].content;
-                        }
+                        projectCommits = await window.electron.loadProjectCommits(project.path);
                     } catch (e) {
                         console.warn('Failed to load commits for initial content:', e);
                     }
-                } else {
-                    const handle = getRepoHandle();
-                    if (handle && project.name) {
-                        try {
-                            const { loadProjectCommits } = await import('../services/browserFileSystem');
-                            const commits = await loadProjectCommits(handle, project.name);
-                            if (commits && commits.length > 0) {
-                                contentToLoad = commits[commits.length - 1].content;
-                            }
-                        } catch (e) {
-                            console.warn('Failed to load commits from browser FS:', e);
-                        }
+                } else if (browserLoadCommits) {
+                    try {
+                        projectCommits = await browserLoadCommits();
+                    } catch (e) {
+                        console.warn('Failed to load commits from browser FS:', e);
                     }
+                }
+
+                if (projectCommits.length > 0) {
+                    contentToLoad = projectCommits[projectCommits.length - 1].content;
                 }
             }
 
@@ -261,7 +257,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         URL.revokeObjectURL(url);
     }, [commits, currentProject]);
 
-    const handleImportCommits = useCallback((content: string) => {
+    const handleImportCommits = useCallback(async (content: string) => {
         try {
             const imported = JSON.parse(content);
             if (!Array.isArray(imported)) {
@@ -281,14 +277,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             };
 
             if (imported.every(isValidCommit)) {
-                setCommits(prev => [...prev, ...imported]);
+                const updatedCommits = [...commits, ...imported];
+                setCommits(updatedCommits);
+                await saveCommits(updatedCommits);
+                setShowProjectsPanel(false); // Close panel on success
             } else {
                 setErrorMessage('Failed to import commits: Invalid format');
             }
         } catch (e) {
             setErrorMessage('Failed to import commits: Invalid JSON');
         }
-    }, [setCommits, setErrorMessage]);
+    }, [commits, setCommits, saveCommits, setErrorMessage, setShowProjectsPanel]);
 
     const handleFileOpen = useCallback((content: string) => {
         setOriginalText(content);

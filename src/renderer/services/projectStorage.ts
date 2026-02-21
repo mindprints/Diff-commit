@@ -5,6 +5,12 @@ const REPO_STORAGE_KEY = 'diff-commit-repository';
 
 /**
  * Check if running in Electron with project APIs available.
+
+const STORAGE_KEY = 'diff-commit-projects';
+const REPO_STORAGE_KEY = 'diff-commit-repository';
+
+/**
+ * Check if running in Electron with project APIs available.
  */
 function hasElectronProjectAPI(): boolean {
     // Only check for new FS-based APIs
@@ -15,7 +21,7 @@ function hasElectronProjectAPI(): boolean {
  * Generate a dynamic project name based on current timestamp
  * Format: 'MMM DD HH.mm' (e.g., 'Jan 13 14.30')
  */
-function getFormattedTimestamp(): string {
+export function getFormattedTimestamp(): string {
     const now = new Date();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const month = months[now.getMonth()];
@@ -24,6 +30,16 @@ function getFormattedTimestamp(): string {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${month} ${day} ${hours}.${minutes}`;
 }
+
+/**
+ * Clear legacy localStorage data to prevent conflicts with the file-based system.
+ */
+export function clearLegacyStorage(): void {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(REPO_STORAGE_KEY);
+    localStorage.removeItem('diff-commit-commits');
+}
+
 
 /**
  * Browser repository storage for virtual repos in localStorage.

@@ -29,7 +29,6 @@ export function useCommitHistory({
 }: UseCommitHistoryOptions) {
     const [commits, setCommits] = useState<TextCommit[]>([]);
     const [showCommitHistory, setShowCommitHistory] = useState(false);
-    const [isLoaded, setIsLoaded] = useState(false);
 
     // Track current project to detect changes
     const currentProjectRef = useRef(currentProjectPath);
@@ -42,13 +41,11 @@ export function useCommitHistory({
         // Clear commits immediately when project changes
         if (projectChanged) {
             setCommits([]);
-            setIsLoaded(false);
         }
 
         // No project = no commits to load
         if (!currentProjectPath && !currentProjectName) {
             setCommits([]);
-            setIsLoaded(true);
             return;
         }
 
@@ -62,7 +59,6 @@ export function useCommitHistory({
                     console.error('Failed to load commits from Electron:', e);
                     setCommits([]);
                 }
-                setIsLoaded(true);
                 return;
             }
 
@@ -75,55 +71,50 @@ export function useCommitHistory({
                     console.warn('Failed to load commits from browser FS:', e);
                     setCommits([]);
                 }
-                setIsLoaded(true);
                 return;
             }
 
             // No storage available
             setCommits([]);
-            setIsLoaded(true);
         };
 
         loadCommits();
     }, [currentProjectPath, currentProjectName, browserLoadCommits]);
 
-    // Save commits when they change (and after initial load)
-    useEffect(() => {
-        // Don't save during initial load
-        if (!isLoaded) return;
-
+    /**
+     * Internal manual commit save function.
+     * Replaces the fragile useEffect-based save to prevent race conditions.
+     */
+    const saveCommits = useCallback(async (currentCommits: TextCommit[]) => {
         // Don't save if no project is selected
-        if (!currentProjectPath && !currentProjectName) return;
+        if (!currentProjectPath && !currentProjectName) return false;
 
-        // Don't save empty commits (handled by initial project creation)
-        if (commits.length === 0) return;
-
-        const saveCommits = async () => {
-            // Priority 1: Electron file system
-            if (currentProjectPath && window.electron?.saveProjectCommits) {
-                try {
-                    await window.electron.saveProjectCommits(currentProjectPath, commits);
-                } catch (e) {
-                    console.error('Failed to save commits to Electron:', e);
-                }
-                return;
+        // Priority 1: Electron file system
+        if (currentProjectPath && window.electron?.saveProjectCommits) {
+            try {
+                await window.electron.saveProjectCommits(currentProjectPath, currentCommits);
+                return true;
+            } catch (e) {
+                console.error('Failed to save commits to Electron:', e);
+                return false;
             }
+        }
 
-            // Priority 2: Browser file system
-            if (browserSaveCommits && currentProjectName) {
-                try {
-                    await browserSaveCommits(commits);
-                } catch (e) {
-                    console.warn('Failed to save commits to browser FS:', e);
-                }
-                return;
+        // Priority 2: Browser file system
+        if (browserSaveCommits && currentProjectName) {
+            try {
+                await browserSaveCommits(currentCommits);
+                return true;
+            } catch (e) {
+                console.warn('Failed to save commits to browser FS:', e);
+                return false;
             }
-        };
+        }
 
-        saveCommits();
-    }, [commits, currentProjectPath, currentProjectName, browserSaveCommits, isLoaded]);
+        return false;
+    }, [currentProjectPath, currentProjectName, browserSaveCommits]);
 
-    const handleCommit = useCallback(() => {
+    const handleCommit = useCallback(async () => {
         const textToCommit = getCommitText();
         if (!textToCommit.trim()) return;
 
@@ -140,31 +131,26 @@ export function useCommitHistory({
             timestamp: Date.now(),
         };
 
-        setCommits(prev => [...prev, newCommit]);
+        const updatedCommits = [...commits, newCommit];
+        setCommits(updatedCommits);
+
+        // Manual save
+        await saveCommits(updatedCommits);
 
         // Call the callback to let App handle any post-commit actions
         onAfterCommit?.(textToCommit);
-    }, [getCommitText, commits, onAfterCommit]);
+    }, [getCommitText, commits, onAfterCommit, saveCommits]);
 
-    const handleDeleteCommit = useCallback((commitId: string) => {
-        setCommits(prev => prev.filter(c => c.id !== commitId));
-    }, []);
+    const handleDeleteCommit = useCallback(async (commitId: string) => {
+        const updatedCommits = commits.filter(c => c.id !== commitId);
+        setCommits(updatedCommits);
+        await saveCommits(updatedCommits);
+    }, [commits, saveCommits]);
 
     const handleClearAllCommits = useCallback(async () => {
         setCommits([]);
-
-        // Clear in Electron file system
-        if (currentProjectPath && window.electron?.saveProjectCommits) {
-            await window.electron.saveProjectCommits(currentProjectPath, []);
-            return;
-        }
-
-        // Clear in browser file system
-        if (browserSaveCommits && currentProjectName) {
-            await browserSaveCommits([]);
-            return;
-        }
-    }, [currentProjectPath, currentProjectName, browserSaveCommits]);
+        await saveCommits([]);
+    }, [saveCommits]);
 
     return {
         commits,
@@ -174,5 +160,6 @@ export function useCommitHistory({
         handleCommit,
         handleDeleteCommit,
         handleClearAllCommits,
+        saveCommits,
     };
 }

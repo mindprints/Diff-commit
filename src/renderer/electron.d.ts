@@ -3,6 +3,7 @@ import { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit } from './typ
 
 export interface IElectronAPI {
     platform: string;
+    resourcesPath: string;
 
     // API Key management
     setApiKey: (provider: string, apiKey: string) => Promise<void>;
@@ -14,30 +15,13 @@ export interface IElectronAPI {
     getLogs: () => Promise<AILogEntry[]>;
     clearLogs: () => Promise<boolean>;
 
-    // Commit History
-    getVersions: () => Promise<TextCommit[]>;
-    saveVersions: (versions: TextCommit[]) => Promise<boolean>;
-    clearVersions: () => Promise<boolean>;
-
     // AI Prompts CRUD
-    getPrompts?: () => Promise<AIPrompt[]>;
-    savePrompts?: (prompts: AIPrompt[]) => Promise<boolean>;
-
-    // Projects (future Electron filesystem support)
-    getProjects?: () => Promise<Project[]>;
-    saveProject?: (project: Project) => Promise<boolean>;
-    deleteProject?: (id: string) => Promise<boolean>;
+    getPrompts: () => Promise<AIPrompt[]>;
+    savePrompts: (prompts: AIPrompt[]) => Promise<boolean>;
 
     // File Operations
     saveFile: (content: string, defaultName?: string, format?: 'md' | 'html' | 'txt') => Promise<string | null>;
     exportVersions: (versions: TextCommit[]) => Promise<string | null>;
-
-    /**
-     * Save a base64-encoded image to disk via save dialog
-     * @param base64Data - The image data (data URL or raw base64)
-     * @param defaultName - Default filename for the save dialog
-     * @returns The saved file path, or null if cancelled
-     */
     saveImage: (base64Data: string, defaultName: string) => Promise<string | null>;
 
     // Repository & Project System
@@ -51,16 +35,9 @@ export interface IElectronAPI {
     loadProjectContent: (path: string) => Promise<string>;
     loadProjectCommits: (path: string) => Promise<TextCommit[]>;
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
+    deleteProject: (projectPath: string) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
-    renameProject: (projectPath: string, newName: string) => Promise<{
-        id: string;
-        name: string;
-        content: string;
-        createdAt: number;
-        updatedAt: number;
-        path: string;
-        repositoryPath: string;
-    } | null>;
+    renameProject: (projectPath: string, newName: string) => Promise<Project | null>;
     loadGraphData: (repoPath: string) => Promise<{
         nodes: Array<{ id: string; x: number; y: number }>;
         edges: Array<{ from: string; to: string }>;
@@ -89,49 +66,18 @@ export interface IElectronAPI {
 
     /**
      * OpenRouter API (secure - key stays in main process)
-     * 
-     * @remarks
-     * **Pricing Precision Note**: The `inputPrice` and `outputPrice` fields use JavaScript's
-     * `number` type. While acceptable for display and comparison, be aware that IEEE 754
-     * double-precision floats can introduce rounding errors in financial calculations.
-     * 
-     * OpenRouter returns pricing as strings (e.g., "0.0000015"), which we convert to numbers
-     * after multiplying by 1,000,000 for USD per 1M tokens. For precise cost calculations,
-     * consider using a decimal library or converting to integer micro-cents.
-     * 
-     * **Error Cases**: Promises may reject if:
-     * - API key is not configured (OPENROUTER_API_KEY env var missing)
-     * - Network timeout (30 second limit)
-     * - OpenRouter API returns non-2xx status
      */
     openRouter: {
-        /**
-         * Fetch all available models from OpenRouter
-         * @returns Array of model metadata with pricing
-         */
         fetchModels: () => Promise<Array<{
-            /** Unique model identifier (e.g., "anthropic/claude-3.5-sonnet") */
             id: string;
-            /** Human-readable model name */
             name: string;
-            /** Provider name (e.g., "Anthropic", "OpenAI") */
             provider: string;
-            /** Maximum context window in tokens */
             contextWindow: number;
-            /** Input price in USD per 1M tokens (converted from per-token rate) */
             inputPrice: number;
-            /** Output price in USD per 1M tokens (converted from per-token rate) */
             outputPrice: number;
-            /** Model modality (e.g., "text", "text+image") */
             modality?: string;
-            /** Model description */
             description?: string;
         }>>;
-        /**
-         * Fetch current pricing for a specific model
-         * @param modelId - The model ID to fetch pricing for
-         * @returns Current input and output prices in USD per 1M tokens
-         */
         fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
         chatCompletions: (payload: {
             model: string;
@@ -181,6 +127,13 @@ export interface IElectronAPI {
     onMenuToolsProjects: (callback: () => void) => () => void;
     onMenuToolsModels: (callback: () => void) => () => void;
     onMenuToolsSettings?: (callback: () => void) => () => void;
+
+    // Folder & Workspace Paths
+    getWorkspacePath: () => Promise<string>;
+    getReposPath: () => Promise<string>;
+    setCustomWorkspace: (customPath: string) => Promise<{ success: boolean; paths: string[]; error?: string }>;
+    createFolderAtPath: (folderPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+    loadRepositoryAtPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
 }
 
 declare global {

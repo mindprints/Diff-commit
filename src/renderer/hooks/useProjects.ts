@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Project } from '../types';
 import * as projectStorage from '../services/projectStorage';
 import * as browserFS from '../services/browserFileSystem';
@@ -15,7 +15,7 @@ export function useProjects() {
     const [isLoading, setIsLoading] = useState(true);
 
     // Store the FileSystemDirectoryHandle for browser mode
-    const repoHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+    const [repoHandle, setRepoHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
     // Check if we're in Electron
     const isElectron = !!(window.electron?.openRepository);
@@ -28,12 +28,7 @@ export function useProjects() {
                 // In Electron mode, clear legacy localStorage data on startup
                 // This prevents conflicts with the file-based project system
                 if (isElectron) {
-                    // In Electron mode, clear legacy localStorage data on startup
-                    // to prevent conflicts with the new file-based project system.
-                    // This ensures a clean slate until a repository is opened.
-                    localStorage.removeItem('diff-commit-projects');
-                    localStorage.removeItem('diff-commit-repository');
-                    localStorage.removeItem('diff-commit-commits');
+                    projectStorage.clearLegacyStorage();
                     setProjects([]);
 
                     // Auto-load default repository folder on startup
@@ -52,7 +47,7 @@ export function useProjects() {
                                     setCurrentProject(sortedProjects[0]);
                                 } else {
                                     // No projects in default repo - create one
-                                    const projectName = 'Project ' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                                    const projectName = projectStorage.getFormattedTimestamp();
                                     const newProject = await projectStorage.createProject(projectName, '', result.path);
                                     if (newProject) {
                                         setProjects([newProject]);
@@ -86,9 +81,7 @@ export function useProjects() {
 
         // Clear legacy localStorage data to prevent conflicts
         // with file-based project system
-        localStorage.removeItem('diff-commit-projects');
-        localStorage.removeItem('diff-commit-repository');
-        localStorage.removeItem('diff-commit-commits');
+        projectStorage.clearLegacyStorage();
 
         setRepositoryPath(result.path);
         setProjects(result.projects);
@@ -100,7 +93,7 @@ export function useProjects() {
             setCurrentProject(sortedProjects[0]);
         } else {
             // No projects - create a date-time named one
-            const projectName = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const projectName = projectStorage.getFormattedTimestamp();
             const newProject = await projectStorage.createProject(projectName, '', result.path);
             if (newProject) {
                 setProjects([newProject]);
@@ -125,7 +118,7 @@ export function useProjects() {
             } else if (browserFS.isFileSystemAccessSupported()) {
                 const result = await browserFS.openBrowserDirectory();
                 if (result) {
-                    repoHandleRef.current = result.handle;
+                    setRepoHandle(result.handle);
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
 
@@ -133,8 +126,8 @@ export function useProjects() {
                         const sortedProjects = [...result.projects].sort((a, b) => b.updatedAt - a.updatedAt);
                         setCurrentProject(sortedProjects[0]);
                     } else {
-                        const projectName = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                        const newProject = await browserFS.createProjectFolder(repoHandleRef.current!, projectName, '');
+                        const projectName = projectStorage.getFormattedTimestamp();
+                        const newProject = await browserFS.createProjectFolder(repoHandle!, projectName, '');
                         if (newProject) {
                             setProjects([newProject]);
                             setCurrentProject(newProject);
@@ -177,10 +170,7 @@ export function useProjects() {
                 // Electron mode - use IPC to show save dialog
                 const result = await projectStorage.createRepository();
                 if (result) {
-                    // Clear legacy localStorage data to prevent conflicts
-                    localStorage.removeItem('diff-commit-projects');
-                    localStorage.removeItem('diff-commit-repository');
-                    localStorage.removeItem('diff-commit-commits');
+                    projectStorage.clearLegacyStorage();
 
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
@@ -197,7 +187,7 @@ export function useProjects() {
                 // Browser mode - use File System Access API (same as open, user picks a folder)
                 const result = await browserFS.openBrowserDirectory();
                 if (result) {
-                    repoHandleRef.current = result.handle;
+                    setRepoHandle(result.handle);
                     setRepositoryPath(result.path);
                     setProjects(result.projects);
                     setCurrentProject(null);
@@ -245,13 +235,10 @@ export function useProjects() {
             } catch (e) {
                 console.log('Using cached content for project:', project.name, e);
             }
-        } else if (repoHandleRef.current) {
-            // Browser mode - re-read from file system
+        } else if (repoHandle) {
+            // Browser mode - re-read from file system using service layer
             try {
-                const projectHandle = await repoHandleRef.current.getDirectoryHandle(project.name);
-                const contentHandle = await projectHandle.getFileHandle('content.md');
-                const file = await contentHandle.getFile();
-                freshContent = await file.text();
+                freshContent = await browserFS.loadProjectContent(repoHandle, project.name);
             } catch {
                 // Use cached content if can't read
                 console.log('Using cached content for project:', project.name);
@@ -280,9 +267,9 @@ export function useProjects() {
             if (window.electron?.saveProjectContent) {
                 await window.electron.saveProjectContent(currentProject.path, content);
             }
-        } else if (repoHandleRef.current && currentProject.name) {
+        } else if (repoHandle && currentProject.name) {
             // Browser mode - save to content.md
-            await browserFS.saveProjectDraft(repoHandleRef.current, currentProject.name, content);
+            await browserFS.saveProjectDraft(repoHandle, currentProject.name, content);
         } else {
             // localStorage fallback
             await projectStorage.saveProject(updatedProject);
@@ -300,9 +287,9 @@ export function useProjects() {
         if (isElectron && repositoryPath) {
             // Electron mode
             newProject = await projectStorage.createProject(name, content, repositoryPath);
-        } else if (repoHandleRef.current) {
+        } else if (repoHandle) {
             // Browser file system mode
-            const result = await browserFS.createProjectFolder(repoHandleRef.current, name, content);
+            const result = await browserFS.createProjectFolder(repoHandle, name, content);
             if (!result) throw new Error('Failed to create project');
             newProject = result;
         } else {
@@ -321,11 +308,16 @@ export function useProjects() {
     const deleteProjectById = useCallback(async (id: string) => {
         const project = projects.find(p => p.id === id);
 
-        if (repoHandleRef.current && project) {
+        if (repoHandle && project) {
             // Browser file system mode
-            await browserFS.deleteProjectFolder(repoHandleRef.current, project.name);
+            await browserFS.deleteProjectFolder(repoHandle, project.name);
+        } else if (isElectron && project?.path) {
+            // Electron mode - actually delete from disk
+            if (window.electron?.deleteProject) {
+                await window.electron.deleteProject(project.path);
+            }
         } else {
-            // Electron or localStorage
+            // localStorage fallback
             await projectStorage.deleteProject(id);
         }
 
@@ -333,7 +325,7 @@ export function useProjects() {
         if (currentProject?.id === id) {
             setCurrentProject(null);
         }
-    }, [projects, currentProject?.id]);
+    }, [projects, currentProject?.id, isElectron]);
 
     // Rename a project
     const renameProjectById = useCallback(async (id: string, newName: string) => {
@@ -342,9 +334,9 @@ export function useProjects() {
 
         let updated: Project | null = null;
 
-        if (repoHandleRef.current) {
+        if (repoHandle) {
             // Browser file system mode
-            updated = await browserFS.renameProjectFolder(repoHandleRef.current, project.name, newName);
+            updated = await browserFS.renameProjectFolder(repoHandle, project.name, newName);
         } else if (project.path) {
             // Electron mode - project has a path on disk
             updated = await projectStorage.renameProject(id, newName, project.path);
@@ -354,8 +346,7 @@ export function useProjects() {
         }
 
         if (updated) {
-            // The project ID changes to the new name, so we need to filter out the old one
-            // and insert the updated project
+            // The project ID changes to the new name or UUID
             setProjects(prev => {
                 const filtered = prev.filter(p => p.id !== id);
                 return [...filtered, updated!];
@@ -374,9 +365,9 @@ export function useProjects() {
 
     // Refresh projects list
     const refreshProjects = useCallback(async () => {
-        if (repoHandleRef.current) {
+        if (repoHandle) {
             // Browser file system - rescan
-            const scanned = await browserFS.scanProjectFolders(repoHandleRef.current);
+            const scanned = await browserFS.scanProjectFolders(repoHandle);
             setProjects(scanned);
         } else if (window.electron?.loadRepositoryAtPath && repositoryPath) {
             // Electron mode - rescan the current repository
@@ -392,7 +383,7 @@ export function useProjects() {
     }, [repositoryPath]);
 
     // Get repo handle for external use (e.g., saving commits)
-    const getRepoHandle = useCallback(() => repoHandleRef.current, []);
+    const getRepoHandle = useCallback(() => repoHandle, [repoHandle]);
 
     return {
         projects,

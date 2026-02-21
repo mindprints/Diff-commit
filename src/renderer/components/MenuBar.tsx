@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PanelTopClose, PanelTopOpen } from 'lucide-react';
 import clsx from 'clsx';
-import { ViewMode } from '../types';
+
 import { version } from '../../../package.json';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
@@ -24,12 +24,12 @@ export function MenuBar() {
     } = useAI();
 
     const {
-        mode, setFontSize, setFontFamily
+        setFontSize, setFontFamily
     } = useEditor();
+
     // Only show in browser (not electron)
     if (window.electron) return null;
 
-    // ... (rest of implementation)
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);

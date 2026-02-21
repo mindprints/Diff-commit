@@ -737,6 +737,7 @@ ${body}
 
     interface ProjectMetadata {
         createdAt: number;
+        id?: string; // Stable UUID — persists across renames
     }
 
     /**
@@ -1014,9 +1015,11 @@ ${body}
 
                         const createdAt = metadata?.createdAt || stats.birthtimeMs;
                         const updatedAt = contentStats?.mtimeMs || stats.mtimeMs;
+                        // Prefer stable UUID from metadata; fall back to folder name for legacy projects
+                        const projectId = metadata?.id || item.name;
 
                         projects.push({
-                            id: item.name,  // Folder name
+                            id: projectId,
                             name: item.name,
                             content,
                             createdAt,
@@ -1105,12 +1108,13 @@ ${body}
             // Create empty commits.json
             fs.writeFileSync(commitsPath, '[]', 'utf-8');
 
-            // Create metadata.json with createdAt
-            writeProjectMetadata(diffCommitPath, { createdAt: now });
+            // Create metadata.json with stable UUID + createdAt
+            const projectId = crypto.randomUUID();
+            writeProjectMetadata(diffCommitPath, { createdAt: now, id: projectId });
 
             console.log('[Hierarchy] Created project with metadata:', projectPath);
             return {
-                id: projectName,
+                id: projectId,
                 name: projectName,
                 content: initialContent,
                 createdAt: now,
@@ -1195,11 +1199,16 @@ ${body}
                 content = await fs.promises.readFile(contentPath, 'utf-8');
             }
 
+            // Read the stable UUID from the moved project's metadata (preserve it across rename)
+            const diffCommitPath = path.join(newPath, DIFF_COMMIT_DIR);
+            const renamedMetadata = readProjectMetadata(diffCommitPath);
+            const renamedProjectId = renamedMetadata?.id || trimmedName;
+
             console.log('[Project] Renamed project:', validatedProjectPath, '->', newPath);
 
             // Return complete project object
             return {
-                id: trimmedName,
+                id: renamedProjectId,
                 name: trimmedName,
                 content,
                 createdAt,
@@ -1278,6 +1287,20 @@ ${body}
             return true;
         } catch (e) {
             console.error('Failed to save commits:', e);
+            return false;
+        }
+    });
+
+    // Delete Project (remove folder and all its contents from disk)
+    ipcMain.handle('delete-project', async (event, projectPath: string) => {
+        if (!projectPath) return false;
+        try {
+            const validatedProjectPath = assertProjectPath(projectPath);
+            await fs.promises.rm(validatedProjectPath, { recursive: true, force: true });
+            console.log('[Project] Deleted project:', validatedProjectPath);
+            return true;
+        } catch (e) {
+            console.error('Failed to delete project:', e);
             return false;
         }
     });

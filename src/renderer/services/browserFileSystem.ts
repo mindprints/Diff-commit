@@ -9,7 +9,7 @@
  * Note: Only works in Chrome, Edge, Opera. Falls back gracefully in other browsers.
  */
 
-import { Project } from '../types';
+import { Project, TextCommit } from '../types';
 
 // Type declarations for File System Access API
 declare global {
@@ -47,6 +47,7 @@ const METADATA_FILE = 'metadata.json';
 // Metadata structure
 interface ProjectMetadata {
     createdAt: number;
+    id?: string; // Stable UUID — persists across renames
 }
 
 // Store the current directory handle
@@ -150,10 +151,11 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
                     let createdAt: number | undefined = undefined;
                     let updatedAt = Date.now();
 
-                    // Try to read metadata for createdAt
+                    let metadata: ProjectMetadata | null = null;
+                    // Try to read metadata.json for createdAt and stable ID
                     try {
                         const diffCommitHandle = await dirHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
-                        const metadata = await readProjectMetadata(diffCommitHandle);
+                        metadata = await readProjectMetadata(diffCommitHandle);
                         if (metadata?.createdAt) {
                             createdAt = metadata.createdAt;
                         }
@@ -181,7 +183,7 @@ export async function scanProjectFolders(repoHandle: FileSystemDirectoryHandle):
                     }
 
                     projects.push({
-                        id: entry.name,  // Folder name
+                        id: metadata?.id ?? entry.name,  // Prefer stable UUID; fall back to folder name for legacy
                         name: entry.name,
                         content,
                         createdAt,
@@ -227,11 +229,12 @@ export async function createProjectFolder(
         await commitsWritable.write('[]');
         await commitsWritable.close();
 
-        // Create metadata.json with createdAt timestamp
-        await writeProjectMetadata(diffCommitHandle, { createdAt: now });
+        // Create metadata.json with stable UUID + createdAt
+        const projectId = crypto.randomUUID();
+        await writeProjectMetadata(diffCommitHandle, { createdAt: now, id: projectId });
 
         return {
-            id: projectName,
+            id: projectId,
             name: projectName,
             content: initialContent,
             createdAt: now,
@@ -271,7 +274,7 @@ export async function saveProjectDraft(
 export async function loadProjectCommits(
     repoHandle: FileSystemDirectoryHandle,
     projectName: string
-): Promise<any[]> {
+): Promise<TextCommit[]> {
     try {
         const projectHandle = await repoHandle.getDirectoryHandle(projectName);
         const diffCommitHandle = await projectHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
@@ -291,7 +294,7 @@ export async function loadProjectCommits(
 export async function saveProjectCommits(
     repoHandle: FileSystemDirectoryHandle,
     projectName: string,
-    commits: any[]
+    commits: TextCommit[]
 ): Promise<boolean> {
     try {
         const projectHandle = await repoHandle.getDirectoryHandle(projectName);
@@ -348,14 +351,14 @@ export async function renameProjectFolder(
         // Read commits
         const commits = await loadProjectCommits(repoHandle, oldName);
 
-        // Read metadata for createdAt
+        // Read old project's stable UUID and createdAt from metadata so we can preserve them
         let createdAt = Date.now();
+        let oldProjectId: string | undefined;
         try {
-            const diffCommitHandle = await oldHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
-            const metadata = await readProjectMetadata(diffCommitHandle);
-            if (metadata?.createdAt) {
-                createdAt = metadata.createdAt;
-            }
+            const oldDiffCommitHandle = await oldHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
+            const oldMeta = await readProjectMetadata(oldDiffCommitHandle);
+            if (oldMeta?.createdAt) createdAt = oldMeta.createdAt;
+            oldProjectId = oldMeta?.id;
         } catch {
             // No metadata
         }
@@ -364,12 +367,14 @@ export async function renameProjectFolder(
         const newProject = await createProjectFolder(repoHandle, newName, content);
         if (!newProject) throw new Error('Failed to create new project folder');
 
-        // Preserve original createdAt
+        // Preserve original createdAt AND stable UUID across rename
         try {
             const newProjectHandle = await repoHandle.getDirectoryHandle(newName);
             const newDiffCommitHandle = await newProjectHandle.getDirectoryHandle(DIFF_COMMIT_DIR);
-            await writeProjectMetadata(newDiffCommitHandle, { createdAt });
+            const preservedId = oldProjectId ?? newProject.id;
+            await writeProjectMetadata(newDiffCommitHandle, { createdAt, id: preservedId });
             newProject.createdAt = createdAt;
+            newProject.id = preservedId;
         } catch {
             // Failed to preserve metadata
         }
@@ -401,4 +406,19 @@ export function getCurrentRepoHandle(): FileSystemDirectoryHandle | null {
  */
 export function setCurrentRepoHandle(handle: FileSystemDirectoryHandle | null): void {
     currentRepoHandle = handle;
+}
+
+/**
+ * Load a project's content from content.md.
+ * Provides a clean service-layer alternative to doing raw FS access
+ * in useProjects.ts.
+ */
+export async function loadProjectContent(
+    repoHandle: FileSystemDirectoryHandle,
+    projectName: string
+): Promise<string> {
+    const projectHandle = await repoHandle.getDirectoryHandle(projectName);
+    const contentHandle = await projectHandle.getFileHandle(PROJECT_CONTENT_FILE);
+    const file = await contentHandle.getFile();
+    return file.text();
 }
