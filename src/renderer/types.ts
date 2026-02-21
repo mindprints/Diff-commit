@@ -99,3 +99,10 @@ export interface RepositoryInfo {
   createdAt?: number;
   updatedAt?: number;
 }
+
+export interface FolderOperationResult {
+  success: boolean;
+  path?: string;      // Singular primary path affected
+  paths?: string[];   // Multiple paths affected (e.g. workspace creation)
+  error?: string;
+}

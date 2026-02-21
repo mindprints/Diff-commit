@@ -146,7 +146,8 @@ export function EditorPanel() {
     } = useUI();
 
     const {
-        handleCommitClick, hasUnsavedChanges, commits
+        handleCommitClick, hasUnsavedChanges, commits,
+        recoveredDraftUpdatedAt, restoreRecoveredDraft, discardRecoveredDraft
     } = useProject();
 
     const {
@@ -320,6 +321,31 @@ export function EditorPanel() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--bg-panel)' }}>
+            {recoveredDraftUpdatedAt && (
+                <div className="flex-none px-4 py-2.5 flex items-center justify-between bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800">
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                        Recovered unsaved draft from {new Date(recoveredDraftUpdatedAt).toLocaleString()}.
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={discardRecoveredDraft}
+                            className="text-gray-600 hover:text-gray-800 dark:text-slate-300 dark:hover:text-slate-100"
+                        >
+                            Discard
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={restoreRecoveredDraft}
+                            className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500"
+                        >
+                            Restore Draft
+                        </Button>
+                    </div>
+                </div>
+            )}
             {/* Prompt Editing Banner */}
             {promptEditSession && (
                 <div className="flex-none px-4 py-2.5 flex items-center justify-between bg-gradient-to-r from-indigo-500/10 to-purple-500/10 dark:from-indigo-900/30 dark:to-purple-900/30 border-b border-indigo-200 dark:border-indigo-800">

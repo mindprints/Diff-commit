@@ -1,5 +1,5 @@
 
-import { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit } from './types';
+import { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit, FolderOperationResult } from './types';
 
 export interface IElectronAPI {
     platform: string;
@@ -116,6 +116,11 @@ export interface IElectronAPI {
     onMenuCreateRepository: (callback: () => void) => () => void;
     onMenuOpenRepository: (callback: () => void) => () => void;
     onMenuSaveProject: (callback: () => void) => () => void;
+    onMenuExportProjectBundle: (callback: () => void) => () => void;
+    onRequestSaveBeforeClose: (callback: (requestId: string) => void) => () => void;
+    onDiscardDraftBeforeClose: (callback: () => void) => () => void;
+    setWindowDirtyState: (hasUnsavedChanges: boolean) => Promise<boolean>;
+    respondSaveBeforeClose: (requestId: string, success: boolean) => Promise<boolean>;
 
     // Tools Menu Listeners
     onMenuToolsSpellingLocal: (callback: () => void) => () => void;
@@ -131,8 +136,8 @@ export interface IElectronAPI {
     // Folder & Workspace Paths
     getWorkspacePath: () => Promise<string>;
     getReposPath: () => Promise<string>;
-    setCustomWorkspace: (customPath: string) => Promise<{ success: boolean; paths: string[]; error?: string }>;
-    createFolderAtPath: (folderPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+    setCustomWorkspace: (customPath: string) => Promise<FolderOperationResult>;
+    createFolderAtPath: (folderPath: string) => Promise<FolderOperationResult>;
     loadRepositoryAtPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
 }
 

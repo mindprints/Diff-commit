@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit } from '../renderer/types';
+import type { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit, FolderOperationResult } from '../renderer/types';
 import { subscribeIpcChannel } from './ipcSubscription';
 
 // Type definitions for the hierarchy sub-API
@@ -138,6 +138,11 @@ export interface ElectronAPI {
     onMenuCreateRepository: (callback: () => void) => () => void;
     onMenuOpenRepository: (callback: () => void) => () => void;
     onMenuSaveProject: (callback: () => void) => () => void;
+    onMenuExportProjectBundle: (callback: () => void) => () => void;
+    onRequestSaveBeforeClose: (callback: (requestId: string) => void) => () => void;
+    onDiscardDraftBeforeClose: (callback: () => void) => () => void;
+    setWindowDirtyState: (hasUnsavedChanges: boolean) => Promise<boolean>;
+    respondSaveBeforeClose: (requestId: string, success: boolean) => Promise<boolean>;
 
     // Tools Menu Listeners
     onMenuToolsSpellingLocal: (callback: () => void) => () => void;
@@ -153,8 +158,8 @@ export interface ElectronAPI {
     // Folder & Workspace Paths
     getWorkspacePath: () => Promise<string>;
     getReposPath: () => Promise<string>;
-    setCustomWorkspace: (customPath: string) => Promise<{ success: boolean; paths: string[]; error?: string }>;
-    createFolderAtPath: (folderPath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+    setCustomWorkspace: (customPath: string) => Promise<FolderOperationResult>;
+    createFolderAtPath: (folderPath: string) => Promise<FolderOperationResult>;
     loadRepositoryAtPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
 
 }
@@ -286,6 +291,17 @@ const electronAPI: ElectronAPI = {
     onMenuSaveProject: (callback: () => void) => {
         return subscribeIpcChannel(ipcRenderer, 'menu-save-project', callback);
     },
+    onMenuExportProjectBundle: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'menu-export-project-bundle', callback);
+    },
+    onRequestSaveBeforeClose: (callback: (requestId: string) => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'request-save-before-close', callback);
+    },
+    onDiscardDraftBeforeClose: (callback: () => void) => {
+        return subscribeIpcChannel(ipcRenderer, 'discard-draft-before-close', callback);
+    },
+    setWindowDirtyState: (hasUnsavedChanges: boolean) => ipcRenderer.invoke('set-window-dirty-state', hasUnsavedChanges),
+    respondSaveBeforeClose: (requestId: string, success: boolean) => ipcRenderer.invoke('respond-save-before-close', requestId, success),
 
     // Tools Menu Listeners
     onMenuToolsSpellingLocal: (callback: () => void) => {

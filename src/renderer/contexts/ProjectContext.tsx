@@ -4,6 +4,13 @@ import { useCommitHistory } from '../hooks/useCommitHistory';
 import { useEditor } from './EditorContext';
 import { useUI } from './UIContext';
 import { Project, TextCommit, ViewMode } from '../types';
+import {
+    getDraftSnapshot,
+    getDraftSnapshotKey,
+    removeDraftSnapshot,
+    upsertDraftSnapshot,
+    type DraftSnapshot,
+} from '../services/draftRecovery';
 
 interface ProjectContextType {
     // useProjects
@@ -40,6 +47,10 @@ interface ProjectContextType {
     // Additional state
     hasUnsavedChanges: boolean;
     setHasUnsavedChanges: (has: boolean) => void;
+    hasUnpersistedChanges: boolean;
+    recoveredDraftUpdatedAt: number | null;
+    restoreRecoveredDraft: () => void;
+    discardRecoveredDraft: () => void;
 
     // Derived handlers
     handleRestoreCommit: (commit: TextCommit) => void;
@@ -52,6 +63,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const { setOriginalText, setPreviewText, setModifiedText, resetDiffState, setMode, originalText, previewText, performDiff } = useEditor();
     const { setShowProjectsPanel, setErrorMessage, isShiftHeld, setShowRepoPicker } = useUI();
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [recoveredDraftSnapshot, setRecoveredDraftSnapshot] = useState<DraftSnapshot | null>(null);
     const lastLoadedProjectIdRef = useRef<string | null>(null);
 
     const {
@@ -86,6 +98,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             await saveCurrentProject(committedText);
         }
     }, [resetDiffState, currentProject, saveCurrentProject, setOriginalText, setPreviewText, setModifiedText]);
+
+    const currentDraftSnapshotKey = useMemo(() => getDraftSnapshotKey(currentProject), [currentProject]);
+    const hasUnpersistedChanges = useMemo(() => {
+        if (!currentProject) return false;
+        return previewText !== currentProject.content;
+    }, [currentProject, previewText]);
 
     const browserLoadCommits = useMemo(() => {
         if (!currentProject?.name) return undefined;
@@ -124,6 +142,41 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             lastLoadedProjectIdRef.current = currentProject.id;
         }
     }, [currentProject, originalText, previewText, resetDiffState, setModifiedText, setOriginalText, setPreviewText]);
+
+    useEffect(() => {
+        if (!currentProject || !currentDraftSnapshotKey) {
+            setRecoveredDraftSnapshot(null);
+            return;
+        }
+        const snapshot = getDraftSnapshot(currentDraftSnapshotKey);
+        if (snapshot && snapshot.content !== currentProject.content) {
+            setRecoveredDraftSnapshot(snapshot);
+            return;
+        }
+        setRecoveredDraftSnapshot(null);
+    }, [currentProject, currentDraftSnapshotKey]);
+
+    useEffect(() => {
+        if (!window.electron?.setWindowDirtyState) return;
+        void window.electron.setWindowDirtyState(hasUnpersistedChanges);
+    }, [hasUnpersistedChanges]);
+
+    useEffect(() => {
+        if (!currentProject || !currentDraftSnapshotKey) return;
+        if (!hasUnpersistedChanges) {
+            removeDraftSnapshot(currentDraftSnapshotKey);
+            return;
+        }
+        upsertDraftSnapshot({
+            key: currentDraftSnapshotKey,
+            content: previewText,
+            updatedAt: Date.now(),
+            projectId: currentProject.id,
+            projectPath: currentProject.path,
+            repositoryPath: currentProject.repositoryPath,
+            projectName: currentProject.name,
+        });
+    }, [currentProject, currentDraftSnapshotKey, hasUnpersistedChanges, previewText]);
 
     const {
         commits,
@@ -277,10 +330,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             };
 
             if (imported.every(isValidCommit)) {
-                const updatedCommits = [...commits, ...imported];
-                setCommits(updatedCommits);
-                await saveCommits(updatedCommits);
-                setShowProjectsPanel(false); // Close panel on success
+                // Deduplicate by ID to avoid re-importing the same commits
+                const existingIds = new Set(commits.map(c => c.id));
+                const newUniqueCommits = imported.filter(c => !existingIds.has(c.id));
+
+                if (newUniqueCommits.length === 0) {
+                    setShowProjectsPanel(false);
+                    return;
+                }
+
+                const updatedCommits = [...commits, ...newUniqueCommits];
+
+                // Attempt persistence first
+                const success = await saveCommits(updatedCommits);
+
+                if (success) {
+                    setCommits(updatedCommits);
+                    setShowProjectsPanel(false); // Close panel on success
+                } else {
+                    setErrorMessage('Failed to save imported commits to disk');
+                }
             } else {
                 setErrorMessage('Failed to import commits: Invalid format');
             }
@@ -315,6 +384,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setMode(ViewMode.DIFF);
     }, [setOriginalText, setModifiedText, originalText, performDiff, setMode]);
 
+    const restoreRecoveredDraft = useCallback(() => {
+        if (!recoveredDraftSnapshot) return;
+        setPreviewText(recoveredDraftSnapshot.content);
+        setOriginalText(recoveredDraftSnapshot.content);
+        setModifiedText('');
+        resetDiffState();
+        setRecoveredDraftSnapshot(null);
+    }, [recoveredDraftSnapshot, resetDiffState, setModifiedText, setOriginalText, setPreviewText]);
+
+    const discardRecoveredDraft = useCallback(() => {
+        if (!recoveredDraftSnapshot) return;
+        removeDraftSnapshot(recoveredDraftSnapshot.key);
+        setRecoveredDraftSnapshot(null);
+    }, [recoveredDraftSnapshot]);
+
+    useEffect(() => {
+        if (!window.electron?.onDiscardDraftBeforeClose || !currentDraftSnapshotKey) return;
+        return window.electron.onDiscardDraftBeforeClose(() => {
+            removeDraftSnapshot(currentDraftSnapshotKey);
+            setRecoveredDraftSnapshot(null);
+        });
+    }, [currentDraftSnapshotKey]);
+
     const contextValue = useMemo(() => ({
         projects, currentProject, loadProject, saveCurrentProject, createNewProject,
         handleLoadProject, handleCreateProject,
@@ -326,6 +418,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         commits, setCommits, handleCommit, handleDeleteCommit, handleClearAllCommits,
         handleClearAll, handleExportCommits, handleImportCommits, handleFileOpen, handleNewProject,
         hasUnsavedChanges, setHasUnsavedChanges,
+        hasUnpersistedChanges,
+        recoveredDraftUpdatedAt: recoveredDraftSnapshot?.updatedAt ?? null,
+        restoreRecoveredDraft,
+        discardRecoveredDraft,
         handleRestoreCommit, handleCompareCommit
     }), [
         projects, currentProject, loadProject, saveCurrentProject, createNewProject,
@@ -333,7 +429,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         deleteProject, renameProject, handleOpenRepository, loadRepositoryByPath, createRepository, repositoryPath,
         getRepoHandle, refreshProjects, commits, setCommits, handleCommit, handleDeleteCommit,
         handleClearAllCommits, handleClearAll, handleExportCommits, handleImportCommits,
-        handleFileOpen, handleNewProject, hasUnsavedChanges, setHasUnsavedChanges,
+        handleFileOpen, handleNewProject, hasUnsavedChanges, setHasUnsavedChanges, hasUnpersistedChanges,
+        recoveredDraftSnapshot?.updatedAt, restoreRecoveredDraft, discardRecoveredDraft,
         handleRestoreCommit, handleCompareCommit
     ]);
 

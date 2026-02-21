@@ -2,12 +2,8 @@ import { Project, RepositoryInfo } from '../types';
 
 const STORAGE_KEY = 'diff-commit-projects';
 const REPO_STORAGE_KEY = 'diff-commit-repository';
+const LEGACY_COMMITS_STORAGE_KEY = 'diff-commit-commits';
 
-/**
- * Check if running in Electron with project APIs available.
-
-const STORAGE_KEY = 'diff-commit-projects';
-const REPO_STORAGE_KEY = 'diff-commit-repository';
 
 /**
  * Check if running in Electron with project APIs available.
@@ -37,7 +33,7 @@ export function getFormattedTimestamp(): string {
 export function clearLegacyStorage(): void {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(REPO_STORAGE_KEY);
-    localStorage.removeItem('diff-commit-commits');
+    localStorage.removeItem(LEGACY_COMMITS_STORAGE_KEY);
 }
 
 

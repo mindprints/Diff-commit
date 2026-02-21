@@ -375,8 +375,8 @@ export async function renameProjectFolder(
             await writeProjectMetadata(newDiffCommitHandle, { createdAt, id: preservedId });
             newProject.createdAt = createdAt;
             newProject.id = preservedId;
-        } catch {
-            // Failed to preserve metadata
+        } catch (e) {
+            console.warn(`[BrowserFS] Failed to preserve metadata during rename for "${oldName}" -> "${newName}". UUID/CreatedAt may have reset.`, e);
         }
 
         // Save commits to new location
@@ -417,8 +417,13 @@ export async function loadProjectContent(
     repoHandle: FileSystemDirectoryHandle,
     projectName: string
 ): Promise<string> {
-    const projectHandle = await repoHandle.getDirectoryHandle(projectName);
-    const contentHandle = await projectHandle.getFileHandle(PROJECT_CONTENT_FILE);
-    const file = await contentHandle.getFile();
-    return file.text();
+    try {
+        const projectHandle = await repoHandle.getDirectoryHandle(projectName);
+        const contentHandle = await projectHandle.getFileHandle(PROJECT_CONTENT_FILE);
+        const file = await contentHandle.getFile();
+        return file.text();
+    } catch (e) {
+        console.warn(`[BrowserFS] Failed to load content for "${projectName}":`, e);
+        return '';
+    }
 }

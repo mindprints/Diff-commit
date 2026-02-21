@@ -121,6 +121,43 @@ function getSecureApiKey(provider: string): string | undefined {
 let mainWindow = null;
 let folderInitializer: AppFolderInitializer | null = null;
 
+interface WindowLifecycleState {
+    hasUnsavedChanges: boolean;
+    bypassCloseGuard: boolean;
+}
+
+const windowLifecycleState = new Map<number, WindowLifecycleState>();
+const pendingSaveBeforeClose = new Map<string, (success: boolean) => void>();
+
+function getWindowLifecycleState(window: BrowserWindow): WindowLifecycleState {
+    const key = window.id;
+    const existing = windowLifecycleState.get(key);
+    if (existing) return existing;
+    const created: WindowLifecycleState = {
+        hasUnsavedChanges: false,
+        bypassCloseGuard: false,
+    };
+    windowLifecycleState.set(key, created);
+    return created;
+}
+
+function requestRendererSaveBeforeClose(window: BrowserWindow, timeoutMs = 10000): Promise<boolean> {
+    const requestId = crypto.randomUUID();
+    return new Promise<boolean>((resolve) => {
+        let settled = false;
+        const settle = (success: boolean) => {
+            if (settled) return;
+            settled = true;
+            pendingSaveBeforeClose.delete(requestId);
+            resolve(success);
+        };
+
+        pendingSaveBeforeClose.set(requestId, settle);
+        window.webContents.send('request-save-before-close', requestId);
+        setTimeout(() => settle(false), timeoutMs);
+    });
+}
+
 // Initialize app folders before creating window
 /**
  * Initialize app folders before creating window.
@@ -168,7 +205,7 @@ async function initializeApp(): Promise<boolean> {
 }
 
 function createWindow() {
-    mainWindow = new BrowserWindow({
+    const createdWindow = new BrowserWindow({
         width: 1400,
         height: 900,
         webPreferences: {
@@ -181,12 +218,62 @@ function createWindow() {
             ? path.join(__dirname, '../../public/icon.png')
             : path.join(process.resourcesPath, 'icon.png') // Common place for extraResources
     });
+    mainWindow = createdWindow;
+
+    getWindowLifecycleState(createdWindow);
+    createdWindow.on('close', async (event) => {
+        const lifecycle = getWindowLifecycleState(createdWindow);
+        if (lifecycle.bypassCloseGuard || !lifecycle.hasUnsavedChanges) {
+            return;
+        }
+
+        event.preventDefault();
+        const result = await dialog.showMessageBox(createdWindow, {
+            type: 'warning',
+            buttons: ['Save', "Don't Save", 'Cancel'],
+            defaultId: 0,
+            cancelId: 2,
+            title: 'Unsaved Project Changes',
+            message: 'You have unsaved project changes.',
+            detail: 'Choose Save to persist the current draft before closing.',
+            noLink: true,
+        });
+
+        if (result.response === 2) {
+            return;
+        }
+
+        if (result.response === 1) {
+            lifecycle.bypassCloseGuard = true;
+            lifecycle.hasUnsavedChanges = false;
+            createdWindow.webContents.send('discard-draft-before-close');
+            createdWindow.close();
+            return;
+        }
+
+        const saved = await requestRendererSaveBeforeClose(createdWindow);
+        if (!saved) {
+            dialog.showErrorBox(
+                'Unable to Save Project',
+                'The project could not be saved before closing. The window will remain open so you can retry.'
+            );
+            return;
+        }
+
+        lifecycle.bypassCloseGuard = true;
+        lifecycle.hasUnsavedChanges = false;
+        createdWindow.close();
+    });
+
+    createdWindow.on('closed', () => {
+        windowLifecycleState.delete(createdWindow.id);
+    });
 
     if (isDev) {
-        mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173');
-        mainWindow.webContents.openDevTools();
+        createdWindow.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173');
+        createdWindow.webContents.openDevTools();
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+        createdWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
     }
 }
 
@@ -326,9 +413,14 @@ function createMenu() {
                     ]
                 },
                 {
-                    label: 'Save Project...',
+                    label: 'Save Project',
                     accelerator: 'CmdOrCtrl+Shift+S',
                     click: () => sendToRenderer('menu-save-project')
+                },
+                {
+                    label: 'Export Project Bundle...',
+                    accelerator: 'CmdOrCtrl+Shift+E',
+                    click: () => sendToRenderer('menu-export-project-bundle')
                 },
                 { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' }
@@ -537,6 +629,21 @@ app.whenReady().then(async () => {
     ipcMain.handle('get-api-key-configured', (event, provider) => {
         const key = getSecureApiKey(provider);
         return Boolean(key && key.trim().length > 0);
+    });
+
+    ipcMain.handle('set-window-dirty-state', (event, hasUnsavedChanges: boolean) => {
+        const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!sourceWindow) return false;
+        const lifecycle = getWindowLifecycleState(sourceWindow);
+        lifecycle.hasUnsavedChanges = Boolean(hasUnsavedChanges);
+        return true;
+    });
+
+    ipcMain.handle('respond-save-before-close', (_event, requestId: string, success: boolean) => {
+        const resolver = pendingSaveBeforeClose.get(requestId);
+        if (!resolver) return false;
+        resolver(Boolean(success));
+        return true;
     });
 
     // Logging Handlers

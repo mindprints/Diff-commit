@@ -170,7 +170,41 @@ npm run build:win
 
 ---
 
-## 🛠️ Terminology
+## � Working with Projects
+
+Diff & Commit AI uses a **Repository -> Project** hierarchy to keep your work organized and safely stored on your local disk.
+
+### ➕ Creating a Project
+1.  **Open/Create a Repository**: On first launch, select a folder on your computer to be your workspace (Repository).
+2.  **Add New Project**: Open the side panel and click the **"+"** icon.
+3.  **Name Your Work**: Enter a name (or use the auto-generated timestamp). This creates a new subfolder in your repository containing a `content.md` file and version data.
+
+### 💾 Saving & Snapshots (Commits)
+The tool uses a git-style "commit" system to ensure you never lose a draft while iterating with AI.
+-   **Manual Save**: Your current text is automatically saved as a "draft" to the project folder.
+-   **Save Project**: `File -> Save Project` writes the current editor draft to the project's `content.md`.
+-   **Export Project Bundle**: `File -> Export Project Bundle...` exports a copy of `content.md` and `commits.json` to a chosen folder.
+-   **Commit (Snapshot)**: Hold **Shift + Click** the AI execution button (or use the Commit button in the History panel) to create a permanent snapshot.
+-   **Stable Identity**: Projects are assigned a unique, stable ID (UUID). You can safely rename a project folder in the UI—the tool preserves its stable ID, ensuring your history and references remain intact.
+
+### 🚪 Closing Behavior & Recovery
+-   **Close Prompt for Unsaved Drafts**: If the current draft has not been persisted to `content.md`, closing the app prompts `Save / Don't Save / Cancel`.
+-   **Save on Close**: Choosing `Save` writes the current draft before the window closes.
+-   **Recovered Draft Banner**: If an unsaved draft snapshot exists on next launch, the editor shows a banner with `Restore Draft` or `Discard`.
+-   **Expected Startup State**: The app opens the most recently updated project in the current repository; recovered drafts are optional and explicit.
+
+### 📂 Loading & Switching
+-   **Project List**: Open the side panel to see all projects within your current repository.
+-   **Switching**: Click a project name to load it. The editor will automatically re-read the `content.md` from disk and load its unique history.
+-   **Auto-Save on Switch**: The app will attempt to save your current draft before loading a different project to prevent data loss.
+
+### 🗑️ Management
+-   **Rename**: Use the edit icon next to a project name in the sidebar to change its name.
+-   **Delete**: Deleting a project removes the entire project folder and its history data from your disk permanently.
+
+---
+
+## �🛠️ Terminology
 To avoid confusion during development:
 *   **Editor (Left)**: The editable "Working Copy" where you type and edit.
 *   **Diff View (Right)**: Shows the comparison between Original and your edits, with accept/reject toggles.

@@ -12,7 +12,7 @@ export function useElectronMenu() {
 
     const {
         commits, setCommits, handleFileOpen, currentProject,
-        handleClearAll, createRepository, handleNewProject
+        handleClearAll, createRepository, handleNewProject, saveCurrentProject
     } = useProject();
 
     const {
@@ -63,8 +63,27 @@ export function useElectronMenu() {
             setShowProjectsPanel(true);
         }));
         unsubscribers.push(window.electron.onMenuSaveProject?.(async () => {
+            if (!currentProject) return;
+            await saveCurrentProject(previewText);
+        }) || (() => { }));
+        unsubscribers.push(window.electron.onMenuExportProjectBundle?.(async () => {
             if (currentProject?.path && window.electron?.saveProjectBundle) {
                 await window.electron.saveProjectBundle(currentProject.path);
+            }
+        }) || (() => { }));
+        unsubscribers.push(window.electron.onRequestSaveBeforeClose?.(async (requestId) => {
+            let success = false;
+            try {
+                if (currentProject) {
+                    await saveCurrentProject(previewText);
+                }
+                success = true;
+            } catch (error) {
+                console.error('Failed to save before close:', error);
+            } finally {
+                if (window.electron?.respondSaveBeforeClose) {
+                    await window.electron.respondSaveBeforeClose(requestId, success);
+                }
             }
         }) || (() => { }));
 
@@ -102,5 +121,5 @@ export function useElectronMenu() {
 
         // Cleanup listeners on unmount
         return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject]);
+    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject, saveCurrentProject]);
 }

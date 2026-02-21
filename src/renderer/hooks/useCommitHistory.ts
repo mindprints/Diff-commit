@@ -32,6 +32,11 @@ export function useCommitHistory({
 
     // Track current project to detect changes
     const currentProjectRef = useRef(currentProjectPath);
+    // Keep commits in a ref for stable callbacks (prevent stale closures in async handlers)
+    const commitsRef = useRef<TextCommit[]>(commits);
+    useEffect(() => {
+        commitsRef.current = commits;
+    }, [commits]);
 
     // Load commits when project changes
     useEffect(() => {
@@ -118,20 +123,21 @@ export function useCommitHistory({
         const textToCommit = getCommitText();
         if (!textToCommit.trim()) return;
 
+        const currentCommits = commitsRef.current;
         // Prevent duplicate commits (identical to last commit)
-        const lastCommit = commits[commits.length - 1];
+        const lastCommit = currentCommits[currentCommits.length - 1];
         if (lastCommit && lastCommit.content === textToCommit) {
             return; // Don't commit identical content
         }
 
         const newCommit: TextCommit = {
             id: crypto.randomUUID(),
-            commitNumber: commits.length + 1,
+            commitNumber: currentCommits.length + 1,
             content: textToCommit,
             timestamp: Date.now(),
         };
 
-        const updatedCommits = [...commits, newCommit];
+        const updatedCommits = [...currentCommits, newCommit];
         setCommits(updatedCommits);
 
         // Manual save
@@ -139,13 +145,13 @@ export function useCommitHistory({
 
         // Call the callback to let App handle any post-commit actions
         onAfterCommit?.(textToCommit);
-    }, [getCommitText, commits, onAfterCommit, saveCommits]);
+    }, [getCommitText, onAfterCommit, saveCommits]);
 
     const handleDeleteCommit = useCallback(async (commitId: string) => {
-        const updatedCommits = commits.filter(c => c.id !== commitId);
+        const updatedCommits = commitsRef.current.filter(c => c.id !== commitId);
         setCommits(updatedCommits);
         await saveCommits(updatedCommits);
-    }, [commits, saveCommits]);
+    }, [saveCommits]);
 
     const handleClearAllCommits = useCallback(async () => {
         setCommits([]);

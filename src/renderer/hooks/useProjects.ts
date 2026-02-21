@@ -127,7 +127,7 @@ export function useProjects() {
                         setCurrentProject(sortedProjects[0]);
                     } else {
                         const projectName = projectStorage.getFormattedTimestamp();
-                        const newProject = await browserFS.createProjectFolder(repoHandle!, projectName, '');
+                        const newProject = await browserFS.createProjectFolder(result.handle, projectName, '');
                         if (newProject) {
                             setProjects([newProject]);
                             setCurrentProject(newProject);
@@ -143,7 +143,7 @@ export function useProjects() {
             console.error('Failed to open repository:', error);
         }
         setIsLoading(false);
-    }, [applyRepositoryResult, isElectron]);
+    }, [applyRepositoryResult, isElectron, repoHandle]);
 
     const loadRepositoryByPath = useCallback(async (repoPath: string) => {
         if (!repoPath) return null;
@@ -210,7 +210,7 @@ export function useProjects() {
         } finally {
             setIsLoading(false);
         }
-    }, [isElectron]);
+    }, [isElectron, repoHandle]);
 
     // Load a specific project - ALWAYS re-read content from disk
     const loadProject = useCallback(async (id: string) => {
@@ -249,7 +249,7 @@ export function useProjects() {
         setCurrentProject(freshProject);
         setProjects(prev => prev.map(p => p.id === id ? freshProject : p));
         return freshProject;
-    }, [projects, isElectron]);
+    }, [projects, isElectron, repoHandle]);
 
     // Save current project content to disk
     const saveCurrentProject = useCallback(async (content: string) => {
@@ -278,7 +278,7 @@ export function useProjects() {
         setCurrentProject(updatedProject);
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
         return updatedProject;
-    }, [currentProject, isElectron]);
+    }, [currentProject, isElectron, repoHandle]);
 
     // Create a new project
     const createNewProject = useCallback(async (name: string, content: string = '', open: boolean = true) => {
@@ -302,7 +302,7 @@ export function useProjects() {
             setCurrentProject(newProject);
         }
         return newProject;
-    }, [isElectron, repositoryPath]);
+    }, [isElectron, repositoryPath, repoHandle]);
 
     // Delete a project
     const deleteProjectById = useCallback(async (id: string) => {
@@ -325,7 +325,7 @@ export function useProjects() {
         if (currentProject?.id === id) {
             setCurrentProject(null);
         }
-    }, [projects, currentProject?.id, isElectron]);
+    }, [projects, currentProject?.id, isElectron, repoHandle]);
 
     // Rename a project
     const renameProjectById = useCallback(async (id: string, newName: string) => {
@@ -356,7 +356,7 @@ export function useProjects() {
             }
         }
         return updated;
-    }, [projects, currentProject?.id]);
+    }, [projects, currentProject?.id, repoHandle]);
 
     // Close current project
     const closeProject = useCallback(() => {
@@ -380,7 +380,7 @@ export function useProjects() {
             const loaded = await projectStorage.getProjects();
             setProjects(loaded);
         }
-    }, [repositoryPath]);
+    }, [repositoryPath, repoHandle]);
 
     // Get repo handle for external use (e.g., saving commits)
     const getRepoHandle = useCallback(() => repoHandle, [repoHandle]);
