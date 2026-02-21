@@ -186,4 +186,34 @@ describe('factChecker search mode runtime', () => {
         const verificationPayload = requestOpenRouterChatCompletionsMock.mock.calls[1][0] as Record<string, unknown>;
         assertPayload(verificationPayload);
     });
+
+    it('keeps model unchanged in auto mode when verification model is capability-tagged as search-capable', async () => {
+        localStorage.setItem(FACTCHECK_SEARCH_MODE_KEY, 'auto');
+        queueSuccessfulFactCheckResponses();
+
+        const result = await runFactCheck('Earth is round.', undefined, undefined, {
+            extractionModel: {
+                id: 'openai/gpt-oss-120b',
+                name: 'GPT-OSS 120B',
+                provider: 'OpenAI',
+                contextWindow: 131072,
+                inputPrice: 0.039,
+                outputPrice: 0.19,
+            },
+            verificationModel: {
+                id: 'anthropic/claude-sonnet-4',
+                name: 'Claude Sonnet 4',
+                provider: 'Anthropic',
+                contextWindow: 200000,
+                inputPrice: 3,
+                outputPrice: 15,
+                capabilities: ['web-search'],
+                supportedParams: ['tools'],
+            } as any,
+        });
+
+        expect(result.isError).toBeFalsy();
+        const verificationPayload = requestOpenRouterChatCompletionsMock.mock.calls[1][0] as Record<string, unknown>;
+        expect(verificationPayload.model).toBe('anthropic/claude-sonnet-4');
+    });
 });

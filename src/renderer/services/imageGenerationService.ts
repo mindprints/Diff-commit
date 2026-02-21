@@ -5,6 +5,7 @@
 
 import { Model } from '../constants/models';
 import { requestOpenRouterChatCompletions } from './openRouterBridge';
+import { supportsImageGeneration } from './openRouterService';
 
 /**
  * Known image-capable model IDs from OpenRouter
@@ -95,6 +96,22 @@ export interface ImageGenerationResponse {
     isCancelled?: boolean;
     /** Error message if failed */
     errorMessage?: string;
+}
+
+type ImageCapabilityCandidate = Pick<Model, 'id'> & {
+    name?: string;
+    modality?: string;
+    capabilities?: string[];
+};
+
+export function isImageCapable(candidate: ImageCapabilityCandidate | null | undefined): boolean {
+    if (!candidate) return false;
+    return supportsImageGeneration(
+        candidate.modality,
+        candidate.id,
+        candidate.name,
+        candidate.capabilities
+    ) || isImageCapableModel(candidate.id);
 }
 
 interface ImageMessagePart {

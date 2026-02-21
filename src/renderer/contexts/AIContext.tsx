@@ -13,7 +13,7 @@ import { ViewMode, AILogEntry, PolishMode, AIPrompt } from '../types';
 import {
     isImageGenerationRequest,
     extractImagePrompt,
-    isImageCapableModel,
+    isImageCapable,
     generateImage,
     generateFilename
 } from '../services/imageGenerationService';
@@ -1029,25 +1029,25 @@ ${instruction}`;
      */
     const findImageCapableModel = useCallback((): Model | null => {
         // Priority 1: Use the user-configured default image model if set and valid
-        if (selectedImageModel && isImageCapableModel(selectedImageModel.id)) {
+        if (isImageCapable(selectedImageModel as Model & { modality?: string; capabilities?: string[] })) {
             return selectedImageModel;
         }
 
         // Priority 2: Check if current text model is image-capable
-        if (isImageCapableModel(selectedModel.id)) {
+        if (isImageCapable(selectedModel as Model & { modality?: string; capabilities?: string[] })) {
             return selectedModel;
         }
 
         // Priority 3: Search through imported models
         for (const model of importedModels) {
-            if (isImageCapableModel(model.id)) {
+            if (isImageCapable(model)) {
                 return model;
             }
         }
 
         // Priority 4: Search through default models
         for (const model of MODELS) {
-            if (isImageCapableModel(model.id)) {
+            if (isImageCapable(model)) {
                 return model;
             }
         }

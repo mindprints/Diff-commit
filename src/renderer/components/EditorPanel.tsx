@@ -346,41 +346,6 @@ export function EditorPanel() {
                     </div>
                 </div>
             )}
-            {/* Prompt Editing Banner */}
-            {promptEditSession && (
-                <div className="flex-none px-4 py-2.5 flex items-center justify-between bg-gradient-to-r from-indigo-500/10 to-purple-500/10 dark:from-indigo-900/30 dark:to-purple-900/30 border-b border-indigo-200 dark:border-indigo-800">
-                    <div className="flex items-center gap-2">
-                        <Edit3 className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
-                        <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                            Editing Prompt: <strong>{promptEditSession.prompt.name}</strong>
-                        </span>
-                        <span className="text-xs text-indigo-400 dark:text-indigo-500 ml-2">
-                            Edit both sections, then Save or Cancel
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleCancelPromptEdit}
-                            className="text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
-                            icon={<X className="w-3.5 h-3.5" />}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={handleSavePromptEdit}
-                            isLoading={promptSaving}
-                            className="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-                            icon={<Save className="w-3.5 h-3.5" />}
-                        >
-                            Save Prompt
-                        </Button>
-                    </div>
-                </div>
-            )}
 
             <div
                 id="panel-editor-header"
@@ -422,7 +387,7 @@ export function EditorPanel() {
                             }}
                             onOpenGraph={() => setShowPromptsModal(true)}
                             onCancel={cancelAIOperation}
-                            disabled={isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations || !!promptEditSession}
+                            disabled={isPolishing || isFactChecking || isGeneratingImage || hasPendingAsyncOperations}
                         />
                         {isFactChecking && factCheckProgress && (
                             <div className="flex items-center gap-2">
@@ -447,8 +412,8 @@ export function EditorPanel() {
                         size="sm"
                         icon={<ArrowRight className="w-4 h-4" />}
                         title="Sync Editor to Diff View (Manual Compare)"
-                        disabled={isAutoCompareEnabled || !!promptEditSession}
-                        className={clsx((isAutoCompareEnabled || promptEditSession) && "opacity-50")}
+                        disabled={isAutoCompareEnabled}
+                        className={clsx((isAutoCompareEnabled) && "opacity-50")}
                     >
                         {/* No text, just icon as requested */}
                     </Button>
@@ -535,7 +500,7 @@ export function EditorPanel() {
                             setPreviewText(newValue);
                         }}
                         onClick={(e) => {
-                            if (e.ctrlKey && !promptEditSession) {
+                            if (e.ctrlKey) {
                                 e.preventDefault();
                                 handleQuickSend();
                             }

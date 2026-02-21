@@ -204,8 +204,7 @@ The tool uses a git-style "commit" system to ensure you never lose a draft while
 
 ---
 
-## �🛠️ Terminology
-To avoid confusion during development:
+## 🛠️ TerminologyTo avoid confusion during development:
 *   **Editor (Left)**: The editable "Working Copy" where you type and edit.
 *   **Diff View (Right)**: Shows the comparison between Original and your edits, with accept/reject toggles.
 *   **Original**: The immutable baseline text you are comparing against.

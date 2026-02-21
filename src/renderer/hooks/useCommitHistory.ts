@@ -34,6 +34,13 @@ export function useCommitHistory({
     const currentProjectRef = useRef(currentProjectPath);
     // Keep commits in a ref for stable callbacks (prevent stale closures in async handlers)
     const commitsRef = useRef<TextCommit[]>(commits);
+
+    // Synchronous updater to keep ref and state in sync immediately
+    const updateCommits = useCallback((newCommits: TextCommit[]) => {
+        setCommits(newCommits);
+        commitsRef.current = newCommits;
+    }, []);
+
     useEffect(() => {
         commitsRef.current = commits;
     }, [commits]);
@@ -45,12 +52,12 @@ export function useCommitHistory({
 
         // Clear commits immediately when project changes
         if (projectChanged) {
-            setCommits([]);
+            updateCommits([]);
         }
 
         // No project = no commits to load
         if (!currentProjectPath && !currentProjectName) {
-            setCommits([]);
+            updateCommits([]);
             return;
         }
 
@@ -59,10 +66,10 @@ export function useCommitHistory({
             if (currentProjectPath && window.electron?.loadProjectCommits) {
                 try {
                     const projectCommits = await window.electron.loadProjectCommits(currentProjectPath);
-                    setCommits(projectCommits || []);
+                    updateCommits(projectCommits || []);
                 } catch (e) {
                     console.error('Failed to load commits from Electron:', e);
-                    setCommits([]);
+                    updateCommits([]);
                 }
                 return;
             }
@@ -71,16 +78,16 @@ export function useCommitHistory({
             if (browserLoadCommits && currentProjectName) {
                 try {
                     const projectCommits = await browserLoadCommits();
-                    setCommits(projectCommits || []);
+                    updateCommits(projectCommits || []);
                 } catch (e) {
                     console.warn('Failed to load commits from browser FS:', e);
-                    setCommits([]);
+                    updateCommits([]);
                 }
                 return;
             }
 
             // No storage available
-            setCommits([]);
+            updateCommits([]);
         };
 
         loadCommits();
@@ -138,7 +145,7 @@ export function useCommitHistory({
         };
 
         const updatedCommits = [...currentCommits, newCommit];
-        setCommits(updatedCommits);
+        updateCommits(updatedCommits);
 
         // Manual save
         await saveCommits(updatedCommits);
@@ -149,12 +156,12 @@ export function useCommitHistory({
 
     const handleDeleteCommit = useCallback(async (commitId: string) => {
         const updatedCommits = commitsRef.current.filter(c => c.id !== commitId);
-        setCommits(updatedCommits);
+        updateCommits(updatedCommits);
         await saveCommits(updatedCommits);
     }, [saveCommits]);
 
     const handleClearAllCommits = useCallback(async () => {
-        setCommits([]);
+        updateCommits([]);
         await saveCommits([]);
     }, [saveCommits]);
 

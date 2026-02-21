@@ -9,7 +9,7 @@ import {
 } from '../services/factChecker';
 import { useAI, useEditor, useModels, useProject, useUI } from '../contexts';
 import { supportsSearchCapability } from '../services/openRouterService';
-import { isImageCapableModel } from '../services/imageGenerationService';
+import { isImageCapable } from '../services/imageGenerationService';
 import { FontSize } from '../constants/ui';
 
 interface SettingsModalProps {
@@ -124,24 +124,6 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         }
     }, [isOpen]);
 
-    useEffect(() => {
-        if (!isOpen || models.length === 0) return;
-
-        const hasExtraction = models.some((m) => m.id === factCheckExtractionModelId);
-        if (!hasExtraction) {
-            const fallback = models[0].id;
-            setFactCheckExtractionModelIdState(fallback);
-            setFactCheckExtractionModelId(fallback);
-        }
-
-        const hasVerification = models.some((m) => m.id === factCheckVerificationModelId);
-        if (!hasVerification) {
-            const fallback = models[0].id;
-            setFactCheckVerificationModelIdState(fallback);
-            setFactCheckVerificationModelId(fallback);
-        }
-    }, [isOpen, models, factCheckExtractionModelId, factCheckVerificationModelId]);
-
     const verificationModelSupportsSearchMap = useMemo(() => {
         const map = new Map<string, boolean>();
         for (const model of models) {
@@ -172,6 +154,33 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         () => verificationModelSupportsSearchMap.get(factCheckVerificationModelId) ?? false,
         [verificationModelSupportsSearchMap, factCheckVerificationModelId]
     );
+
+    useEffect(() => {
+        if (!isOpen || models.length === 0) return;
+
+        const hasExtraction = models.some((m) => m.id === factCheckExtractionModelId);
+        if (!hasExtraction) {
+            const fallback = models[0].id;
+            setFactCheckExtractionModelIdState(fallback);
+            setFactCheckExtractionModelId(fallback);
+        }
+
+        const hasVerification = models.some((m) => m.id === factCheckVerificationModelId);
+        if (!hasVerification) {
+            const searchAwareFallback = factCheckSearchMode !== 'off'
+                ? (models.find((m) => verificationModelSupportsSearchMap.get(m.id))?.id || models[0].id)
+                : models[0].id;
+            setFactCheckVerificationModelIdState(searchAwareFallback);
+            setFactCheckVerificationModelId(searchAwareFallback);
+        }
+    }, [
+        isOpen,
+        models,
+        factCheckExtractionModelId,
+        factCheckVerificationModelId,
+        factCheckSearchMode,
+        verificationModelSupportsSearchMap
+    ]);
 
     const scrollToSection = (sectionId: SettingsSectionId) => {
         setActiveSection(sectionId);
@@ -601,14 +610,14 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                                                 return;
                                             }
                                             const model = models.find((m) => m.id === e.target.value);
-                                            if (model && isImageCapableModel(model.id)) {
+                                            if (model && isImageCapable(model)) {
                                                 setDefaultImageModel(model);
                                             }
                                         }}
                                         className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     >
                                         <option value="">Auto-detect</option>
-                                        {models.filter((m) => isImageCapableModel(m.id)).map((m) => (
+                                        {models.filter((m) => isImageCapable(m)).map((m) => (
                                             <option key={`settings-image-${m.id}`} value={m.id}>
                                                 {m.name} ({m.provider})
                                             </option>
@@ -726,14 +735,14 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                                     </select>
                                     <p className={`text-xs ${selectedVerificationModelSupportsSearch ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
                                         {selectedVerificationModelSupportsSearch
-                                            ? 'Selected verification model is likely search-capable.'
-                                            : 'Search capability is unclear for the selected verification model.'}
+                                            ? 'Selected verification model likely has native web-search support.'
+                                            : 'Native search support is unclear for the selected verification model.'}
                                     </p>
                                     {factCheckSearchMode !== 'off' && !selectedVerificationModelSupportsSearch && (
                                         <div className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                                             <AlertCircle className="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                                             <p className="text-xs text-amber-700 dark:text-amber-300">
-                                                Fact-check search mode is enabled, but this model may not support web search options. Verification requests may fail.
+                                                Fact-check search mode is enabled. Native search may be unavailable for this model, but :online/plugin search can still be applied.
                                             </p>
                                         </div>
                                     )}

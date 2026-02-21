@@ -7,7 +7,7 @@ export function useElectronMenu() {
     const {
         isDarkMode, setIsDarkMode, setShowHelp, setShowLogs,
         setShowCommitHistory, setShowPromptsModal, setShowProjectsPanel,
-        setShowModelsModal, setShowSettingsModal, setShowRepoPicker
+        setShowModelsModal, setShowSettingsModal, setShowRepoPicker, setErrorMessage
     } = useUI();
 
     const {
@@ -64,11 +64,28 @@ export function useElectronMenu() {
         }));
         unsubscribers.push(window.electron.onMenuSaveProject?.(async () => {
             if (!currentProject) return;
-            await saveCurrentProject(previewText);
+            try {
+                const success = await saveCurrentProject(previewText);
+                if (!success) {
+                    setErrorMessage('Failed to save project changes to disk.');
+                }
+            } catch (error) {
+                console.error('Error in menu-save-project handler:', error);
+                setErrorMessage('An unexpected error occurred while saving the project.');
+            }
         }) || (() => { }));
         unsubscribers.push(window.electron.onMenuExportProjectBundle?.(async () => {
             if (currentProject?.path && window.electron?.saveProjectBundle) {
-                await window.electron.saveProjectBundle(currentProject.path);
+                try {
+                    const result = await window.electron.saveProjectBundle(currentProject.path);
+                    if (!result) {
+                        // cancelled or failed
+                        console.log('[Menu] Project bundle export cancelled or failed');
+                    }
+                } catch (error) {
+                    console.error('Error in menu-export-project-bundle handler:', error);
+                    setErrorMessage('Failed to export project bundle.');
+                }
             }
         }) || (() => { }));
         unsubscribers.push(window.electron.onRequestSaveBeforeClose?.(async (requestId) => {
@@ -121,5 +138,5 @@ export function useElectronMenu() {
 
         // Cleanup listeners on unmount
         return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject, saveCurrentProject]);
+    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject, saveCurrentProject, setErrorMessage]);
 }

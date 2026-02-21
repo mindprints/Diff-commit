@@ -1,3 +1,5 @@
+import { supportsSearchCapability } from './openRouterService';
+
 export type OpenRouterSearchMode = 'off' | 'auto' | 'online_suffix' | 'web_plugin';
 
 const FACTCHECK_SEARCH_MODE_KEY = 'diff-commit-factcheck-search-mode';
@@ -16,11 +18,28 @@ export interface OpenRouterChatPayloadWithPlugins {
     plugins?: OpenRouterPlugin[];
 }
 
-export function isNativeSearchModel(modelId: string): boolean {
+export interface SearchCapabilityHints {
+    modelId?: string;
+    modelName?: string;
+    capabilities?: string[];
+    supportedParams?: string[];
+}
+
+export function isNativeSearchModel(modelId: string, hints?: SearchCapabilityHints): boolean {
     const normalized = modelId.toLowerCase();
-    return (
+    const explicitNative = (
         normalized.startsWith('perplexity/sonar') ||
         (normalized.startsWith('google/gemini') && normalized.includes('grounding'))
+    );
+    if (explicitNative) {
+        return true;
+    }
+
+    return supportsSearchCapability(
+        hints?.modelId || modelId,
+        hints?.modelName,
+        hints?.capabilities,
+        hints?.supportedParams
     );
 }
 
@@ -46,14 +65,15 @@ export function setFactCheckSearchMode(mode: OpenRouterSearchMode): void {
 
 export function applySearchModeToPayload(
     payload: OpenRouterChatPayloadWithPlugins,
-    mode: OpenRouterSearchMode
+    mode: OpenRouterSearchMode,
+    hints?: SearchCapabilityHints
 ): OpenRouterChatPayloadWithPlugins {
     if (mode === 'off') {
         return payload;
     }
 
     if (mode === 'auto') {
-        if (isNativeSearchModel(payload.model)) {
+        if (isNativeSearchModel(payload.model, hints)) {
             return payload;
         }
         return { ...payload, model: ensureOnlineSuffix(payload.model) };

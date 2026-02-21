@@ -728,7 +728,7 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
                                                         )}
                                                         title={isSearchCapable
                                                             ? "Likely supports web/search capability"
-                                                            : "Search support is unclear; may fail with fact-check search mode"}
+                                                            : "Native search support is unclear; :online/plugin search can still be used"}
                                                     >
                                                         <Search className="w-2.5 h-2.5" />
                                                         {isSearchCapable ? "Search" : "Search?"}

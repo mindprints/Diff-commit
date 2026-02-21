@@ -3,7 +3,7 @@ import { FactClaim, VerificationResult, FactCheckSession, ConfidenceLevel, Verif
 import { MODELS } from '../constants/models';
 import type { Model } from '../constants/models';
 import { requestOpenRouterChatCompletions } from './openRouterBridge';
-import { applySearchModeToPayload, getFactCheckSearchMode, OpenRouterChatPayloadWithPlugins } from './openRouterSearch';
+import { applySearchModeToPayload, getFactCheckSearchMode, OpenRouterChatPayloadWithPlugins, SearchCapabilityHints } from './openRouterSearch';
 
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
 const SITE_URL = 'http://localhost:5173';
@@ -216,15 +216,11 @@ async function requestChatCompletions(payload: {
     messages: Array<{ role: string; content: string }>;
     temperature: number;
     plugins?: Array<{ id: string; [key: string]: unknown }>;
-}, signal?: AbortSignal, useSearch = false): Promise<OpenRouterChatCompletionResponse> {
+}, signal?: AbortSignal, useSearch = false, searchHints?: SearchCapabilityHints): Promise<OpenRouterChatCompletionResponse> {
     const searchMode = useSearch ? getFactCheckSearchMode() : 'off';
     const effectivePayload = useSearch
-        ? applySearchModeToPayload(payload as OpenRouterChatPayloadWithPlugins, searchMode)
+        ? applySearchModeToPayload(payload as OpenRouterChatPayloadWithPlugins, searchMode, searchHints)
         : payload;
-
-    if (useSearch) {
-        console.info('[FactCheck] Search mode:', searchMode, 'Model:', effectivePayload.model);
-    }
 
     if (window.electron?.openRouter?.chatCompletions) {
         return requestOpenRouterChatCompletions(effectivePayload, signal) as Promise<OpenRouterChatCompletionResponse>;
@@ -373,11 +369,20 @@ Valid status values: verified, incorrect, outdated, misleading, unverifiable
 Valid confidence values: high, medium, low`;
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const verificationWithHints = verificationModel as Model & {
+        capabilities?: string[];
+        supportedParams?: string[];
+    };
     const data = await requestChatCompletions({
         model: verificationModel.id,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
-    }, signal, true);
+    }, signal, true, {
+        modelId: verificationModel.id,
+        modelName: verificationModel.name,
+        capabilities: verificationWithHints.capabilities,
+        supportedParams: verificationWithHints.supportedParams,
+    });
     const content = data.choices?.[0]?.message?.content || '{}';
     const usage = data.usage ? {
         inputTokens: data.usage.prompt_tokens,
