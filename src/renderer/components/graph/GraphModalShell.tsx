@@ -3,7 +3,7 @@ import '../ProjectNodeModal.css';
 
 interface GraphModalShellProps {
     controls: React.ReactNode;
-    closeControl: React.ReactNode;
+    closeControl?: React.ReactNode;
     topBar?: React.ReactNode;
     children: React.ReactNode;
 }
@@ -13,7 +13,7 @@ export function GraphModalShell({ controls, closeControl, topBar, children }: Gr
         <div className="project-node-modal">
             <div className="modal-controls">{controls}</div>
             {topBar}
-            <div className="modal-close flex items-center gap-2">{closeControl}</div>
+            {closeControl ? <div className="modal-close flex items-center gap-2">{closeControl}</div> : null}
             {children}
         </div>
     );

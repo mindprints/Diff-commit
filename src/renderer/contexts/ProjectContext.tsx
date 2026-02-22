@@ -18,11 +18,12 @@ interface ProjectContextType {
     currentProject: Project | null;
     loadProject: (id: string) => Promise<Project | null>;
     saveCurrentProject: (content: string) => Promise<void>;
-    createNewProject: (name: string, content: string) => Promise<Project>;
+    createNewProject: (name: string, content: string, open?: boolean) => Promise<Project>;
     handleLoadProject: (id: string) => Promise<Project | null | undefined>;
     handleCreateProject: (name: string) => Promise<Project>;
     deleteProject: (id: string) => Promise<void>;
     renameProject: (id: string, newName: string) => Promise<Project | null>;
+    moveProjectToRepository: (id: string, targetRepoPath: string) => Promise<Project | null>;
     openRepository: () => Promise<void>;
     loadRepositoryByPath: (repoPath: string) => Promise<{ path: string; projects: Project[] } | null>;
     createRepository: () => Promise<void>;
@@ -74,6 +75,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createNewProject,
         deleteProject,
         renameProject,
+        moveProjectToRepository,
         openRepository,
         loadRepositoryByPath,
         createRepository,
@@ -412,6 +414,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         handleLoadProject, handleCreateProject,
         handleAccept, handleCommitClick,
         deleteProject, renameProject,
+        moveProjectToRepository,
         openRepository: handleOpenRepository,
         loadRepositoryByPath,
         createRepository, repositoryPath, getRepoHandle, refreshProjects,
@@ -426,7 +429,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }), [
         projects, currentProject, loadProject, saveCurrentProject, createNewProject,
         handleLoadProject, handleCreateProject, handleAccept, handleCommitClick,
-        deleteProject, renameProject, handleOpenRepository, loadRepositoryByPath, createRepository, repositoryPath,
+        deleteProject, renameProject, moveProjectToRepository, handleOpenRepository, loadRepositoryByPath, createRepository, repositoryPath,
         getRepoHandle, refreshProjects, commits, setCommits, handleCommit, handleDeleteCommit,
         handleClearAllCommits, handleClearAll, handleExportCommits, handleImportCommits,
         handleFileOpen, handleNewProject, hasUnsavedChanges, setHasUnsavedChanges, hasUnpersistedChanges,

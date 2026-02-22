@@ -1329,6 +1329,86 @@ ${body}
         }
     });
 
+    // Move Project to another Repository (move folder on disk)
+    ipcMain.handle('move-project-to-repository', async (event, projectPath: string, targetRepoPath: string) => {
+        if (!projectPath || !targetRepoPath) return null;
+        const validatedProjectPath = assertProjectPath(projectPath);
+        const validatedTargetRepoPath = assertRepositoryPath(targetRepoPath);
+
+        const pathExists = async (p: string): Promise<boolean> => {
+            try {
+                await fs.promises.access(p);
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        if (!(await pathExists(validatedProjectPath))) {
+            throw new Error('Project folder does not exist');
+        }
+
+        const sourceParentPath = path.dirname(validatedProjectPath);
+        if (sourceParentPath.toLowerCase() === validatedTargetRepoPath.toLowerCase()) {
+            // No move needed
+            const projectName = path.basename(validatedProjectPath);
+            const contentPath = path.join(validatedProjectPath, PROJECT_CONTENT_FILE);
+            const content = (await pathExists(contentPath)) ? await fs.promises.readFile(contentPath, 'utf-8') : '';
+            const metadata = readProjectMetadata(path.join(validatedProjectPath, DIFF_COMMIT_DIR));
+            const stats = await fs.promises.stat(validatedProjectPath);
+            return {
+                id: metadata?.id || projectName,
+                name: projectName,
+                content,
+                createdAt: metadata?.createdAt || stats.birthtimeMs,
+                updatedAt: Date.now(),
+                path: validatedProjectPath,
+                repositoryPath: sourceParentPath
+            };
+        }
+
+        const projectName = path.basename(validatedProjectPath);
+        const targetProjectPath = path.join(validatedTargetRepoPath, projectName);
+        if (await pathExists(targetProjectPath)) {
+            throw new Error(`A project named "${projectName}" already exists in target repository`);
+        }
+
+        try {
+            await fs.promises.rename(validatedProjectPath, targetProjectPath);
+
+            const metaPath = path.join(targetProjectPath, '.hierarchy-meta.json');
+            if (await pathExists(metaPath)) {
+                const metaContent = await fs.promises.readFile(metaPath, 'utf-8');
+                const meta = JSON.parse(metaContent);
+                meta.type = 'project';
+                meta.name = projectName;
+                await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+            }
+
+            const contentPath = path.join(targetProjectPath, PROJECT_CONTENT_FILE);
+            const content = (await pathExists(contentPath))
+                ? await fs.promises.readFile(contentPath, 'utf-8')
+                : '';
+
+            const diffCommitPath = path.join(targetProjectPath, DIFF_COMMIT_DIR);
+            const metadata = readProjectMetadata(diffCommitPath);
+            const stats = await fs.promises.stat(targetProjectPath);
+
+            return {
+                id: metadata?.id || projectName,
+                name: projectName,
+                content,
+                createdAt: metadata?.createdAt || stats.birthtimeMs,
+                updatedAt: Date.now(),
+                path: targetProjectPath,
+                repositoryPath: validatedTargetRepoPath
+            };
+        } catch (e) {
+            console.error('Failed to move project:', e);
+            throw e;
+        }
+    });
+
     // Save Project Content (write to content.md in project folder)
     ipcMain.handle('save-project-content', async (event, projectPath, content) => {
         if (!projectPath) return false;

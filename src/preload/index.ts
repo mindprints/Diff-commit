@@ -103,6 +103,7 @@ export interface ElectronAPI {
     saveProjectCommits: (path: string, commits: TextCommit[]) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
     renameProject: (projectPath: string, newName: string) => Promise<Project | null>;
+    moveProjectToRepository: (projectPath: string, targetRepoPath: string) => Promise<Project | null>;
     deleteProject: (projectPath: string) => Promise<boolean>;
     loadGraphData: (repoPath: string) => Promise<{ nodes: Array<{ id: string; x: number; y: number }>; edges: Array<{ from: string; to: string }> }>;
     saveGraphData: (repoPath: string, data: { nodes: Array<{ id: string; x: number; y: number }>; edges: Array<{ from: string; to: string }> }) => Promise<boolean>;
@@ -209,6 +210,7 @@ const electronAPI: ElectronAPI = {
     saveProjectCommits: (path: string, commits: TextCommit[]) => ipcRenderer.invoke('save-project-commits', path, commits),
     saveProjectBundle: (projectPath: string) => ipcRenderer.invoke('save-project-bundle', projectPath),
     renameProject: (projectPath: string, newName: string) => ipcRenderer.invoke('rename-project', projectPath, newName),
+    moveProjectToRepository: (projectPath: string, targetRepoPath: string) => ipcRenderer.invoke('move-project-to-repository', projectPath, targetRepoPath),
     deleteProject: (projectPath: string) => ipcRenderer.invoke('delete-project', projectPath),
     loadGraphData: (repoPath: string) => ipcRenderer.invoke('graph:load', repoPath),
     saveGraphData: (repoPath: string, data) => ipcRenderer.invoke('graph:save', repoPath, data),

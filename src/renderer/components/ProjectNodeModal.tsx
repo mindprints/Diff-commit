@@ -4,14 +4,16 @@ import { X, GitMerge, FileText, Trash2, ArrowLeft, RotateCcw, Plus, Edit2, Folde
 import { Button } from './Button';
 import { loadGraphData, saveGraphData, getTopologicalSort } from '../services/graphService';
 import { CreateNodeDialog } from './CreateNodeDialog';
+import * as projectStorage from '../services/projectStorage';
 import './ProjectNodeModal.css';
-import { Project, TextCommit } from '../types';
+import { Project, RepositoryInfo, TextCommit } from '../types';
 import { GraphModalShell } from './graph/GraphModalShell';
 import { GraphCanvas } from './graph/GraphCanvas';
 import { GraphContextMenu } from './graph/GraphContextMenu';
 import { GraphNodeCard } from './graph/GraphNodeCard';
 import { GraphNodeTooltip } from './graph/GraphNodeTooltip';
 import { GraphSearchControl } from './graph/GraphSearchControl';
+import { clientToGraphSpace } from './graph/graphMath';
 
 interface ProjectNodeModalProps {
     isOpen: boolean;
@@ -23,7 +25,7 @@ interface ProjectNodeModalProps {
 type EntityType = 'repository' | 'project' | 'commit';
 
 // Hierarchical navigation scope
-type ViewScopeType = 'projects' | 'commits';
+type ViewScopeType = 'projects' | 'commits' | 'unified';
 interface ViewScope {
     type: ViewScopeType;
     projectId?: string;      // Set when viewing commits of a specific project
@@ -82,6 +84,9 @@ const GAP_X = 20;
 const GAP_Y = 50;
 const NODE_SPACING_X = NODE_WIDTH + GAP_X;
 const NODE_SPACING_Y = NODE_HEIGHT + GAP_Y;
+const RECENT_REPOS_KEY = 'diff-commit-recent-repos';
+const PINNED_REPOS_KEY = 'diff-commit-pinned-repos';
+const MAX_VISIBLE_REPOS = 6;
 
 // Helper: Escape regex special characters
 function escapeRegExp(string: string) {
@@ -125,7 +130,7 @@ const EntityIcon = ({ type, className }: { type: EntityType; className?: string 
 };
 
 export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
-    const { currentProject, projects, createNewProject, repositoryPath, handleLoadProject, deleteProject, renameProject, refreshProjects, getRepoHandle } = useProject();
+    const { currentProject, projects, createNewProject, repositoryPath, handleLoadProject, deleteProject, renameProject, refreshProjects, getRepoHandle, loadRepositoryByPath } = useProject();
     const { setShowRepoPicker } = useUI();
 
     // Canvas State
@@ -167,6 +172,75 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const [scopeCommits, setScopeCommits] = useState<TextCommit[]>([]);
 
     const [commitCounts, setCommitCounts] = useState<Record<string, number>>({});
+    const [availableRepos, setAvailableRepos] = useState<RepositoryInfo[]>([]);
+    const [repoSearchTerm, setRepoSearchTerm] = useState('');
+    const [repoPinnedPaths, setRepoPinnedPaths] = useState<string[]>([]);
+    const [repoRecentPaths, setRepoRecentPaths] = useState<string[]>([]);
+    const [unifiedSelectedProjectId, setUnifiedSelectedProjectId] = useState<string | null>(null);
+    const [unifiedProjectCommits, setUnifiedProjectCommits] = useState<TextCommit[]>([]);
+    const [repoDropTargets, setRepoDropTargets] = useState<RepositoryInfo[]>([]);
+    const [repoDropZoneHighlightPath, setRepoDropZoneHighlightPath] = useState<string | null>(null);
+    const repoDropZoneRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const repositoryNodeId = useMemo(
+        () => `repo:${repositoryPath || 'unknown'}`,
+        [repositoryPath]
+    );
+    const repositoryLabel = useMemo(() => {
+        if (!repositoryPath) return 'Repository';
+        const parts = repositoryPath.split(/[\\/]/).filter(Boolean);
+        return parts[parts.length - 1] || repositoryPath;
+    }, [repositoryPath]);
+    const unifiedCommitMap = useMemo(() => {
+        const map = new Map<string, TextCommit>();
+        unifiedProjectCommits.forEach((commit) => map.set(commit.id, commit));
+        return map;
+    }, [unifiedProjectCommits]);
+
+    const repoMap = useMemo(() => {
+        const map = new Map<string, RepositoryInfo>();
+        availableRepos.forEach((repo) => map.set(repo.path, repo));
+        return map;
+    }, [availableRepos]);
+    const visibleRepoOptions = useMemo(() => {
+        const term = repoSearchTerm.trim().toLowerCase();
+        const baseOrder = [
+            ...(repositoryPath ? [repositoryPath] : []),
+            ...repoPinnedPaths,
+            ...repoRecentPaths,
+            ...availableRepos.map((r) => r.path),
+        ];
+        const deduped = Array.from(new Set(baseOrder))
+            .map((path) => repoMap.get(path))
+            .filter((repo): repo is RepositoryInfo => Boolean(repo))
+            .filter((repo) => {
+                if (!term) return true;
+                return repo.name.toLowerCase().includes(term) || repo.path.toLowerCase().includes(term);
+            });
+        return deduped.slice(0, MAX_VISIBLE_REPOS);
+    }, [repoSearchTerm, repositoryPath, repoPinnedPaths, repoRecentPaths, availableRepos, repoMap]);
+
+    const pickRandomRepos = useCallback((repos: RepositoryInfo[], count: number, excludePath?: string | null) => {
+        const pool = repos.filter((repo) => repo.path !== excludePath);
+        if (pool.length <= count) return pool;
+        const shuffled = [...pool];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled.slice(0, count);
+    }, []);
+
+    const getUnifiedRepoDropTarget = useCallback((clientX: number, clientY: number): RepositoryInfo | null => {
+        for (const repo of repoDropTargets) {
+            const el = repoDropZoneRefs.current[repo.path];
+            if (!el) continue;
+            const rect = el.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                return repo;
+            }
+        }
+        return null;
+    }, [repoDropTargets]);
 
     const filteredNodes = useMemo(() => {
         const filtered = nodes;
@@ -186,6 +260,25 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
                 return nameMatch || contentMatch;
             });
+        } else if (viewScope.type === 'unified') {
+            return filtered.filter((n) => {
+                if (n.id === repositoryNodeId || n.entityType === 'repository') {
+                    return repositoryLabel.toLowerCase().includes(term) || Boolean(repositoryPath?.toLowerCase().includes(term));
+                }
+                if (n.entityType === 'commit') {
+                    const commit = unifiedCommitMap.get(n.id);
+                    if (!commit) return false;
+                    return (
+                        `commit ${commit.commitNumber}`.toLowerCase().includes(term) ||
+                        commit.content.toLowerCase().includes(term)
+                    );
+                }
+                const p = projects.find(proj => proj.id === n.id);
+                if (!p) return false;
+                const nameMatch = p.name.toLowerCase().includes(term);
+                const contentMatch = p.content && p.content.toLowerCase().includes(term);
+                return nameMatch || contentMatch;
+            });
         } else {
             // Filter commits by content
             return filtered.filter(n => {
@@ -194,13 +287,13 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                 return commit.content.toLowerCase().includes(term);
             });
         }
-    }, [nodes, projects, scopeCommits, searchTerm, viewScope.type]);
+    }, [nodes, projects, scopeCommits, searchTerm, viewScope.type, repositoryNodeId, repositoryLabel, repositoryPath, unifiedCommitMap]);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadCommitCounts = async () => {
-            if (viewScope.type !== 'projects' || projects.length === 0) {
+            if ((viewScope.type !== 'projects' && viewScope.type !== 'unified') || projects.length === 0) {
                 if (!cancelled) setCommitCounts({});
                 return;
             }
@@ -253,6 +346,112 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             cancelled = true;
         };
     }, [projects, viewScope.type, getRepoHandle]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        const loadVisibleRepos = async () => {
+            try {
+                const repos = await projectStorage.listRepositories();
+                if (!cancelled) setAvailableRepos(repos);
+            } catch {
+                if (!cancelled) setAvailableRepos([]);
+            }
+            try {
+                const pinnedRaw = localStorage.getItem(PINNED_REPOS_KEY);
+                const recentRaw = localStorage.getItem(RECENT_REPOS_KEY);
+                const pinned = pinnedRaw ? JSON.parse(pinnedRaw) : [];
+                const recent = recentRaw ? JSON.parse(recentRaw) : [];
+                if (!cancelled) {
+                    setRepoPinnedPaths(Array.isArray(pinned) ? pinned : []);
+                    setRepoRecentPaths(Array.isArray(recent) ? recent : []);
+                }
+            } catch {
+                if (!cancelled) {
+                    setRepoPinnedPaths([]);
+                    setRepoRecentPaths([]);
+                }
+            }
+        };
+        void loadVisibleRepos();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || viewScope.type !== 'unified') {
+            setRepoDropTargets([]);
+            setRepoDropZoneHighlightPath(null);
+            return;
+        }
+        setRepoDropTargets(pickRandomRepos(availableRepos, 3, repositoryPath));
+    }, [isOpen, viewScope.type, availableRepos, repositoryPath, pickRandomRepos]);
+
+    useEffect(() => {
+        if (!isOpen || viewScope.type !== 'unified') return;
+        if (!unifiedSelectedProjectId) {
+            setUnifiedProjectCommits([]);
+            setNodes((prev) => prev.filter((n) => n.entityType !== 'commit'));
+            return;
+        }
+
+        let cancelled = false;
+        const loadUnifiedCommits = async () => {
+            const project = projects.find((p) => p.id === unifiedSelectedProjectId);
+            if (!project) {
+                if (!cancelled) {
+                    setUnifiedProjectCommits([]);
+                    setNodes((prev) => prev.filter((n) => n.entityType !== 'commit'));
+                }
+                return;
+            }
+
+            let commits: TextCommit[] = [];
+            if (window.electron?.loadProjectCommits && project.path) {
+                try {
+                    commits = await window.electron.loadProjectCommits(project.path) || [];
+                } catch {
+                    commits = [];
+                }
+            } else {
+                const repoHandle = getRepoHandle();
+                if (repoHandle) {
+                    try {
+                        const { loadProjectCommits } = await import('../services/browserFileSystem');
+                        commits = await loadProjectCommits(repoHandle, project.name) || [];
+                    } catch {
+                        commits = [];
+                    }
+                }
+            }
+
+            if (cancelled) return;
+            setUnifiedProjectCommits(commits);
+            setNodes((prev) => {
+                const nonCommitNodes = prev.filter((n) => n.entityType !== 'commit');
+                const previousCommitNodeMap = new Map<string, NodeState>(
+                    prev.filter((n) => n.entityType === 'commit').map((n) => [n.id, n])
+                );
+                const commitNodes: NodeState[] = commits.map((commit, idx) => {
+                    const previous = previousCommitNodeMap.get(commit.id);
+                    if (previous) return previous;
+                    return {
+                        id: commit.id,
+                        x: 300 + (idx % 5) * NODE_SPACING_X,
+                        y: 420 + Math.floor(idx / 5) * NODE_SPACING_Y,
+                        entityType: 'commit',
+                    };
+                });
+                return [...nonCommitNodes, ...commitNodes];
+            });
+        };
+
+        void loadUnifiedCommits();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, viewScope.type, unifiedSelectedProjectId, projects, getRepoHandle]);
 
     const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -317,24 +516,80 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         }
     }, [repositoryPath, projects]);
 
+    const initializeUnifiedLayout = useCallback(async (forced: boolean = false) => {
+        if (!repositoryPath) return;
+
+        const data = await loadGraphData(repositoryPath);
+        const existingProjectIds = new Set(projects.map(p => p.id));
+
+        const projectNodes = (!forced
+            ? data.nodes.filter(n => existingProjectIds.has(n.id))
+            : []
+        ).map((n) => ({ ...n, entityType: 'project' as EntityType }));
+        const knownNodes = new Set(projectNodes.map((n) => n.id));
+
+        const isColliding = (x: number, y: number) => {
+            return projectNodes.some(n =>
+                Math.abs(n.x - x) < NODE_SPACING_X && Math.abs(n.y - y) < NODE_SPACING_Y
+            );
+        };
+
+        projects.forEach(p => {
+            if (!knownNodes.has(p.id)) {
+                let x = 300;
+                let y = 220;
+                let attempts = 0;
+                const maxAttempts = 150;
+                while (isColliding(x, y) && attempts < maxAttempts) {
+                    x += NODE_SPACING_X;
+                    if (x > 1200) {
+                        x = 300;
+                        y += NODE_SPACING_Y;
+                    }
+                    attempts++;
+                }
+                projectNodes.push({ id: p.id, x, y, entityType: 'project' });
+            }
+        });
+
+        const storedRepoNode = !forced
+            ? data.nodes.find((n) => n.id === repositoryNodeId)
+            : undefined;
+        const repositoryNode: NodeState = {
+            id: repositoryNodeId,
+            x: storedRepoNode?.x ?? 50,
+            y: storedRepoNode?.y ?? 40,
+            entityType: 'repository',
+        };
+
+        setNodes([repositoryNode, ...projectNodes]);
+        setEdges([]);
+        if (forced) {
+            setOffset({ x: 0, y: 0 });
+            setScale(1);
+        }
+    }, [repositoryPath, projects, repositoryNodeId]);
+
     useEffect(() => {
         if (isOpen) {
-            // Reset to projects view when modal opens
-            setViewScope({ type: 'projects' });
+            // Open in unified mode by default to show repository + projects together
+            setViewScope({ type: 'unified' });
             setScopeCommits([]);
-            initializeLayout(false);
+            setUnifiedSelectedProjectId(null);
+            setUnifiedProjectCommits([]);
+            initializeUnifiedLayout(false);
         }
-    }, [isOpen, initializeLayout]);
+    }, [isOpen, initializeUnifiedLayout]);
 
     // Save on changes
     useEffect(() => {
-        if (isOpen && repositoryPath && nodes.length > 0) {
+        if (isOpen && repositoryPath && nodes.length > 0 && viewScope.type === 'projects') {
             const timeout = setTimeout(() => {
                 saveGraphData(repositoryPath, { nodes, edges });
             }, 1000);
             return () => clearTimeout(timeout);
         }
-    }, [nodes, edges, repositoryPath, isOpen]);
+    }, [nodes, edges, repositoryPath, isOpen, viewScope.type]);
 
     // Native Wheel Listener for passive: false
     useEffect(() => {
@@ -356,6 +611,15 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         return () => canvas.removeEventListener('wheel', handleWheel);
     }, []);
 
+    const handleSelectVisibleRepo = useCallback(async (repo: RepositoryInfo) => {
+        if (!repo.path || repo.path === repositoryPath) return;
+        await loadRepositoryByPath(repo.path);
+        setUnifiedSelectedProjectId(null);
+        setUnifiedProjectCommits([]);
+        setSelectedNodes(new Set());
+        setRepoDropZoneHighlightPath(null);
+    }, [repositoryPath, loadRepositoryByPath]);
+
     // --- Interaction Handlers ---
 
     const handleMouseDown = useCallback((e: React.MouseEvent, nodeId: string | null) => {
@@ -363,10 +627,39 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
 
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const worldPoint = clientToGraphSpace(e.clientX, e.clientY, rect, offset, scale);
+        const x = worldPoint.x;
+        const y = worldPoint.y;
 
         if (nodeId) {
+            if (viewScope.type === 'unified') {
+                e.stopPropagation();
+                const selectedNode = nodes.find((n) => n.id === nodeId);
+                setSelectedNodes(prev => {
+                    const next = new Set(prev);
+                    if (e.ctrlKey) {
+                        if (next.has(nodeId)) next.delete(nodeId);
+                        else next.add(nodeId);
+                    } else {
+                        next.clear();
+                        next.add(nodeId);
+                    }
+                    return next;
+                });
+                if (selectedNode?.entityType === 'project') {
+                    setUnifiedSelectedProjectId(nodeId);
+                    setDraggingNode(nodeId);
+                    setDragStart({
+                        x: x - (selectedNode.x || 0),
+                        y: y - (selectedNode.y || 0)
+                    });
+                } else if (selectedNode?.entityType === 'repository' || nodeId === repositoryNodeId) {
+                    setUnifiedSelectedProjectId(null);
+                    setUnifiedProjectCommits([]);
+                    setNodes((prev) => prev.filter((n) => n.entityType !== 'commit'));
+                }
+                return;
+            }
             if (e.shiftKey) {
                 // Start creating edge
                 e.stopPropagation();
@@ -402,13 +695,14 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             // Clear selection if clicking background
             if (!e.ctrlKey) setSelectedNodes(new Set());
         }
-    }, [nodes, offset]);
+    }, [nodes, offset, scale, viewScope.type, repositoryNodeId]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const worldPoint = clientToGraphSpace(e.clientX, e.clientY, rect, offset, scale);
+        const x = worldPoint.x;
+        const y = worldPoint.y;
 
         if (draggingNode) {
             setNodes(prev => prev.map(n =>
@@ -416,25 +710,45 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     ? { ...n, x: x - dragStart.x, y: y - dragStart.y }
                     : n
             ));
+            if (viewScope.type === 'unified') {
+                const dragging = nodes.find((n) => n.id === draggingNode);
+                if (dragging?.entityType === 'project') {
+                    const target = getUnifiedRepoDropTarget(e.clientX, e.clientY);
+                    setRepoDropZoneHighlightPath(target?.path ?? null);
+                } else {
+                    setRepoDropZoneHighlightPath(null);
+                }
+            }
         } else if (draggingCanvas) {
             setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
         } else if (creatingEdge) {
             setCreatingEdge(prev => prev ? { ...prev, curX: x, curY: y } : null);
         }
-    }, [draggingNode, draggingCanvas, creatingEdge, dragStart]);
+    }, [draggingNode, draggingCanvas, creatingEdge, dragStart, offset, scale, viewScope.type, nodes, getUnifiedRepoDropTarget]);
 
-    const handleMouseUp = useCallback((e: React.MouseEvent) => {
-        if (creatingEdge) {
+    const handleMouseUp = useCallback(async (e: React.MouseEvent) => {
+        if (draggingNode && viewScope.type === 'unified') {
+            const dragging = nodes.find((n) => n.id === draggingNode);
+            if (dragging?.entityType === 'project') {
+                const target = getUnifiedRepoDropTarget(e.clientX, e.clientY);
+                if (target) {
+                    await handleSelectVisibleRepo(target);
+                }
+            }
+        }
+
+        if (creatingEdge && viewScope.type === 'projects') {
             // Check if dropped on a node
             const rect = canvasRef.current?.getBoundingClientRect();
             if (rect) {
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+                const worldPoint = clientToGraphSpace(e.clientX, e.clientY, rect, offset, scale);
+                const x = worldPoint.x;
+                const y = worldPoint.y;
 
                 // Find node under mouse
                 const targetNode = nodes.find(n =>
-                    x >= n.x && x <= n.x + 200 && // Width 200
-                    y >= n.y && y <= n.y + 100    // Height rough approx, check CSS
+                    x >= n.x && x <= n.x + NODE_WIDTH &&
+                    y >= n.y && y <= n.y + NODE_HEIGHT
                 );
 
                 if (targetNode && targetNode.id !== creatingEdge.from) {
@@ -449,13 +763,29 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
         setDraggingNode(null);
         setDraggingCanvas(false);
         setCreatingEdge(null);
-    }, [creatingEdge, nodes, edges]);
+        setRepoDropZoneHighlightPath(null);
+    }, [creatingEdge, nodes, edges, offset, scale, viewScope.type, draggingNode, getUnifiedRepoDropTarget, handleSelectVisibleRepo]);
 
     const handleNodeHover = async (id: string) => {
         setHoveredNode(id);
         currentHoverRef.current = id;
 
-        if (viewScope.type === 'projects') {
+        if (viewScope.type === 'projects' || viewScope.type === 'unified') {
+            if (id === repositoryNodeId) {
+                setHoverContentSource('draft');
+                setHoverContent(`Path: ${repositoryPath || '(none)'}\nProjects: ${projects.length}`);
+                return;
+            }
+            if (viewScope.type === 'unified') {
+                const unifiedCommit = unifiedCommitMap.get(id);
+                if (unifiedCommit) {
+                    const content = unifiedCommit.content || "(Empty commit)";
+                    if (currentHoverRef.current !== id) return;
+                    setHoverContentSource('commit');
+                    setHoverContent(content.slice(0, 500) + (content.length > 500 ? '...' : ''));
+                    return;
+                }
+            }
             const project = projects.find(p => p.id === id);
             if (project) {
                 const cacheKey = `${project.updatedAt}-${commitCounts[id] ?? 0}`;
@@ -860,9 +1190,19 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const navigateToProjects = useCallback(() => {
         setViewScope({ type: 'projects' });
         setScopeCommits([]);
+        setUnifiedSelectedProjectId(null);
+        setUnifiedProjectCommits([]);
         // Reinitialize layout with projects
         initializeLayout(false);
     }, [initializeLayout]);
+
+    const navigateToUnified = useCallback(() => {
+        setViewScope({ type: 'unified' });
+        setScopeCommits([]);
+        setUnifiedSelectedProjectId(null);
+        setUnifiedProjectCommits([]);
+        initializeUnifiedLayout(false);
+    }, [initializeUnifiedLayout]);
 
 
     if (!isOpen) return null;
@@ -872,12 +1212,29 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             controls={
                 <>
                     <Button
+                        variant={viewScope.type === 'unified' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={navigateToUnified}
+                        title="Unified repo and projects graph"
+                    >
+                        Unified
+                    </Button>
+                    <Button
+                        variant={viewScope.type === 'projects' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={navigateToProjects}
+                        title="Projects-only graph"
+                    >
+                        Projects
+                    </Button>
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
+                    <Button
                         variant="primary"
                         size="sm"
                         onClick={() => setShowCreateDialog(true)}
                         icon={<Plus className="w-4 h-4" />}
                         disabled={!repositoryPath || viewScope.type !== 'projects'}
-                        title={!repositoryPath ? 'Open a repository first' : viewScope.type !== 'projects' ? 'Return to Projects to create' : 'Create new project'}
+                        title={!repositoryPath ? 'Open a repository first' : viewScope.type !== 'projects' ? 'Available in Projects mode' : 'Create new project'}
                     >
                         New
                     </Button>
@@ -890,6 +1247,33 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     >
                         Repos
                     </Button>
+                    {viewScope.type === 'unified' && (
+                        <>
+                            <input
+                                value={repoSearchTerm}
+                                onChange={(e) => setRepoSearchTerm(e.target.value)}
+                                placeholder="Find repo..."
+                                className="h-8 w-36 px-2 text-xs rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200"
+                                title="Filter visible repositories"
+                            />
+                            <div className="flex items-center gap-1 max-w-[260px] overflow-x-auto">
+                                {visibleRepoOptions.map((repo) => (
+                                    <button
+                                        key={repo.path}
+                                        className={`px-2 py-1 text-[11px] rounded-full border whitespace-nowrap transition-colors ${
+                                            repo.path === repositoryPath
+                                                ? 'border-indigo-400 bg-indigo-100 text-indigo-700 dark:border-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-200'
+                                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                                        }`}
+                                        onClick={() => { void handleSelectVisibleRepo(repo); }}
+                                        title={repo.path}
+                                    >
+                                        {repo.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
                     <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
                     <GraphSearchControl
                         value={searchTerm}
@@ -899,14 +1283,39 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                         inputClassName="text-xs"
                     />
                     <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
-                    <Button variant="ghost" onClick={() => initializeLayout(true)} title="Reset Node Positions">
+                    <Button
+                        variant="ghost"
+                        onClick={() => {
+                            if (viewScope.type === 'projects') {
+                                initializeLayout(true);
+                                return;
+                            }
+                            if (viewScope.type === 'unified') {
+                                initializeUnifiedLayout(true);
+                                return;
+                            }
+                            setOffset({ x: 0, y: 0 });
+                            setScale(1);
+                        }}
+                        title="Reset Node Positions"
+                    >
                         <RotateCcw className="w-4 h-4" />
                     </Button>
                     <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
-                    <Button variant="ghost" onClick={deleteEdgesOnly} disabled={selectedNodes.size === 0} title="Remove Edges (connections only)">
+                    <Button
+                        variant="ghost"
+                        onClick={deleteEdgesOnly}
+                        disabled={selectedNodes.size === 0 || viewScope.type !== 'projects'}
+                        title={viewScope.type !== 'projects' ? 'Available in Projects mode' : 'Remove Edges (connections only)'}
+                    >
                         <X className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" onClick={handleDeleteNodes} disabled={selectedNodes.size === 0} title="Delete Selected Projects">
+                    <Button
+                        variant="ghost"
+                        onClick={handleDeleteNodes}
+                        disabled={selectedNodes.size === 0 || viewScope.type !== 'projects'}
+                        title={viewScope.type !== 'projects' ? 'Available in Projects mode' : 'Delete Selected Projects'}
+                    >
                         <Trash2 className="w-4 h-4" />
                     </Button>
                     <Button variant="primary" onClick={handleMerge} icon={<GitMerge className="w-4 h-4" />} disabled={viewScope.type !== 'projects'}>
@@ -914,7 +1323,25 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     </Button>
                 </>
             }
-            topBar={viewScope.type !== 'projects' ? (
+            topBar={viewScope.type === 'unified' ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800">
+                    <EntityIcon type="repository" className="w-3.5 h-3.5" />
+                    <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200">
+                        Unified graph: {repositoryLabel}
+                    </span>
+                    <span className="text-xs text-indigo-600 dark:text-indigo-300">
+                        {projects.length} project{projects.length !== 1 ? 's' : ''} (repo fixed, projects draggable)
+                    </span>
+                    <span className="text-xs text-indigo-600 dark:text-indigo-300">
+                        Drag project pills to repo zones on the right
+                    </span>
+                    {unifiedSelectedProjectId && (
+                        <span className="text-xs text-indigo-700 dark:text-indigo-300">
+                            Selected project shows {unifiedProjectCommits.length} diff{unifiedProjectCommits.length !== 1 ? 's' : ''}
+                        </span>
+                    )}
+                </div>
+            ) : viewScope.type !== 'projects' ? (
                 <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700">
                     <button
                         onClick={navigateToProjects}
@@ -994,20 +1421,32 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                         let canDrillDown = false;
                         let canRename = false;
 
-                        if (viewScope.type === 'projects') {
-                            const project = projects.find(p => p.id === node.id);
-                            if (!project) return null;
-                            displayName = project.name;
-                            displayMeta = new Date(project.updatedAt).toLocaleDateString();
-                            canDrillDown = true;
-                            canRename = true;
-                        } else {
+                        if (viewScope.type === 'commits') {
                             const commit = scopeCommits.find(c => c.id === node.id);
                             if (!commit) return null;
                             displayName = `Commit ${commit.commitNumber}`;
                             displayMeta = new Date(commit.timestamp).toLocaleString();
                             canDrillDown = false;
                             canRename = false;
+                        } else if (entityType === 'repository') {
+                            displayName = repositoryLabel;
+                            displayMeta = repositoryPath || '';
+                            canDrillDown = false;
+                            canRename = false;
+                        } else if (entityType === 'commit') {
+                            const commit = unifiedCommitMap.get(node.id);
+                            if (!commit) return null;
+                            displayName = `Diff ${commit.commitNumber}`;
+                            displayMeta = new Date(commit.timestamp).toLocaleString();
+                            canDrillDown = false;
+                            canRename = false;
+                        } else {
+                            const project = projects.find(p => p.id === node.id);
+                            if (!project) return null;
+                            displayName = project.name;
+                            displayMeta = new Date(project.updatedAt).toLocaleDateString();
+                            canDrillDown = viewScope.type === 'projects';
+                            canRename = viewScope.type === 'projects';
                         }
 
                         return (
@@ -1015,7 +1454,8 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 key={node.id}
                                 x={node.x}
                                 y={node.y}
-                                className={`${entityStyle.borderClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''}`}
+                                zIndex={draggingNode === node.id ? 90 : selectedNodes.has(node.id) ? 60 : 30}
+                                className={`${entityStyle.borderClass} ${entityStyle.bgClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''} ${viewScope.type === 'unified' && entityType === 'repository' ? 'ring-1 ring-indigo-300 dark:ring-indigo-700' : ''}`}
                                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                                 onMouseEnter={() => handleNodeHover(node.id)}
                                 onMouseLeave={() => setHoveredNode(null)}
@@ -1069,7 +1509,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 body={<div className="flex items-center justify-between">
                                     <div className="project-node-meta">
                                         <div>{displayMeta}</div>
-                                        {viewScope.type === 'projects' && (
+                                        {(viewScope.type === 'projects' || viewScope.type === 'unified') && entityType === 'project' && (
                                             <div className="text-[10px] text-gray-400 dark:text-slate-400">
                                                 commits {commitCounts[node.id] ?? 0}
                                             </div>
@@ -1107,7 +1547,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                         subtitle={
                                             selectedNodes.has(node.id)
                                                 ? 'Selected'
-                                                : viewScope.type === 'projects' && hoveredNode === node.id && hoverContentSource !== 'draft'
+                                                : (viewScope.type === 'projects' || viewScope.type === 'unified') && hoveredNode === node.id && hoverContentSource !== 'draft'
                                                     ? (hoverContentSource === 'commit' ? 'Commit Preview' : 'Empty Draft')
                                                     : undefined
                                         }
@@ -1116,7 +1556,11 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                         {selectedNodes.has(node.id) ? (
                                             <HighlightText
                                                 text={
-                                                    viewScope.type === 'projects'
+                                                    entityType === 'repository'
+                                                        ? `Path: ${repositoryPath || '(none)'}\nProjects: ${projects.length}`
+                                                        : entityType === 'commit'
+                                                        ? (unifiedCommitMap.get(node.id)?.content || '(Empty)')
+                                                        : viewScope.type === 'projects' || viewScope.type === 'unified'
                                                         ? (projects.find(p => p.id === node.id)?.content || '(Empty)')
                                                         : (scopeCommits.find(c => c.id === node.id)?.content || '(Empty)')
                                                 }
@@ -1131,6 +1575,35 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                     );
                 })}
             </GraphCanvas>
+
+            {viewScope.type === 'unified' && repoDropTargets.length > 0 && (
+                <div className="absolute right-6 top-28 bottom-6 z-[60] flex flex-col gap-3 pointer-events-none">
+                    {repoDropTargets.map((repo) => {
+                        const active = repoDropZoneHighlightPath === repo.path;
+                        return (
+                            <div
+                                key={repo.path}
+                                ref={(el) => { repoDropZoneRefs.current[repo.path] = el; }}
+                                className={`w-56 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto ${
+                                    active
+                                        ? 'border-indigo-400 bg-indigo-50/90 dark:bg-indigo-900/40 scale-105 shadow-lg shadow-indigo-200/50'
+                                        : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
+                                }`}
+                                onClick={() => { void handleSelectVisibleRepo(repo); }}
+                                title={repo.path}
+                            >
+                                <div className="flex items-center gap-2 mb-2">
+                                    <FolderGit2 className={`w-4 h-4 ${active ? 'text-indigo-500' : 'text-gray-400 dark:text-slate-500'}`} />
+                                    <span className="text-xs font-semibold text-gray-600 dark:text-slate-300 truncate">{repo.name}</span>
+                                </div>
+                                <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
+                                    Drop a project here to preview this repo graph
+                                </p>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Context Menu */}
             {contextMenu && (
@@ -1176,7 +1649,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             )}
 
             {/* Create Node Dialog */}
-            {repositoryPath && (
+            {repositoryPath && viewScope.type === 'projects' && (
                 <CreateNodeDialog
                     isOpen={showCreateDialog}
                     onClose={() => setShowCreateDialog(false)}

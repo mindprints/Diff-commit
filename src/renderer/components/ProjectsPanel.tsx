@@ -8,6 +8,8 @@ import { CreateNodeDialog } from './CreateNodeDialog';
 interface ProjectsPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    onExitToEditor?: () => void;
+    startInCreateMode?: boolean;
     projects: Project[];
     currentProject: Project | null;
     onLoadProject: (id: string) => Promise<Project | null>;
@@ -22,6 +24,8 @@ interface ProjectsPanelProps {
 export function ProjectsPanel({
     isOpen,
     onClose,
+    onExitToEditor,
+    startInCreateMode = false,
     projects,
     currentProject,
     onLoadProject,
@@ -53,6 +57,15 @@ export function ProjectsPanel({
         }
     }, [repositoryPath]);
 
+    useEffect(() => {
+        if (!isOpen || !startInCreateMode || !repositoryPath) return;
+        setEditingId(null);
+        setEditingName('');
+        setRenameError(null);
+        setShowProjectDropdown(false);
+        setIsCreating(true);
+    }, [isOpen, startInCreateMode, repositoryPath]);
+
     if (!isOpen) return null;
 
     const handleCreate = async () => {
@@ -61,11 +74,13 @@ export function ProjectsPanel({
         await onCreateProject(newProjectName.trim(), '');
         setNewProjectName('');
         setIsCreating(false);
+        onExitToEditor?.();
         onClose(); // Close the panel after creating and switching to the new project
     };
 
     const handleLoad = async (id: string) => {
         await onLoadProject(id);
+        onExitToEditor?.();
         onClose();
     };
 
@@ -105,7 +120,7 @@ export function ProjectsPanel({
     const sortedProjects = [...projects].sort((a, b) => b.updatedAt - a.updatedAt);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 

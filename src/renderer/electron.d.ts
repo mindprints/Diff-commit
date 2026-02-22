@@ -38,6 +38,7 @@ export interface IElectronAPI {
     deleteProject: (projectPath: string) => Promise<boolean>;
     saveProjectBundle: (projectPath: string) => Promise<string | null>;
     renameProject: (projectPath: string, newName: string) => Promise<Project | null>;
+    moveProjectToRepository: (projectPath: string, targetRepoPath: string) => Promise<Project | null>;
     loadGraphData: (repoPath: string) => Promise<{
         nodes: Array<{ id: string; x: number; y: number }>;
         edges: Array<{ from: string; to: string }>;

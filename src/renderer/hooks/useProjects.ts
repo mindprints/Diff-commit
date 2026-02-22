@@ -358,6 +358,46 @@ export function useProjects() {
         return updated;
     }, [projects, currentProject?.id, repoHandle]);
 
+    const moveProjectToRepositoryById = useCallback(async (id: string, targetRepoPath: string) => {
+        const project = projects.find((p) => p.id === id);
+        if (!project || !targetRepoPath) return null;
+
+        if (isElectron && window.electron?.moveProjectToRepository) {
+            let sourceProjectPath = project.path;
+            if (!sourceProjectPath && repositoryPath && window.electron?.loadRepositoryAtPath) {
+                const reloaded = await window.electron.loadRepositoryAtPath(repositoryPath);
+                const reloadedProject = reloaded?.projects.find((p) => p.id === id || p.name === project.name);
+                sourceProjectPath = reloadedProject?.path;
+            }
+
+            if (!sourceProjectPath) {
+                throw new Error(`Cannot move project "${project.name}" because its source path is unavailable.`);
+            }
+
+            const moved = await window.electron.moveProjectToRepository(sourceProjectPath, targetRepoPath);
+            if (moved) {
+                setProjects((prev) => prev.filter((p) => p.id !== id));
+                if (currentProject?.id === id) {
+                    setCurrentProject(null);
+                }
+            }
+            return moved;
+        }
+
+        // Browser/localStorage fallback: reassign repositoryPath only
+        const updatedProject: Project = {
+            ...project,
+            repositoryPath: targetRepoPath,
+            updatedAt: Date.now(),
+        };
+        await projectStorage.saveProject(updatedProject);
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+        if (currentProject?.id === id) {
+            setCurrentProject(null);
+        }
+        return updatedProject;
+    }, [projects, isElectron, currentProject?.id, repositoryPath]);
+
     // Close current project
     const closeProject = useCallback(() => {
         setCurrentProject(null);
@@ -400,6 +440,7 @@ export function useProjects() {
         renameProject: renameProjectById,
         closeProject,
         refreshProjects,
+        moveProjectToRepository: moveProjectToRepositoryById,
         getRepoHandle,
     };
 }

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AIPrompt } from '../types';
 import { Model } from '../constants/models';
-import { ArrowLeft, Check, Edit3, Pin, PinOff, Plus, RotateCcw, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Edit3, Pin, PinOff, RotateCcw, Star, Trash2 } from 'lucide-react';
 import { Button } from './Button';
 import clsx from 'clsx';
 import { GraphModalShell } from './graph/GraphModalShell';
@@ -10,6 +10,7 @@ import { GraphContextMenu } from './graph/GraphContextMenu';
 import { GraphNodeCard } from './graph/GraphNodeCard';
 import { GraphNodeTooltip } from './graph/GraphNodeTooltip';
 import { GraphSearchControl } from './graph/GraphSearchControl';
+import { clientToGraphSpace, rectsOverlap } from './graph/graphMath';
 
 interface PromptGraphModalProps {
     isOpen: boolean;
@@ -30,6 +31,13 @@ interface PromptNodeState {
     id: string;
     x: number;
     y: number;
+}
+
+interface RenderNodeState {
+    node: PromptNodeState;
+    prompt: AIPrompt;
+    isPinned: boolean;
+    isDragging: boolean;
 }
 
 interface PromptFormState {
@@ -158,6 +166,7 @@ export function PromptGraphModal({
     }, [prompts]);
 
     const pinnedPrompts = useMemo(() => prompts.filter(p => p.pinned), [prompts]);
+    const pinnedPromptIds = useMemo(() => new Set(pinnedPrompts.map((p) => p.id)), [pinnedPrompts]);
 
     const filteredNodeIds = useMemo(() => {
         const q = searchTerm.trim().toLowerCase();
@@ -233,6 +242,9 @@ export function PromptGraphModal({
 
     const handleMouseDown = useCallback((e: React.MouseEvent, nodeId: string | null) => {
         if (e.button !== 0) return;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const worldPoint = clientToGraphSpace(e.clientX, e.clientY, rect, offset, scale);
 
         if (nodeId) {
             e.stopPropagation();
@@ -243,8 +255,8 @@ export function PromptGraphModal({
             setDraggingNode(nodeId);
             setDraggingCanvas(false);
             setDragStart({
-                x: e.clientX - node.x,
-                y: e.clientY - node.y,
+                x: worldPoint.x - node.x,
+                y: worldPoint.y - node.y,
             });
             return;
         }
@@ -254,14 +266,63 @@ export function PromptGraphModal({
         setDraggingNode(null);
         setDraggingCanvas(true);
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-    }, [nodes, offset]);
+    }, [nodes, offset, scale]);
+
+    const resolvePinnedCollision = useCallback((candidate: PromptNodeState, movingId: string): PromptNodeState => {
+        const movingPrompt = promptsById.get(movingId);
+        if (!movingPrompt || movingPrompt.pinned) {
+            return candidate;
+        }
+
+        const frozenRects = nodes
+            .filter((n) => n.id !== movingId && pinnedPromptIds.has(n.id))
+            .map((n) => ({
+                x: n.x,
+                y: n.y,
+                width: NODE_WIDTH,
+                height: NODE_HEIGHT,
+            }));
+
+        let next = { ...candidate };
+        const gap = 18;
+        for (let i = 0; i < frozenRects.length + 4; i++) {
+            const overlap = frozenRects.find((frozen) =>
+                rectsOverlap(
+                    { x: next.x, y: next.y, width: NODE_WIDTH, height: NODE_HEIGHT },
+                    frozen
+                )
+            );
+            if (!overlap) break;
+
+            const pushRight = overlap.x + overlap.width + gap;
+            const pushDown = overlap.y + overlap.height + gap;
+            const rightDelta = Math.abs(pushRight - next.x);
+            const downDelta = Math.abs(pushDown - next.y);
+            if (rightDelta <= downDelta) {
+                next.x = pushRight;
+            } else {
+                next.y = pushDown;
+            }
+        }
+
+        return next;
+    }, [nodes, pinnedPromptIds, promptsById]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
         if (draggingNode) {
+            const rect = canvasRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const worldPoint = clientToGraphSpace(e.clientX, e.clientY, rect, offset, scale);
+            const candidate = {
+                id: draggingNode,
+                x: worldPoint.x - dragStart.x,
+                y: worldPoint.y - dragStart.y,
+            };
+            const resolved = resolvePinnedCollision(candidate, draggingNode);
             setNodes((prev) =>
                 prev.map((n) =>
                     n.id === draggingNode
-                        ? { ...n, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }
+                        ? { ...n, x: resolved.x, y: resolved.y }
                         : n
                 )
             );
@@ -270,7 +331,7 @@ export function PromptGraphModal({
         } else if (draggingCanvas) {
             setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
         }
-    }, [dragStart, draggingCanvas, draggingNode, getDropZone]);
+    }, [dragStart, draggingCanvas, draggingNode, getDropZone, offset, scale, resolvePinnedCollision]);
 
     const handleMouseUp = useCallback(async (e: React.MouseEvent) => {
         if (draggingNode) {
@@ -306,12 +367,6 @@ export function PromptGraphModal({
         }
     }, [onEditInEditor, onClose]);
 
-    const handleStartCreate = useCallback(() => {
-        setIsCreating(true);
-        setSelectedId(null);
-        setFormState(EMPTY_FORM);
-    }, []);
-
     const handleSave = useCallback(async () => {
         if (!isCreating) return;
         const payload = {
@@ -340,6 +395,30 @@ export function PromptGraphModal({
         if (selectedId === prompt.id) setSelectedId(null);
     }, [onDeletePrompt, selectedId]);
 
+    const renderedNodes = useMemo<RenderNodeState[]>(() => {
+        const visible = nodes
+            .filter((n) => filteredNodeIds.has(n.id))
+            .map((node) => {
+                const prompt = promptsById.get(node.id);
+                if (!prompt) return null;
+                return {
+                    node,
+                    prompt,
+                    isPinned: Boolean(prompt.pinned),
+                    isDragging: draggingNode === node.id,
+                };
+            })
+            .filter((entry): entry is RenderNodeState => Boolean(entry));
+
+        visible.sort((a, b) => {
+            if (a.isDragging !== b.isDragging) return a.isDragging ? 1 : -1;
+            if (a.isPinned !== b.isPinned) return a.isPinned ? 1 : -1;
+            return 0;
+        });
+
+        return visible;
+    }, [nodes, filteredNodeIds, promptsById, draggingNode]);
+
     const handleReset = useCallback(async (prompt: AIPrompt) => {
         if (!prompt.isBuiltIn) return;
         if (!confirm(`Reset "${prompt.name}" to default values?`)) return;
@@ -356,15 +435,20 @@ export function PromptGraphModal({
         <GraphModalShell
             controls={
                 <>
+                    <button
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors border border-gray-200 dark:border-slate-700 font-medium text-sm text-gray-700 dark:text-slate-200"
+                        onClick={onClose}
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Return to Editor
+                    </button>
+                    <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1" />
                     <GraphSearchControl
                         value={searchTerm}
                         onChange={setSearchTerm}
                         placeholder="Search prompts..."
                         inputClassName="text-gray-800 dark:text-slate-100"
                     />
-                    <Button variant="outline" size="sm" onClick={handleStartCreate} icon={<Plus className="w-3.5 h-3.5" />}>
-                        New Prompt
-                    </Button>
                     <Button
                         variant="outline"
                         size="sm"
@@ -378,15 +462,6 @@ export function PromptGraphModal({
                     </Button>
                 </>
             }
-            closeControl={
-                <button
-                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors border border-gray-200 dark:border-slate-700 font-medium text-sm text-gray-700 dark:text-slate-200"
-                    onClick={onClose}
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    Return to Editor
-                </button>
-            }
         >
             <GraphCanvas
                 canvasRef={canvasRef}
@@ -397,15 +472,10 @@ export function PromptGraphModal({
                 onMouseUp={handleMouseUp}
             >
                 {/* Prompt node cards */}
-                {nodes
-                    .filter((n) => filteredNodeIds.has(n.id))
-                    .map((node) => {
-                        const prompt = promptsById.get(node.id);
-                        if (!prompt) return null;
+                {renderedNodes.map(({ node, prompt, isPinned, isDragging }) => {
                         const isDefault = prompt.id === defaultPromptId;
-                        const isPinned = prompt.pinned;
                         const badge = modelBadge(prompt, selectedModel, selectedImageModel);
-                        const isDragging = draggingNode === node.id;
+                        const zIndex = isDragging ? 90 : isPinned ? 60 : selectedId === node.id ? 50 : 30;
 
                         return (
                             <GraphNodeCard
@@ -422,6 +492,7 @@ export function PromptGraphModal({
                                     isPinned && 'ring-1 ring-amber-300 dark:ring-amber-600',
                                     isDragging && 'opacity-70 scale-105'
                                 )}
+                                zIndex={zIndex}
                                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                                 onMouseEnter={() => { if (!draggingNode) setHoveredId(node.id); }}
                                 onMouseLeave={() => setHoveredId(null)}

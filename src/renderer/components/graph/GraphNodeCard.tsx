@@ -18,6 +18,7 @@ interface GraphNodeCardProps {
     footer?: React.ReactNode;
     overlay?: React.ReactNode;
     tooltip?: React.ReactNode;
+    zIndex?: number;
 }
 
 export function GraphNodeCard({
@@ -35,11 +36,12 @@ export function GraphNodeCard({
     footer,
     overlay,
     tooltip,
+    zIndex,
 }: GraphNodeCardProps) {
     return (
         <div
             className={clsx('project-node group', className)}
-            style={{ transform: `translate(${x}px, ${y}px)` }}
+            style={{ transform: `translate(${x}px, ${y}px)`, zIndex }}
             onMouseDown={onMouseDown}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}

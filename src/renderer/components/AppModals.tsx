@@ -10,13 +10,14 @@ import { WelcomeModal } from './WelcomeModal';
 import { HelpModal } from './HelpModal';
 import { LogsModal } from './LogsModal';
 import { SettingsModal } from './SettingsModal';
-import { ProjectNodeModal } from './ProjectNodeModal';
+import { UniversalGraphModal } from './UniversalGraphModal';
 import { RepoPickerDialog } from './RepoPickerDialog';
 import { X, Volume2, Shield, Save } from 'lucide-react';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
 
 export function AppModals() {
+    const [projectsPanelStartInCreateMode, setProjectsPanelStartInCreateMode] = React.useState(false);
     const {
         showHelp, setShowHelp,
         showLogs, setShowLogs,
@@ -38,7 +39,7 @@ export function AppModals() {
     } = useEditor();
 
     const {
-        projects, currentProject, deleteProject, renameProject,
+        projects, currentProject, deleteProject, renameProject, moveProjectToRepository, createNewProject,
         openRepository, loadRepositoryByPath, createRepository, repositoryPath,
         commits, handleDeleteCommit, handleClearAllCommits,
         handleLoadProject, handleCreateProject,
@@ -175,7 +176,15 @@ export function AppModals() {
             {/* Projects Panel */}
             <ProjectsPanel
                 isOpen={showProjectsPanel}
-                onClose={() => setShowProjectsPanel(false)}
+                onClose={() => {
+                    setShowProjectsPanel(false);
+                    setProjectsPanelStartInCreateMode(false);
+                }}
+                onExitToEditor={() => {
+                    setProjectsPanelStartInCreateMode(false);
+                    setShowGraphModal(false);
+                }}
+                startInCreateMode={projectsPanelStartInCreateMode}
                 projects={projects}
                 currentProject={currentProject}
                 onLoadProject={handleLoadProject}
@@ -216,10 +225,45 @@ export function AppModals() {
                 }}
             />
 
-            {/* Project Graph Modal */}
-            <ProjectNodeModal
+            {/* Universal Graph Modal */}
+            <UniversalGraphModal
                 isOpen={showGraphModal}
                 onClose={() => setShowGraphModal(false)}
+                projects={projects}
+                repositoryPath={repositoryPath}
+                currentProjectId={currentProject?.id}
+                onOpenProject={async (projectId) => {
+                    await handleLoadProject(projectId);
+                    setShowGraphModal(false);
+                }}
+                onCreateProject={async (name, content, open) => {
+                    return await createNewProject(name, content, open);
+                }}
+                onSwitchRepository={async (repoPath) => {
+                    await loadRepositoryByPath(repoPath);
+                }}
+                onMoveProject={async (projectId, targetRepoPath) => {
+                    try {
+                        const moved = await moveProjectToRepository(projectId, targetRepoPath);
+                        return Boolean(moved);
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : 'Failed to move project';
+                        setErrorMessage(message);
+                        return false;
+                    }
+                }}
+                onDeleteProject={async (projectId) => {
+                    try {
+                        await deleteProject(projectId);
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : 'Failed to delete project';
+                        setErrorMessage(message);
+                    }
+                }}
+                onNewProject={() => {
+                    setProjectsPanelStartInCreateMode(true);
+                    setShowProjectsPanel(true);
+                }}
             />
         </>
     );
