@@ -254,6 +254,40 @@ The tool uses a git-style "commit" system to ensure you never lose a draft while
 
 ---
 
+## 📝 Changelog (Unreleased / Prototype Work)
+
+### Universal Graph (active prototype replacement path)
+*   **Project move UX polish**: Dragging a project to a repo zone now keeps you in the source repo view (target repo flashes on success).
+*   **Reliable open behavior**: Double-click on project pills opens the project in the editor again.
+*   **Project quick actions**: Hover trash icon added for deleting projects directly from the universal graph.
+*   **Merge workflow**: `Ctrl/Cmd+Click` select multiple projects (selection order preserved) and merge them via a new `Merge` button.
+*   **Sorting controls**: Sort-by-name and sort-by-date moved into a compact `Sort` dropdown (with `Reset View`).
+*   **Layering fix**: Hover previews/tooltips render above surrounding pills.
+
+### Project Manager integration (from Universal Graph)
+*   `New Project` in universal graph opens the Project Manager **on top of** the graph.
+*   The Project Manager opens directly in create mode (no second "New" click).
+*   Cancel returns to universal graph; create/load returns to the editor.
+
+### Prompt Editing in Main Editor
+*   Prompt edit mode now supports renaming via a 3-tier format in the main editor:
+    *   `PROMPT NAME`
+    *   `SYSTEM INSTRUCTION`
+    *   `TASK`
+*   Saving prompt edits now updates prompt name as well as content fields.
+
+### Repo Intelligence Prototype (NotebookLM-style direction)
+*   New repo-scoped analysis prototype with a minimal `RepoIntelPanel`:
+    *   Build/refresh index
+    *   Summarize repo
+    *   Ask repo
+    *   Find redundancy
+*   V1 backend/indexing scans project `content.md` files across the repo.
+*   Grounded AI summarize/ask flows use retrieved repo excerpts and return source citations (retrieval-derived).
+*   Renderer fallback path exists when the new Electron preload bridge is not yet loaded (restart Electron to use the full main-process repo-intel path).
+
+---
+
 ## 📝 Changelog (v1.4.0)
 
 ### New Features

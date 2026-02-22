@@ -4,6 +4,7 @@ import { EditorProvider } from './EditorContext';
 import { ProjectProvider } from './ProjectContext';
 import { AIProvider } from './AIContext';
 import { ModelsProvider } from './ModelsContext';
+import { RepoIntelProvider } from './RepoIntelContext';
 
 export function CombinedProvider({ children }: { children: ReactNode }) {
     return (
@@ -12,7 +13,9 @@ export function CombinedProvider({ children }: { children: ReactNode }) {
                 <EditorProvider>
                     <ProjectProvider>
                         <AIProvider>
-                            {children}
+                            <RepoIntelProvider>
+                                {children}
+                            </RepoIntelProvider>
                         </AIProvider>
                     </ProjectProvider>
                 </EditorProvider>
@@ -26,3 +29,4 @@ export * from './EditorContext';
 export * from './ProjectContext';
 export * from './AIContext';
 export * from './ModelsContext';
+export * from './RepoIntelContext';

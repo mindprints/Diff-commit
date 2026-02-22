@@ -51,6 +51,8 @@ interface UIContextType {
     setShowRepoPicker: (show: boolean) => void;
     showGraphModal: boolean;
     setShowGraphModal: (show: boolean) => void;
+    showRepoIntelModal: boolean;
+    setShowRepoIntelModal: (show: boolean) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -62,6 +64,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [showPromptsModal, setShowPromptsModal] = useState(false);
     const [showModelsModal, setShowModelsModal] = useState(false);
     const [showGraphModal, setShowGraphModal] = useState(false);
+    const [showRepoIntelModal, setShowRepoIntelModal] = useState(false);
     const [showCommitHistory, setShowCommitHistory] = useState(false);
     const [savePromptDialogOpen, setSavePromptDialogOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selection: string } | null>(null);
@@ -165,6 +168,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
             showAnalysisViewer, setShowAnalysisViewer,
             showSettingsModal, setShowSettingsModal,
             showGraphModal, setShowGraphModal,
+            showRepoIntelModal, setShowRepoIntelModal,
             showRepoPicker, setShowRepoPicker,
         }}>
             {children}

@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit, FolderOperationResult } from '../renderer/types';
+import type {
+    RepoIntelBuildOptions,
+    RepoIntelIndexStats,
+    RepoIntelQueryOptions,
+    RepoIntelRetrievedContext,
+    RepoRedundancyReport,
+} from '../shared/repoIntelTypes';
 import { subscribeIpcChannel } from './ipcSubscription';
 
 // Type definitions for the hierarchy sub-API
@@ -65,6 +72,14 @@ interface ArtificialAnalysisAPI {
     }>>;
 }
 
+interface RepoIntelAPI {
+    buildIndex: (repoPath: string, options?: RepoIntelBuildOptions) => Promise<RepoIntelIndexStats>;
+    getIndexStatus: (repoPath: string) => Promise<RepoIntelIndexStats>;
+    clearIndex: (repoPath: string) => Promise<boolean>;
+    queryIndex: (repoPath: string, query: string, options?: RepoIntelQueryOptions) => Promise<RepoIntelRetrievedContext>;
+    findRedundancy: (repoPath: string, options?: { threshold?: number; topK?: number }) => Promise<RepoRedundancyReport>;
+}
+
 // Full ElectronAPI interface
 export interface ElectronAPI {
     platform: string;
@@ -116,6 +131,9 @@ export interface ElectronAPI {
 
     // Artificial Analysis API (secure - key stays in main process)
     artificialAnalysis: ArtificialAnalysisAPI;
+
+    // Repo Intelligence (repo-scoped analysis/indexing)
+    repoIntel: RepoIntelAPI;
 
     // AI Prompts CRUD
     getPrompts: () => Promise<AIPrompt[]>;
@@ -239,6 +257,14 @@ const electronAPI: ElectronAPI = {
     // Artificial Analysis API (secure - key stays in main process)
     artificialAnalysis: {
         fetchBenchmarks: () => ipcRenderer.invoke('artificialanalysis:fetch-benchmarks'),
+    },
+
+    repoIntel: {
+        buildIndex: (repoPath: string, options?: RepoIntelBuildOptions) => ipcRenderer.invoke('repo-intel:build-index', repoPath, options),
+        getIndexStatus: (repoPath: string) => ipcRenderer.invoke('repo-intel:get-index-status', repoPath),
+        clearIndex: (repoPath: string) => ipcRenderer.invoke('repo-intel:clear-index', repoPath),
+        queryIndex: (repoPath: string, query: string, options?: RepoIntelQueryOptions) => ipcRenderer.invoke('repo-intel:query-index', repoPath, query, options),
+        findRedundancy: (repoPath: string, options?: { threshold?: number; topK?: number }) => ipcRenderer.invoke('repo-intel:find-redundancy', repoPath, options),
     },
 
     // Menu event listeners (from main process)

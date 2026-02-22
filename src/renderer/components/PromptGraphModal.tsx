@@ -283,7 +283,7 @@ export function PromptGraphModal({
                 height: NODE_HEIGHT,
             }));
 
-        let next = { ...candidate };
+        const next = { ...candidate };
         const gap = 18;
         for (let i = 0; i < frozenRects.length + 4; i++) {
             const overlap = frozenRects.find((frozen) =>
@@ -473,105 +473,105 @@ export function PromptGraphModal({
             >
                 {/* Prompt node cards */}
                 {renderedNodes.map(({ node, prompt, isPinned, isDragging }) => {
-                        const isDefault = prompt.id === defaultPromptId;
-                        const badge = modelBadge(prompt, selectedModel, selectedImageModel);
-                        const zIndex = isDragging ? 90 : isPinned ? 60 : selectedId === node.id ? 50 : 30;
+                    const isDefault = prompt.id === defaultPromptId;
+                    const badge = modelBadge(prompt, selectedModel, selectedImageModel);
+                    const zIndex = isDragging ? 90 : isPinned ? 60 : selectedId === node.id ? 50 : 30;
 
-                        return (
-                            <GraphNodeCard
-                                key={node.id}
-                                x={node.x}
-                                y={node.y}
-                                className={clsx(
-                                    // Distinct prompt pill background colors (different from project pills)
-                                    'prompt-node-pill',
-                                    prompt.isBuiltIn
-                                        ? 'border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-950/30'
-                                        : 'border-teal-300 dark:border-teal-700 bg-teal-50/60 dark:bg-teal-950/30',
-                                    selectedId === node.id && 'selected ring-2 ring-indigo-400 dark:ring-indigo-500',
-                                    isPinned && 'ring-1 ring-amber-300 dark:ring-amber-600',
-                                    isDragging && 'opacity-70 scale-105'
-                                )}
-                                zIndex={zIndex}
-                                onMouseDown={(e) => handleMouseDown(e, node.id)}
-                                onMouseEnter={() => { if (!draggingNode) setHoveredId(node.id); }}
-                                onMouseLeave={() => setHoveredId(null)}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setSelectedId(node.id);
-                                    setContextMenu({ x: e.clientX, y: e.clientY, id: node.id });
-                                }}
-                                onDoubleClick={() => onSetDefault(prompt.id)}
-                                onMenuClick={(e) => {
-                                    e.stopPropagation();
-                                    setContextMenu({ x: e.clientX, y: e.clientY, id: node.id });
-                                }}
-                                header={
-                                    <>
-                                        <span className={clsx('w-2.5 h-2.5 rounded-full', prompt.color || 'bg-gray-400')} />
-                                        <div className="project-node-title" title={prompt.name}>{prompt.name}</div>
-                                    </>
-                                }
-                                body={
-                                    <div className="project-node-meta space-y-1">
-                                        <div>{prompt.isBuiltIn ? 'Built-in' : 'Custom'}</div>
-                                        <div>{prompt.isImageMode ? 'Image mode' : 'Text mode'}</div>
-                                        <div title={badge} className="truncate">{badge}</div>
-                                    </div>
-                                }
-                                overlay={
-                                    <div className="absolute top-2 right-2 flex items-center gap-1">
-                                        {isPinned && (
-                                            <Pin className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                        )}
-                                        {isDefault && (
-                                            <Star className="w-4 h-4 text-amber-500 fill-current" />
-                                        )}
-                                        {/* Quick action: trash icon — deletes custom prompts */}
-                                        {!prompt.isBuiltIn && (
-                                            <button
-                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-all"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDelete(prompt);
-                                                }}
-                                                onMouseDown={(e) => e.stopPropagation()}
-                                                title="Delete prompt"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
-                                            </button>
-                                        )}
-                                        {/* Quick action: edit icon — opens in frontpage editor */}
+                    return (
+                        <GraphNodeCard
+                            key={node.id}
+                            x={node.x}
+                            y={node.y}
+                            className={clsx(
+                                // Distinct prompt pill background colors (different from project pills)
+                                'prompt-node-pill',
+                                prompt.isBuiltIn
+                                    ? 'border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-950/30'
+                                    : 'border-teal-300 dark:border-teal-700 bg-teal-50/60 dark:bg-teal-950/30',
+                                selectedId === node.id && 'selected ring-2 ring-indigo-400 dark:ring-indigo-500',
+                                isPinned && 'ring-1 ring-amber-300 dark:ring-amber-600',
+                                isDragging && 'opacity-70 scale-105'
+                            )}
+                            zIndex={zIndex}
+                            onMouseDown={(e) => handleMouseDown(e, node.id)}
+                            onMouseEnter={() => { if (!draggingNode) setHoveredId(node.id); }}
+                            onMouseLeave={() => setHoveredId(null)}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                setSelectedId(node.id);
+                                setContextMenu({ x: e.clientX, y: e.clientY, id: node.id });
+                            }}
+                            onDoubleClick={() => onSetDefault(prompt.id)}
+                            onMenuClick={(e) => {
+                                e.stopPropagation();
+                                setContextMenu({ x: e.clientX, y: e.clientY, id: node.id });
+                            }}
+                            header={
+                                <>
+                                    <span className={clsx('w-2.5 h-2.5 rounded-full', prompt.color || 'bg-gray-400')} />
+                                    <div className="project-node-title" title={prompt.name}>{prompt.name}</div>
+                                </>
+                            }
+                            body={
+                                <div className="project-node-meta space-y-1">
+                                    <div>{prompt.isBuiltIn ? 'Built-in' : 'Custom'}</div>
+                                    <div>{prompt.isImageMode ? 'Image mode' : 'Text mode'}</div>
+                                    <div title={badge} className="truncate">{badge}</div>
+                                </div>
+                            }
+                            overlay={
+                                <div className="absolute top-2 right-2 flex items-center gap-1">
+                                    {isPinned && (
+                                        <Pin className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                    )}
+                                    {isDefault && (
+                                        <Star className="w-4 h-4 text-amber-500 fill-current" />
+                                    )}
+                                    {/* Quick action: trash icon — deletes custom prompts */}
+                                    {!prompt.isBuiltIn && (
                                         <button
-                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded transition-all"
+                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-all"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleEditInFrontpageEditor(prompt);
+                                                handleDelete(prompt);
                                             }}
                                             onMouseDown={(e) => e.stopPropagation()}
-                                            title="Edit in editor"
+                                            title="Delete prompt"
                                         >
-                                            <Edit3 className="w-3.5 h-3.5 text-indigo-400 hover:text-indigo-600" />
+                                            <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
                                         </button>
-                                    </div>
-                                }
-                                tooltip={
-                                    // Hide tooltip while dragging to keep dragging clean
-                                    !draggingNode && (hoveredId === node.id || selectedId === node.id) ? (
-                                        <GraphNodeTooltip
-                                            title={selectedId === node.id ? 'Full Prompt' : 'Prompt Preview'}
-                                            subtitle={selectedId === node.id ? 'Selected' : 'Hover Preview'}
-                                            persistent={selectedId === node.id}
-                                        >
-                                            <div className="text-[11px] font-semibold mb-1">System</div>
-                                            <div className="mb-2 whitespace-pre-wrap">{prompt.systemInstruction}</div>
-                                            <div className="text-[11px] font-semibold mb-1">Task</div>
-                                            <div className="whitespace-pre-wrap">{prompt.promptTask}</div>
-                                        </GraphNodeTooltip>
-                                    ) : undefined}
-                            />
-                        );
-                    })}
+                                    )}
+                                    {/* Quick action: edit icon — opens in frontpage editor */}
+                                    <button
+                                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded transition-all"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditInFrontpageEditor(prompt);
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        title="Edit in editor"
+                                    >
+                                        <Edit3 className="w-3.5 h-3.5 text-indigo-400 hover:text-indigo-600" />
+                                    </button>
+                                </div>
+                            }
+                            tooltip={
+                                // Hide tooltip while dragging to keep dragging clean
+                                !draggingNode && (hoveredId === node.id || selectedId === node.id) ? (
+                                    <GraphNodeTooltip
+                                        title={selectedId === node.id ? 'Full Prompt' : 'Prompt Preview'}
+                                        subtitle={selectedId === node.id ? 'Selected' : 'Hover Preview'}
+                                        persistent={selectedId === node.id}
+                                    >
+                                        <div className="text-[11px] font-semibold mb-1">System</div>
+                                        <div className="mb-2 whitespace-pre-wrap">{prompt.systemInstruction}</div>
+                                        <div className="text-[11px] font-semibold mb-1">Task</div>
+                                        <div className="whitespace-pre-wrap">{prompt.promptTask}</div>
+                                    </GraphNodeTooltip>
+                                ) : undefined}
+                        />
+                    );
+                })}
             </GraphCanvas>
 
             {/* Drop zones — fixed position overlays, OUTSIDE the canvas transform */}

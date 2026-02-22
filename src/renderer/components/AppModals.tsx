@@ -12,6 +12,7 @@ import { LogsModal } from './LogsModal';
 import { SettingsModal } from './SettingsModal';
 import { UniversalGraphModal } from './UniversalGraphModal';
 import { RepoPickerDialog } from './RepoPickerDialog';
+import { RepoIntelPanel } from './RepoIntelPanel';
 import { X, Volume2, Shield, Save } from 'lucide-react';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
@@ -31,7 +32,8 @@ export function AppModals() {
         activeLogId, setActiveLogId,
         showSettingsModal, setShowSettingsModal,
         showGraphModal, setShowGraphModal,
-        showRepoPicker, setShowRepoPicker
+        showRepoPicker, setShowRepoPicker,
+        showRepoIntelModal, setShowRepoIntelModal
     } = useUI();
 
     const {
@@ -225,6 +227,16 @@ export function AppModals() {
                 }}
             />
 
+            <RepoIntelPanel
+                isOpen={showRepoIntelModal}
+                onClose={() => setShowRepoIntelModal(false)}
+                onOpenProject={async (projectId) => {
+                    await handleLoadProject(projectId);
+                    setShowRepoIntelModal(false);
+                    setShowGraphModal(false);
+                }}
+            />
+
             {/* Universal Graph Modal */}
             <UniversalGraphModal
                 isOpen={showGraphModal}
@@ -263,6 +275,9 @@ export function AppModals() {
                 onNewProject={() => {
                     setProjectsPanelStartInCreateMode(true);
                     setShowProjectsPanel(true);
+                }}
+                onOpenRepoIntel={() => {
+                    setShowRepoIntelModal(true);
                 }}
             />
         </>

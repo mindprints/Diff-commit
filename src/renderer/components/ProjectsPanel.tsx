@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FolderOpen, Plus, Trash2, Edit2, Check, FileText, AlertCircle } from 'lucide-react';
+import { X, FolderOpen, Plus, Trash2, Edit2, Check, FileText } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import { Project } from '../types';
@@ -63,10 +63,9 @@ export function ProjectsPanel({
         setEditingName('');
         setRenameError(null);
         setShowProjectDropdown(false);
+        setNewProjectName('');
         setIsCreating(true);
-    }, [isOpen, startInCreateMode, repositoryPath]);
-
-    if (!isOpen) return null;
+    }, [isOpen, startInCreateMode, repositoryPath]); if (!isOpen) return null;
 
     const handleCreate = async () => {
         if (!newProjectName.trim()) return;
@@ -97,9 +96,9 @@ export function ProjectsPanel({
                 await onRenameProject(editingId, editingName.trim());
                 setEditingId(null);
                 setEditingName('');
-            } catch (e: any) {
+            } catch (e: unknown) {
                 console.error('Rename failed:', e);
-                setRenameError(e.message || 'Failed to rename project');
+                setRenameError(e instanceof Error ? e.message : 'Failed to rename project');
             }
         } else {
             setEditingId(null);

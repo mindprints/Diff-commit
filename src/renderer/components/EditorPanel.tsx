@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit3, Volume2, Square, Zap, GitBranch, PanelBottomClose, PanelBottomOpen, ArrowRight, X, Save, RotateCcw } from 'lucide-react';
+import { Edit3, Volume2, Square, Zap, GitBranch, PanelBottomClose, PanelBottomOpen, ArrowRight, Save, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from './Button';
 import { PromptDropdownButton } from './PromptDropdownButton';
@@ -118,20 +118,30 @@ function wrapSelection(
 }
 
 function formatPromptForEditor(prompt: AIPrompt): string {
-    return `SYSTEM INSTRUCTION:\n${prompt.systemInstruction}${SECTION_SEPARATOR}TASK:\n${prompt.promptTask}`;
+    return `PROMPT NAME:\n${prompt.name}${SECTION_SEPARATOR}SYSTEM INSTRUCTION:\n${prompt.systemInstruction}${SECTION_SEPARATOR}TASK:\n${prompt.promptTask}`;
 }
 
-function parsePromptFromEditor(text: string): { systemInstruction: string; promptTask: string } | null {
+function parsePromptFromEditor(text: string): { name?: string; systemInstruction: string; promptTask: string } | null {
     // Try to split by the separator
     const parts = text.split('════════════════════════════════');
     if (parts.length < 2) return null;
 
+    if (parts.length >= 3) {
+        const nameBlock = parts[0].trim();
+        const sysBlock = parts[1].trim();
+        const taskBlock = parts.slice(2).join('════════════════════════════════').trim();
+
+        const nameMatch = nameBlock.replace(/^PROMPT NAME:\s*/i, '').trim();
+        const sysMatch = sysBlock.replace(/^SYSTEM INSTRUCTION:\s*/i, '').trim();
+        const taskMatch = taskBlock.replace(/^TASK:\s*/i, '').trim();
+
+        if (!nameMatch || !sysMatch || !taskMatch) return null;
+        return { name: nameMatch, systemInstruction: sysMatch, promptTask: taskMatch };
+    }
+
     const sysBlock = parts[0].trim();
     const taskBlock = parts[1].trim();
-
-    // Strip the "SYSTEM INSTRUCTION:" prefix
     const sysMatch = sysBlock.replace(/^SYSTEM INSTRUCTION:\s*/i, '').trim();
-    // Strip the "TASK:" prefix
     const taskMatch = taskBlock.replace(/^TASK:\s*/i, '').trim();
 
     if (!sysMatch || !taskMatch) return null;
@@ -215,13 +225,14 @@ export function EditorPanel() {
 
         const parsed = parsePromptFromEditor(previewText);
         if (!parsed) {
-            alert('Could not parse prompt sections. Make sure both "SYSTEM INSTRUCTION:" and "TASK:" sections are present, separated by the divider line.');
+            alert('Could not parse prompt sections. Keep "PROMPT NAME:", "SYSTEM INSTRUCTION:", and "TASK:" sections separated by the divider lines.');
             return;
         }
 
         setPromptSaving(true);
         try {
             await updatePrompt(promptEditSession.prompt.id, {
+                ...(parsed.name ? { name: parsed.name } : {}),
                 systemInstruction: parsed.systemInstruction,
                 promptTask: parsed.promptTask,
             });
@@ -514,7 +525,7 @@ export function EditorPanel() {
                         sizeClassName={sizeClasses[fontSize]}
                         spellCheck={false}
                         placeholder={promptEditSession
-                            ? "Edit the prompt sections above. Keep the SYSTEM INSTRUCTION and TASK sections separated by the divider line."
+                            ? "Edit PROMPT NAME, SYSTEM INSTRUCTION, and TASK. Keep sections separated by the divider lines."
                             : "Type or paste your text here. Use AI Edit to polish it."
                         }
                         onContextMenu={(e) => handleOpenContextMenu(e, previewText)}

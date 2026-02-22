@@ -7,6 +7,7 @@ import fs from 'fs';
 import * as hierarchyService from './hierarchyService';
 import { AppFolderInitializer } from './AppFolderInitializer';
 import { registerHierarchyHandlers } from './hierarchy-ipc-handlers';
+import { registerRepoIntelHandlers } from './repoIntelIpc';
 import type { NodeType } from './hierarchyTypes';
 import {
     assertProjectPath as assertProjectPathBase,
@@ -190,6 +191,7 @@ async function initializeApp(): Promise<boolean> {
 
         // Pass repos path to hierarchy validator
         registerHierarchyHandlers(reposPath);
+        registerRepoIntelHandlers();
         return true;
     } else {
         console.error('[App] ✗ Failed to initialize folders:', result.error);
@@ -1374,7 +1376,17 @@ ${body}
         }
 
         try {
-            await fs.promises.rename(validatedProjectPath, targetProjectPath);
+            try {
+                await fs.promises.rename(validatedProjectPath, targetProjectPath);
+            } catch (error: unknown) {
+                if (error && typeof error === 'object' && 'code' in error && error.code === 'EXDEV') {
+                    console.log('[Project] Cross-device move detected, falling back to copy+delete:', validatedProjectPath, '->', targetProjectPath);
+                    await fs.promises.cp(validatedProjectPath, targetProjectPath, { recursive: true });
+                    await fs.promises.rm(validatedProjectPath, { recursive: true, force: true });
+                } else {
+                    throw error;
+                }
+            }
 
             const metaPath = path.join(targetProjectPath, '.hierarchy-meta.json');
             if (await pathExists(metaPath)) {

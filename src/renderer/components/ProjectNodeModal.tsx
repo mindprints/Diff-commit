@@ -181,6 +181,7 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     const [repoDropTargets, setRepoDropTargets] = useState<RepositoryInfo[]>([]);
     const [repoDropZoneHighlightPath, setRepoDropZoneHighlightPath] = useState<string | null>(null);
     const repoDropZoneRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const initializationRef = useRef(false);
     const repositoryNodeId = useMemo(
         () => `repo:${repositoryPath || 'unknown'}`,
         [repositoryPath]
@@ -571,15 +572,22 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
     }, [repositoryPath, projects, repositoryNodeId]);
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && !initializationRef.current) {
             // Open in unified mode by default to show repository + projects together
             setViewScope({ type: 'unified' });
             setScopeCommits([]);
             setUnifiedSelectedProjectId(null);
             setUnifiedProjectCommits([]);
             initializeUnifiedLayout(false);
+            initializationRef.current = true;
         }
     }, [isOpen, initializeUnifiedLayout]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            initializationRef.current = false;
+        }
+    }, [isOpen]);
 
     // Save on changes
     useEffect(() => {
@@ -1260,11 +1268,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                 {visibleRepoOptions.map((repo) => (
                                     <button
                                         key={repo.path}
-                                        className={`px-2 py-1 text-[11px] rounded-full border whitespace-nowrap transition-colors ${
-                                            repo.path === repositoryPath
+                                        className={`px-2 py-1 text-[11px] rounded-full border whitespace-nowrap transition-colors ${repo.path === repositoryPath
                                                 ? 'border-indigo-400 bg-indigo-100 text-indigo-700 dark:border-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-200'
                                                 : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                                        }`}
+                                            }`}
                                         onClick={() => { void handleSelectVisibleRepo(repo); }}
                                         title={repo.path}
                                     >
@@ -1380,96 +1387,96 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
             >
                 {/* Edges Layer */}
                 <svg className="graph-svg-layer" style={{ overflow: 'visible' }}>
-                        <defs>
-                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="280" refY="3.5" orient="auto">
-                                <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
-                            </marker>
-                        </defs>
-                        {edges.map((edge, idx) => {
-                            const source = nodes.find(n => n.id === edge.from);
-                            const target = nodes.find(n => n.id === edge.to);
-                            if (!source || !target) return null;
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="280" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                        </marker>
+                    </defs>
+                    {edges.map((edge, idx) => {
+                        const source = nodes.find(n => n.id === edge.from);
+                        const target = nodes.find(n => n.id === edge.to);
+                        if (!source || !target) return null;
 
-                            return (
-                                <line
-                                    key={idx}
-                                    x1={source.x + 100} y1={source.y + 50}
-                                    x2={target.x + 100} y2={target.y + 50}
-                                    className="graph-edge"
-                                />
-                            );
-                        })}
-                        {creatingEdge && (
+                        return (
                             <line
-                                x1={(nodes.find(n => n.id === creatingEdge.from)?.x || 0) + 100}
-                                y1={(nodes.find(n => n.id === creatingEdge.from)?.y || 0) + 50}
-                                x2={creatingEdge.curX}
-                                y2={creatingEdge.curY}
-                                className="graph-edge potential"
+                                key={idx}
+                                x1={source.x + 100} y1={source.y + 50}
+                                x2={target.x + 100} y2={target.y + 50}
+                                className="graph-edge"
                             />
-                        )}
+                        );
+                    })}
+                    {creatingEdge && (
+                        <line
+                            x1={(nodes.find(n => n.id === creatingEdge.from)?.x || 0) + 100}
+                            y1={(nodes.find(n => n.id === creatingEdge.from)?.y || 0) + 50}
+                            x2={creatingEdge.curX}
+                            y2={creatingEdge.curY}
+                            className="graph-edge potential"
+                        />
+                    )}
                 </svg>
 
                 {/* Nodes Layer */}
                 {filteredNodes.map(node => {
-                        const entityType = node.entityType || 'project';
-                        const entityStyle = ENTITY_STYLES[entityType];
+                    const entityType = node.entityType || 'project';
+                    const entityStyle = ENTITY_STYLES[entityType];
 
-                        // Get display data based on scope
-                        let displayName = '';
-                        let displayMeta = '';
-                        let canDrillDown = false;
-                        let canRename = false;
+                    // Get display data based on scope
+                    let displayName = '';
+                    let displayMeta = '';
+                    let canDrillDown = false;
+                    let canRename = false;
 
-                        if (viewScope.type === 'commits') {
-                            const commit = scopeCommits.find(c => c.id === node.id);
-                            if (!commit) return null;
-                            displayName = `Commit ${commit.commitNumber}`;
-                            displayMeta = new Date(commit.timestamp).toLocaleString();
-                            canDrillDown = false;
-                            canRename = false;
-                        } else if (entityType === 'repository') {
-                            displayName = repositoryLabel;
-                            displayMeta = repositoryPath || '';
-                            canDrillDown = false;
-                            canRename = false;
-                        } else if (entityType === 'commit') {
-                            const commit = unifiedCommitMap.get(node.id);
-                            if (!commit) return null;
-                            displayName = `Diff ${commit.commitNumber}`;
-                            displayMeta = new Date(commit.timestamp).toLocaleString();
-                            canDrillDown = false;
-                            canRename = false;
-                        } else {
-                            const project = projects.find(p => p.id === node.id);
-                            if (!project) return null;
-                            displayName = project.name;
-                            displayMeta = new Date(project.updatedAt).toLocaleDateString();
-                            canDrillDown = viewScope.type === 'projects';
-                            canRename = viewScope.type === 'projects';
-                        }
+                    if (viewScope.type === 'commits') {
+                        const commit = scopeCommits.find(c => c.id === node.id);
+                        if (!commit) return null;
+                        displayName = `Commit ${commit.commitNumber}`;
+                        displayMeta = new Date(commit.timestamp).toLocaleString();
+                        canDrillDown = false;
+                        canRename = false;
+                    } else if (entityType === 'repository') {
+                        displayName = repositoryLabel;
+                        displayMeta = repositoryPath || '';
+                        canDrillDown = false;
+                        canRename = false;
+                    } else if (entityType === 'commit') {
+                        const commit = unifiedCommitMap.get(node.id);
+                        if (!commit) return null;
+                        displayName = `Diff ${commit.commitNumber}`;
+                        displayMeta = new Date(commit.timestamp).toLocaleString();
+                        canDrillDown = false;
+                        canRename = false;
+                    } else {
+                        const project = projects.find(p => p.id === node.id);
+                        if (!project) return null;
+                        displayName = project.name;
+                        displayMeta = new Date(project.updatedAt).toLocaleDateString();
+                        canDrillDown = viewScope.type === 'projects';
+                        canRename = viewScope.type === 'projects';
+                    }
 
-                        return (
-                            <GraphNodeCard
-                                key={node.id}
-                                x={node.x}
-                                y={node.y}
-                                zIndex={draggingNode === node.id ? 90 : selectedNodes.has(node.id) ? 60 : 30}
-                                className={`${entityStyle.borderClass} ${entityStyle.bgClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''} ${viewScope.type === 'unified' && entityType === 'repository' ? 'ring-1 ring-indigo-300 dark:ring-indigo-700' : ''}`}
-                                onMouseDown={(e) => handleMouseDown(e, node.id)}
-                                onMouseEnter={() => handleNodeHover(node.id)}
-                                onMouseLeave={() => setHoveredNode(null)}
-                                onContextMenu={(e) => viewScope.type === 'projects' ? handleContextMenu(e, node.id) : undefined}
-                                onDoubleClick={() => {
-                                    if (renamingNodeId !== node.id) {
-                                        if (canDrillDown) {
-                                            // Drill into project to show commits
-                                            drillIntoProject(node.id);
-                                        }
+                    return (
+                        <GraphNodeCard
+                            key={node.id}
+                            x={node.x}
+                            y={node.y}
+                            zIndex={draggingNode === node.id ? 90 : selectedNodes.has(node.id) ? 60 : 30}
+                            className={`${entityStyle.borderClass} ${entityStyle.bgClass} ${selectedNodes.has(node.id) ? 'selected' : ''} ${deleteConfirmId === node.id ? 'deleting' : ''} ${viewScope.type === 'unified' && entityType === 'repository' ? 'ring-1 ring-indigo-300 dark:ring-indigo-700' : ''}`}
+                            onMouseDown={(e) => handleMouseDown(e, node.id)}
+                            onMouseEnter={() => handleNodeHover(node.id)}
+                            onMouseLeave={() => setHoveredNode(null)}
+                            onContextMenu={(e) => viewScope.type === 'projects' ? handleContextMenu(e, node.id) : undefined}
+                            onDoubleClick={() => {
+                                if (renamingNodeId !== node.id) {
+                                    if (canDrillDown) {
+                                        // Drill into project to show commits
+                                        drillIntoProject(node.id);
                                     }
-                                }}
-                                header={
-                                    <>
+                                }
+                            }}
+                            header={
+                                <>
                                     <EntityIcon type={entityType} className="flex-shrink-0" />
                                     {renamingNodeId === node.id ? (
                                         <input
@@ -1498,80 +1505,80 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                                             <HighlightText text={displayName} highlight={searchTerm} />
                                         </div>
                                     )}
-                                    </>
+                                </>
+                            }
+                            onMenuClick={viewScope.type === 'projects'
+                                ? (e) => {
+                                    e.stopPropagation();
+                                    handleContextMenu(e, node.id);
                                 }
-                                onMenuClick={viewScope.type === 'projects'
-                                    ? (e) => {
-                                        e.stopPropagation();
-                                        handleContextMenu(e, node.id);
-                                    }
-                                    : undefined}
-                                body={<div className="flex items-center justify-between">
-                                    <div className="project-node-meta">
-                                        <div>{displayMeta}</div>
-                                        {(viewScope.type === 'projects' || viewScope.type === 'unified') && entityType === 'project' && (
-                                            <div className="text-[10px] text-gray-400 dark:text-slate-400">
-                                                commits {commitCounts[node.id] ?? 0}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${entityStyle.bgClass} ${entityStyle.iconColor} font-medium`}>
-                                        {entityStyle.label}
-                                    </span>
-                                </div>}
-                                overlay={deleteConfirmId === node.id ? (
-                                    <div
-                                        className="absolute inset-0 bg-red-500/90 dark:bg-red-900/90 rounded-lg flex flex-col items-center justify-center p-2 z-10"
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                    >
-                                        <p className="text-white text-xs font-medium mb-2 text-center">Delete "{displayName}"?</p>
-                                        <div className="flex gap-2">
-                                            <button
-                                                className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white text-xs rounded transition-colors"
-                                                onClick={() => setDeleteConfirmId(null)}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                className="px-2 py-1 bg-white text-red-600 text-xs font-medium rounded hover:bg-red-100 transition-colors"
-                                                onClick={handleDeleteNodes}
-                                            >
-                                                Delete
-                                            </button>
+                                : undefined}
+                            body={<div className="flex items-center justify-between">
+                                <div className="project-node-meta">
+                                    <div>{displayMeta}</div>
+                                    {(viewScope.type === 'projects' || viewScope.type === 'unified') && entityType === 'project' && (
+                                        <div className="text-[10px] text-gray-400 dark:text-slate-400">
+                                            commits {commitCounts[node.id] ?? 0}
                                         </div>
+                                    )}
+                                </div>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${entityStyle.bgClass} ${entityStyle.iconColor} font-medium`}>
+                                    {entityStyle.label}
+                                </span>
+                            </div>}
+                            overlay={deleteConfirmId === node.id ? (
+                                <div
+                                    className="absolute inset-0 bg-red-500/90 dark:bg-red-900/90 rounded-lg flex flex-col items-center justify-center p-2 z-10"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                    <p className="text-white text-xs font-medium mb-2 text-center">Delete "{displayName}"?</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white text-xs rounded transition-colors"
+                                            onClick={() => setDeleteConfirmId(null)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="px-2 py-1 bg-white text-red-600 text-xs font-medium rounded hover:bg-red-100 transition-colors"
+                                            onClick={handleDeleteNodes}
+                                        >
+                                            Delete
+                                        </button>
                                     </div>
-                                ) : undefined}
-                                tooltip={(hoveredNode === node.id || selectedNodes.has(node.id)) && !deleteConfirmId ? (
-                                    <GraphNodeTooltip
-                                        title={selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}
-                                        subtitle={
-                                            selectedNodes.has(node.id)
-                                                ? 'Selected'
-                                                : (viewScope.type === 'projects' || viewScope.type === 'unified') && hoveredNode === node.id && hoverContentSource !== 'draft'
-                                                    ? (hoverContentSource === 'commit' ? 'Commit Preview' : 'Empty Draft')
-                                                    : undefined
-                                        }
-                                        persistent={selectedNodes.has(node.id)}
-                                    >
-                                        {selectedNodes.has(node.id) ? (
-                                            <HighlightText
-                                                text={
-                                                    entityType === 'repository'
-                                                        ? `Path: ${repositoryPath || '(none)'}\nProjects: ${projects.length}`
-                                                        : entityType === 'commit'
+                                </div>
+                            ) : undefined}
+                            tooltip={(hoveredNode === node.id || selectedNodes.has(node.id)) && !deleteConfirmId ? (
+                                <GraphNodeTooltip
+                                    title={selectedNodes.has(node.id) ? 'Full Content' : 'Latest Content (Preview)'}
+                                    subtitle={
+                                        selectedNodes.has(node.id)
+                                            ? 'Selected'
+                                            : (viewScope.type === 'projects' || viewScope.type === 'unified') && hoveredNode === node.id && hoverContentSource !== 'draft'
+                                                ? (hoverContentSource === 'commit' ? 'Commit Preview' : 'Empty Draft')
+                                                : undefined
+                                    }
+                                    persistent={selectedNodes.has(node.id)}
+                                >
+                                    {selectedNodes.has(node.id) ? (
+                                        <HighlightText
+                                            text={
+                                                entityType === 'repository'
+                                                    ? `Path: ${repositoryPath || '(none)'}\nProjects: ${projects.length}`
+                                                    : entityType === 'commit'
                                                         ? (unifiedCommitMap.get(node.id)?.content || '(Empty)')
                                                         : viewScope.type === 'projects' || viewScope.type === 'unified'
-                                                        ? (projects.find(p => p.id === node.id)?.content || '(Empty)')
-                                                        : (scopeCommits.find(c => c.id === node.id)?.content || '(Empty)')
-                                                }
-                                                highlight={searchTerm}
-                                            />
-                                        ) : (
-                                            <HighlightText text={hoverContent} highlight={searchTerm} />
-                                        )}
-                                    </GraphNodeTooltip>
-                                ) : undefined}
-                            />
+                                                            ? (projects.find(p => p.id === node.id)?.content || '(Empty)')
+                                                            : (scopeCommits.find(c => c.id === node.id)?.content || '(Empty)')
+                                            }
+                                            highlight={searchTerm}
+                                        />
+                                    ) : (
+                                        <HighlightText text={hoverContent} highlight={searchTerm} />
+                                    )}
+                                </GraphNodeTooltip>
+                            ) : undefined}
+                        />
                     );
                 })}
             </GraphCanvas>
@@ -1584,11 +1591,10 @@ export function ProjectNodeModal({ isOpen, onClose }: ProjectNodeModalProps) {
                             <div
                                 key={repo.path}
                                 ref={(el) => { repoDropZoneRefs.current[repo.path] = el; }}
-                                className={`w-56 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto ${
-                                    active
+                                className={`w-56 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto ${active
                                         ? 'border-indigo-400 bg-indigo-50/90 dark:bg-indigo-900/40 scale-105 shadow-lg shadow-indigo-200/50'
                                         : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
-                                }`}
+                                    }`}
                                 onClick={() => { void handleSelectVisibleRepo(repo); }}
                                 title={repo.path}
                             >

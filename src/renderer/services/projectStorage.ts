@@ -88,10 +88,10 @@ export async function openRepository(): Promise<{ path: string; projects: Projec
     // Browser fallback: return stored browser repository with local projects
     const browserRepo = getBrowserRepository();
     if (browserRepo) {
-        const projects = await getProjects();
+        const projects = await getProjects(browserRepo.path);
         return {
             path: browserRepo.path,
-            projects: projects.filter(p => p.repositoryPath === browserRepo.path)
+            projects
         };
     }
 
@@ -167,13 +167,16 @@ export async function createRepository(): Promise<{ path: string; projects: Proj
  * Get all projects from storage (Browser Fallback).
  * For Electron, this is handled by openRepository() now, but can still return legacy stored projects if needed.
  */
-export async function getProjects(): Promise<Project[]> {
+export async function getProjects(repoPath?: string): Promise<Project[]> {
     try {
         // Browser fallback - localStorage
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
+                if (repoPath) {
+                    return parsed.filter((p: Project) => p.repositoryPath === repoPath);
+                }
                 return parsed;
             }
         }

@@ -1,5 +1,12 @@
 
 import { AILogEntry, AIPrompt, Project, RepositoryInfo, TextCommit, FolderOperationResult } from './types';
+import type {
+    RepoIntelBuildOptions,
+    RepoIntelIndexStats,
+    RepoIntelQueryOptions,
+    RepoIntelRetrievedContext,
+    RepoRedundancyReport,
+} from '../shared/repoIntelTypes';
 
 export interface IElectronAPI {
     platform: string;
@@ -97,6 +104,14 @@ export interface IElectronAPI {
             plugins?: Array<{ id: string;[key: string]: unknown }>;
         }) => Promise<unknown>;
         chatCompletionsCancel?: (requestId: string) => Promise<boolean>;
+    };
+
+    repoIntel: {
+        buildIndex: (repoPath: string, options?: RepoIntelBuildOptions) => Promise<RepoIntelIndexStats>;
+        getIndexStatus: (repoPath: string) => Promise<RepoIntelIndexStats>;
+        clearIndex: (repoPath: string) => Promise<boolean>;
+        queryIndex: (repoPath: string, query: string, options?: RepoIntelQueryOptions) => Promise<RepoIntelRetrievedContext>;
+        findRedundancy: (repoPath: string, options?: { threshold?: number; topK?: number }) => Promise<RepoRedundancyReport>;
     };
 
     // Menu event listeners

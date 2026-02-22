@@ -384,6 +384,14 @@ export function useProjects() {
             return moved;
         }
 
+        // Browser File System (repoHandle) handling
+        if (repoHandle) {
+            // Currently, moving between directory handles is not logically simple 
+            // without actually copying files. We'll show a message.
+            alert('Cross-repository moves are currently unsupported when using the browser file system access API.\n\nPlease move the project folder manually on your disk and re-load the repository.');
+            return null;
+        }
+
         // Browser/localStorage fallback: reassign repositoryPath only
         const updatedProject: Project = {
             ...project,
@@ -391,12 +399,20 @@ export function useProjects() {
             updatedAt: Date.now(),
         };
         await projectStorage.saveProject(updatedProject);
-        setProjects((prev) => prev.filter((p) => p.id !== id));
-        if (currentProject?.id === id) {
-            setCurrentProject(null);
+
+        // Remove from current view if it's no longer in our current repo
+        // Or update it if it's still/now in our current repo
+        if (targetRepoPath !== repositoryPath) {
+            setProjects((prev) => prev.filter((p) => p.id !== id));
+            if (currentProject?.id === id) {
+                setCurrentProject(null);
+            }
+        } else {
+            setProjects((prev) => prev.map((p) => (p.id === id ? updatedProject : p)));
         }
+
         return updatedProject;
-    }, [projects, isElectron, currentProject?.id, repositoryPath]);
+    }, [projects, isElectron, currentProject?.id, repositoryPath, repoHandle]);
 
     // Close current project
     const closeProject = useCallback(() => {
@@ -417,7 +433,7 @@ export function useProjects() {
             }
         } else {
             // localStorage fallback (browser without handle)
-            const loaded = await projectStorage.getProjects();
+            const loaded = await projectStorage.getProjects(repositoryPath || undefined);
             setProjects(loaded);
         }
     }, [repositoryPath, repoHandle]);

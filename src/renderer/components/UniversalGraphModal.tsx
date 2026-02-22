@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { ArrowLeft, ChevronDown, FolderGit2, FileText, GitMerge, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Brain, ChevronDown, FolderGit2, FileText, GitMerge, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from './Button';
 import { GraphModalShell } from './graph/GraphModalShell';
 import { GraphCanvas } from './graph/GraphCanvas';
@@ -23,6 +23,7 @@ interface UniversalGraphModalProps {
     onMoveProject: (projectId: string, targetRepoPath: string) => Promise<boolean>;
     onDeleteProject: (projectId: string) => Promise<void>;
     onNewProject: () => void;
+    onOpenRepoIntel: () => void;
 }
 
 interface UniversalNodeState {
@@ -78,12 +79,12 @@ export function UniversalGraphModal({
     onMoveProject,
     onDeleteProject,
     onNewProject,
+    onOpenRepoIntel,
 }: UniversalGraphModalProps) {
     const [nodes, setNodes] = useState<UniversalNodeState[]>([]);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [scale, setScale] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
-    const [repos, setRepos] = useState<RepositoryInfo[]>([]);
     const [dropRepos, setDropRepos] = useState<RepositoryInfo[]>([]);
     const [dropRepoPositions, setDropRepoPositions] = useState<Record<string, { x: number; y: number }>>({});
     const [highlightRepoPath, setHighlightRepoPath] = useState<string | null>(null);
@@ -126,7 +127,7 @@ export function UniversalGraphModal({
                     if (!project) return false;
                     return (
                         project.name.toLowerCase().includes(q) ||
-                        project.content.toLowerCase().includes(q)
+                        (project.content ?? '').toLowerCase().includes(q)
                     );
                 })
                 .map((n) => n.id)
@@ -185,7 +186,6 @@ export function UniversalGraphModal({
             try {
                 const list = await projectStorage.listRepositories();
                 if (cancelled) return;
-                setRepos(list);
                 const fixed = chooseFixedDropRepos(list);
                 setDropRepos(fixed);
                 const stillPresent = fixed.some((repo) => repo.path === selectedRepoPath);
@@ -195,7 +195,6 @@ export function UniversalGraphModal({
                 }
             } catch {
                 if (!cancelled) {
-                    setRepos([]);
                     setDropRepos([]);
                     setSelectedRepoPath(null);
                 }
@@ -222,6 +221,8 @@ export function UniversalGraphModal({
     }, [isOpen, dropRepos]);
 
     useEffect(() => {
+        if (!isOpen) return;
+
         const onMove = (e: MouseEvent) => {
             const path = draggingDropRepoPathRef.current;
             const prevPointer = dropRepoPointerRef.current;
@@ -250,7 +251,7 @@ export function UniversalGraphModal({
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
         };
-    }, []);
+    }, [isOpen]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -278,6 +279,8 @@ export function UniversalGraphModal({
         setSelectedNodeId(null);
         setMergeSelectedNodeIds([]);
         setHoveredNodeId(null);
+        setDraggingNodeId(null);
+        setDraggingCanvas(false);
     }, [isOpen, projects, repositoryPath]);
 
     useEffect(() => {
@@ -314,6 +317,15 @@ export function UniversalGraphModal({
         window.addEventListener('mousedown', handlePointerDown);
         return () => window.removeEventListener('mousedown', handlePointerDown);
     }, [sortMenuOpen]);
+
+    // Handle flashRepoPath expiration (prevent state updates on unmounted component)
+    useEffect(() => {
+        if (!flashRepoPath) return;
+        const timer = setTimeout(() => {
+            setFlashRepoPath(null);
+        }, 600);
+        return () => clearTimeout(timer);
+    }, [flashRepoPath]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent, nodeId: string | null) => {
         if (e.button !== 0) return;
@@ -398,7 +410,6 @@ export function UniversalGraphModal({
                     }
                 }
                 setFlashRepoPath(dropRepo.path);
-                setTimeout(() => setFlashRepoPath((prev) => (prev === dropRepo.path ? null : prev)), 650);
             }
         }
         setDraggingNodeId(null);
@@ -507,6 +518,14 @@ export function UniversalGraphModal({
                     <Button
                         variant="outline"
                         size="sm"
+                        onClick={onOpenRepoIntel}
+                        icon={<Brain className="w-3.5 h-3.5" />}
+                    >
+                        Repo Intel
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
                         onClick={handleMergeSelected}
                         icon={<GitMerge className="w-3.5 h-3.5" />}
                         disabled={mergeSelectedNodeIds.length < 2}
@@ -581,11 +600,11 @@ export function UniversalGraphModal({
                         ? 90
                         : isMergeSelected
                             ? 80
-                        : selectedNodeId === node.id
-                            ? 70
-                            : hoveredNodeId === node.id
-                                ? 60
-                                : 30;
+                            : selectedNodeId === node.id
+                                ? 70
+                                : hoveredNodeId === node.id
+                                    ? 60
+                                    : 30;
 
                     return (
                         <GraphNodeCard
@@ -609,12 +628,12 @@ export function UniversalGraphModal({
                                 </>
                             }
                             body={
-                                    <div className="project-node-meta">
-                                        <div className="truncate" title={subtitle}>{subtitle}</div>
-                                        <div className="text-[10px] text-gray-400 dark:text-slate-400">
-                                            Double-click to open in editor
-                                        </div>
+                                <div className="project-node-meta">
+                                    <div className="truncate" title={subtitle}>{subtitle}</div>
+                                    <div className="text-[10px] text-gray-400 dark:text-slate-400">
+                                        Double-click to open in editor
                                     </div>
+                                </div>
                             }
                             overlay={
                                 <div className="absolute top-2 right-2 flex items-center gap-1">
@@ -690,8 +709,9 @@ export function UniversalGraphModal({
                                     }
                                     setSelectedRepoPath(repo.path);
                                     setFlashRepoPath(repo.path);
-                                    setTimeout(() => setFlashRepoPath((prev) => (prev === repo.path ? null : prev)), 450);
-                                    void onSwitchRepository(repo.path);
+                                    onSwitchRepository(repo.path).catch((err) => {
+                                        console.error('Failed to switch repository:', err);
+                                    });
                                 }}
                                 title={repo.path}
                             >
