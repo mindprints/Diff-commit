@@ -48,6 +48,31 @@
     color: white;
 }
 
+.project-node.repo-intel-node {
+    background: linear-gradient(180deg, #fff8cc 0%, #fef3a4 100%);
+    border-color: #eab308;
+    box-shadow:
+        0 4px 10px -2px rgb(234 179 8 / 0.25),
+        0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.dark .project-node.repo-intel-node {
+    background: linear-gradient(180deg, rgb(61 47 10 / 0.9) 0%, rgb(82 63 13 / 0.92) 100%);
+    border-color: #eab308;
+    color: #f8fafc;
+    box-shadow:
+        0 8px 18px -6px rgb(234 179 8 / 0.35),
+        0 6px 10px -6px rgb(0 0 0 / 0.5);
+}
+
+.project-node.repo-intel-node .project-node-meta {
+    color: #713f12;
+}
+
+.dark .project-node.repo-intel-node .project-node-meta {
+    color: #fde68a;
+}
+
 .project-node:hover {
     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
     border-color: #6366f1;
@@ -59,6 +84,20 @@
     border-color: #ec4899;
     /* Pink-500 */
     box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.3);
+}
+
+.project-node.repo-intel-node:hover {
+    border-color: #d97706;
+    box-shadow:
+        0 12px 20px -6px rgb(234 179 8 / 0.35),
+        0 6px 10px -6px rgb(0 0 0 / 0.2);
+}
+
+.dark .project-node.repo-intel-node:hover {
+    border-color: #f59e0b;
+    box-shadow:
+        0 14px 24px -8px rgb(234 179 8 / 0.45),
+        0 8px 14px -8px rgb(0 0 0 / 0.55);
 }
 
 .project-node-title {

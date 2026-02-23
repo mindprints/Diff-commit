@@ -81,9 +81,10 @@ export function RepoIntelProvider({ children }: { children: React.ReactNode }) {
 
     const runAnswerTask = useCallback(async (
         task: RepoIntelTask,
-        runner: (repoPath: string) => Promise<RepoIntelAnswer>
+        runner: (repoPath: string) => Promise<RepoIntelAnswer>,
+        explicitPath?: string
     ): Promise<RepoIntelAnswer | null> => {
-        const resolved = resolveRepoPath();
+        const resolved = explicitPath || resolveRepoPath();
         if (!resolved) {
             setError('No repository selected for repo intelligence.');
             return null;
@@ -111,7 +112,7 @@ export function RepoIntelProvider({ children }: { children: React.ReactNode }) {
             setError('No repository selected for repo intelligence.');
             return null;
         }
-        return runAnswerTask('summarize_repo', (path) => repoIntelService.summarizeRepo(path, selectedModel));
+        return runAnswerTask('summarize_repo', (path) => repoIntelService.summarizeRepo(path, selectedModel), resolved);
     }, [resolveRepoPath, runAnswerTask, selectedModel]);
 
     const askRepo = useCallback(async (question: string, repoPath?: string) => {
@@ -120,7 +121,7 @@ export function RepoIntelProvider({ children }: { children: React.ReactNode }) {
             setError('No repository selected for repo intelligence.');
             return null;
         }
-        return runAnswerTask('ask_repo', (path) => repoIntelService.askRepo(path, question, selectedModel));
+        return runAnswerTask('ask_repo', (path) => repoIntelService.askRepo(path, question, selectedModel), resolved);
     }, [resolveRepoPath, runAnswerTask, selectedModel]);
 
     const mapTopics = useCallback(async (repoPath?: string) => {
@@ -129,7 +130,7 @@ export function RepoIntelProvider({ children }: { children: React.ReactNode }) {
             setError('No repository selected for repo intelligence.');
             return null;
         }
-        return runAnswerTask('map_topics', (path) => repoIntelService.mapRepoTopics(path, selectedModel));
+        return runAnswerTask('map_topics', (path) => repoIntelService.mapRepoTopics(path, selectedModel), resolved);
     }, [resolveRepoPath, runAnswerTask, selectedModel]);
 
     const findRedundancy = useCallback(async (repoPath?: string) => {

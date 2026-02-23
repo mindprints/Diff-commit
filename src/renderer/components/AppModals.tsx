@@ -14,11 +14,28 @@ import { UniversalGraphModal } from './UniversalGraphModal';
 import { RepoPickerDialog } from './RepoPickerDialog';
 import { RepoIntelPanel } from './RepoIntelPanel';
 import { X, Volume2, Shield, Save } from 'lucide-react';
+import type { AIPrompt } from '../types';
+import {
+    getRepoIntelPromptConfigs,
+    resetRepoIntelPromptConfig,
+    updateRepoIntelPromptConfig,
+} from '../services/repoIntelPromptConfig';
 
 import { useUI, useProject, useAI, useEditor } from '../contexts';
 
+const REPO_INTEL_PROMPT_PREFIX = 'repo-intel:';
+
+function isRepoIntelPromptId(id: string): boolean {
+    return id.startsWith(REPO_INTEL_PROMPT_PREFIX);
+}
+
+function toRepoIntelPromptNodeOrder(index: number, aiPromptCount: number): number {
+    return aiPromptCount + 100 + index;
+}
+
 export function AppModals() {
     const [projectsPanelStartInCreateMode, setProjectsPanelStartInCreateMode] = React.useState(false);
+    const [repoIntelPromptVersion, setRepoIntelPromptVersion] = React.useState(0);
     const {
         showHelp, setShowHelp,
         showLogs, setShowLogs,
@@ -57,6 +74,57 @@ export function AppModals() {
         selectedImageModel, setDefaultImageModel,
         activePromptId, setDefaultPrompt
     } = useAI();
+
+    const promptGraphPrompts = React.useMemo<AIPrompt[]>(() => {
+        const repoIntelPromptNodes: AIPrompt[] = getRepoIntelPromptConfigs().map((prompt, index) => ({
+            id: `${REPO_INTEL_PROMPT_PREFIX}${prompt.task}`,
+            name: prompt.name,
+            systemInstruction: prompt.systemInstruction,
+            promptTask: prompt.promptTask,
+            isBuiltIn: true,
+            order: toRepoIntelPromptNodeOrder(index, aiPrompts.length),
+            color: 'bg-yellow-400',
+            isImageMode: false,
+            pinned: false,
+        }));
+        return [...aiPrompts, ...repoIntelPromptNodes];
+    }, [aiPrompts, repoIntelPromptVersion]);
+
+    const handlePromptGraphUpdate = React.useCallback(async (id: string, updates: Partial<AIPrompt>) => {
+        if (isRepoIntelPromptId(id)) {
+            const task = id.replace(REPO_INTEL_PROMPT_PREFIX, '') as 'summarize_repo' | 'ask_repo' | 'map_topics';
+            if (updates.name || updates.systemInstruction || updates.promptTask) {
+                updateRepoIntelPromptConfig(task, {
+                    ...(typeof updates.name === 'string' ? { name: updates.name } : {}),
+                    ...(typeof updates.systemInstruction === 'string' ? { systemInstruction: updates.systemInstruction } : {}),
+                    ...(typeof updates.promptTask === 'string' ? { promptTask: updates.promptTask } : {}),
+                });
+                setRepoIntelPromptVersion((v) => v + 1);
+            }
+            return;
+        }
+        await updatePrompt(id, updates);
+    }, [updatePrompt]);
+
+    const handlePromptGraphResetBuiltIn = React.useCallback(async (id: string) => {
+        if (isRepoIntelPromptId(id)) {
+            const task = id.replace(REPO_INTEL_PROMPT_PREFIX, '') as 'summarize_repo' | 'ask_repo' | 'map_topics';
+            resetRepoIntelPromptConfig(task);
+            setRepoIntelPromptVersion((v) => v + 1);
+            return;
+        }
+        await resetBuiltIn(id);
+    }, [resetBuiltIn]);
+
+    const handlePromptGraphDelete = React.useCallback(async (id: string) => {
+        if (isRepoIntelPromptId(id)) return;
+        await deletePrompt(id);
+    }, [deletePrompt]);
+
+    const handlePromptGraphSetDefault = React.useCallback((id: string) => {
+        if (isRepoIntelPromptId(id)) return;
+        setDefaultPrompt(id);
+    }, [setDefaultPrompt]);
 
     return (
         <>
@@ -148,19 +216,26 @@ export function AppModals() {
             <PromptGraphModal
                 isOpen={showPromptsModal}
                 onClose={() => setShowPromptsModal(false)}
-                prompts={aiPrompts}
+                prompts={promptGraphPrompts}
                 onCreatePrompt={createPrompt}
-                onUpdatePrompt={updatePrompt}
-                onDeletePrompt={deletePrompt}
-                onResetBuiltIn={resetBuiltIn}
+                onUpdatePrompt={handlePromptGraphUpdate}
+                onDeletePrompt={handlePromptGraphDelete}
+                onResetBuiltIn={handlePromptGraphResetBuiltIn}
                 defaultPromptId={activePromptId}
-                onSetDefault={setDefaultPrompt}
+                onSetDefault={handlePromptGraphSetDefault}
                 selectedModel={selectedModel}
                 selectedImageModel={selectedImageModel}
                 onEditInEditor={(prompt) => {
-                    // Load prompt content into the main editor for modification
+                    const detail = isRepoIntelPromptId(prompt.id)
+                        ? {
+                            prompt,
+                            onSavePromptEdits: async (promptId: string, updates: Partial<AIPrompt>) => {
+                                await handlePromptGraphUpdate(promptId, updates);
+                            },
+                        }
+                        : { prompt };
                     const content = `[PROMPT: ${prompt.name}]\n\n--- System Instruction ---\n${prompt.systemInstruction}\n\n--- Task ---\n${prompt.promptTask}`;
-                    const event = new CustomEvent('load-prompt-to-editor', { detail: { prompt, content } });
+                    const event = new CustomEvent('load-prompt-to-editor', { detail: { ...detail, content } });
                     window.dispatchEvent(event);
                 }}
             />

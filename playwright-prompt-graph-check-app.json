@@ -1,0 +1,7 @@
+{
+  "bodySnippet": "top\nDefault levels\n2 hidden\n﻿\nreact-dom_client.js?v=41bca6f4:20103 \nDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools\nVM4 sandbox_bundle:2 \nElectron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.\nuseProjects.ts:38 \n[App] Auto-loading default repository: C:\\Users\\mindp\\AppData\\Roaming\\diff-commit-ai\\workspace\\repos\\Default\nuseProjects.ts:38 \n[App] Auto-loading default repository: C:\\Users\\mindp\\AppData\\Roaming\\diff-commit-ai\\workspace\\repos\\Default\n﻿\n.\nLocal storage\nOn this page you can view, add, edit, and delete local storage key-value pairs.Learn more\nNumber of entries shown in table: 0",
+  "hasPromptGraph": false,
+  "promptNodeCount": 0,
+  "labels": [],
+  "repoIntelLabels": []
+}

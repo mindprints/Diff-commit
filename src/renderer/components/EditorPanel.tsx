@@ -12,10 +12,18 @@ import { useUI, useProject, useAI, useEditor } from '../contexts';
 import { useState, useEffect, useCallback } from 'react';
 
 // Stash structure: saved editor content during prompt editing
+interface EditablePromptLike {
+    id: string;
+    name: string;
+    systemInstruction: string;
+    promptTask: string;
+}
+
 interface PromptEditSession {
-    prompt: AIPrompt;              // The prompt being edited
+    prompt: EditablePromptLike;    // The prompt being edited
     stashedContent: string;        // Editor content before prompt editing began
     stashedOriginalText: string;   // Original text baseline before prompt editing
+    savePromptEdits?: (id: string, updates: Partial<AIPrompt>) => Promise<void>;
 }
 
 // Separator used to delimit prompt sections in the editor
@@ -117,7 +125,7 @@ function wrapSelection(
     onChangeValue(newValue);
 }
 
-function formatPromptForEditor(prompt: AIPrompt): string {
+function formatPromptForEditor(prompt: EditablePromptLike): string {
     return `PROMPT NAME:\n${prompt.name}${SECTION_SEPARATOR}SYSTEM INSTRUCTION:\n${prompt.systemInstruction}${SECTION_SEPARATOR}TASK:\n${prompt.promptTask}`;
 }
 
@@ -129,7 +137,7 @@ function parsePromptFromEditor(text: string): { name?: string; systemInstruction
     if (parts.length >= 3) {
         const nameBlock = parts[0].trim();
         const sysBlock = parts[1].trim();
-        const taskBlock = parts.slice(2).join('════════════════════════════════').trim();
+        const taskBlock = parts.slice(2).join(SECTION_SEPARATOR).trim();
 
         const nameMatch = nameBlock.replace(/^PROMPT NAME:\s*/i, '').trim();
         const sysMatch = sysBlock.replace(/^SYSTEM INSTRUCTION:\s*/i, '').trim();
@@ -185,7 +193,11 @@ export function EditorPanel() {
     // Listen for the custom event dispatched when "Edit in Editor" is triggered
     useEffect(() => {
         const handleLoadPrompt = async (e: Event) => {
-            const detail = (e as CustomEvent).detail as { prompt: AIPrompt; content: string };
+            const detail = (e as CustomEvent).detail as {
+                prompt: EditablePromptLike;
+                content?: string;
+                onSavePromptEdits?: (id: string, updates: Partial<AIPrompt>) => Promise<void>;
+            };
             if (!detail?.prompt) return;
 
             // Step 1: If there's unsaved content, auto-commit it first
@@ -202,6 +214,7 @@ export function EditorPanel() {
                 prompt: detail.prompt,
                 stashedContent: previewText,
                 stashedOriginalText: originalText,
+                savePromptEdits: detail.onSavePromptEdits,
             };
 
             // Step 3: Load prompt content into editor
@@ -231,7 +244,8 @@ export function EditorPanel() {
 
         setPromptSaving(true);
         try {
-            await updatePrompt(promptEditSession.prompt.id, {
+            const savePromptEdits = promptEditSession.savePromptEdits ?? updatePrompt;
+            await savePromptEdits(promptEditSession.prompt.id, {
                 ...(parsed.name ? { name: parsed.name } : {}),
                 systemInstruction: parsed.systemInstruction,
                 promptTask: parsed.promptTask,

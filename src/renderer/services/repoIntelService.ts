@@ -9,6 +9,7 @@ import type {
     RepoRedundancyReport,
 } from '../../shared/repoIntelTypes';
 import type { Project } from '../types';
+import { getRepoIntelPromptConfig } from './repoIntelPromptConfig';
 
 function getRepoIntelApi() {
     return window.electron?.repoIntel;
@@ -81,9 +82,10 @@ async function runGroundedTask(params: {
     model: Model;
     question?: string;
     retrieved: RepoIntelRetrievedContext;
+    systemInstruction: string;
     taskInstruction: string;
 }): Promise<RepoIntelAnswer> {
-    const { task, repoPath, model, question, retrieved, taskInstruction } = params;
+    const { task, repoPath, model, question, retrieved, systemInstruction, taskInstruction } = params;
 
     const sourceBlock = formatSourcesForPrompt(retrieved, 12);
     if (!sourceBlock.trim()) {
@@ -92,15 +94,6 @@ async function runGroundedTask(params: {
             citations: [],
         };
     }
-
-    const systemPrompt = [
-        'You are a repository analysis assistant.',
-        'Use only the provided source excerpts.',
-        'Do not invent facts.',
-        'Cite concrete claims with citation markers like [C1], [C2].',
-        'If evidence is insufficient, say so explicitly.',
-        'Return concise markdown.',
-    ].join(' ');
 
     const userPrompt = [
         `Repository path: ${repoPath}`,
@@ -115,7 +108,7 @@ async function runGroundedTask(params: {
         const raw = await requestOpenRouterChatCompletions({
             model: model.id,
             messages: [
-                { role: 'system', content: systemPrompt },
+                { role: 'system', content: systemInstruction },
                 { role: 'user', content: userPrompt },
             ],
             temperature: 0.2,
@@ -177,6 +170,7 @@ export async function retrieveRepoContext(
 }
 
 export async function summarizeRepo(repoPath: string, model: Model): Promise<RepoIntelAnswer> {
+    const prompt = getRepoIntelPromptConfig('summarize_repo');
     await ensureRepoIndex(repoPath);
     const retrieved = await retrieveRepoContext(repoPath, 'overview summary purpose architecture topics', {
         topK: 12,
@@ -188,11 +182,13 @@ export async function summarizeRepo(repoPath: string, model: Model): Promise<Rep
         repoPath,
         model,
         retrieved,
-        taskInstruction: 'Summarize what this repository contains, major themes, and likely project categories.',
+        systemInstruction: prompt.systemInstruction,
+        taskInstruction: prompt.promptTask,
     });
 }
 
 export async function askRepo(repoPath: string, question: string, model: Model): Promise<RepoIntelAnswer> {
+    const prompt = getRepoIntelPromptConfig('ask_repo');
     await ensureRepoIndex(repoPath);
     const retrieved = await retrieveRepoContext(repoPath, question, { topK: 12, includeChunks: true, strategy: 'lexical' });
     return runGroundedTask({
@@ -201,11 +197,13 @@ export async function askRepo(repoPath: string, question: string, model: Model):
         model,
         question,
         retrieved,
-        taskInstruction: 'Answer the user question using only the provided excerpts.',
+        systemInstruction: prompt.systemInstruction,
+        taskInstruction: prompt.promptTask,
     });
 }
 
 export async function mapRepoTopics(repoPath: string, model: Model): Promise<RepoIntelAnswer> {
+    const prompt = getRepoIntelPromptConfig('map_topics');
     await ensureRepoIndex(repoPath);
     const retrieved = await retrieveRepoContext(repoPath, 'topics themes categories concepts', {
         topK: 16,
@@ -217,7 +215,8 @@ export async function mapRepoTopics(repoPath: string, model: Model): Promise<Rep
         repoPath,
         model,
         retrieved,
-        taskInstruction: 'Produce a topic map of the repository with bullet groups and cite sources.',
+        systemInstruction: prompt.systemInstruction,
+        taskInstruction: prompt.promptTask,
     });
 }
 
@@ -311,7 +310,7 @@ function fallbackRetrieveRepoContext(
         });
     }
 
-    rows.sort((a, b) => b.score - a.score || b.source.updatedAt - a.source.updatedAt);
+    rows.sort((a, b) => (b.score - a.score) || (Number(b.source.updatedAt || 0) - Number(a.source.updatedAt || 0)));
     return {
         query,
         chunks: rows.slice(0, Math.max(1, options?.topK ?? 12)),
@@ -355,14 +354,51 @@ function fallbackFindRepoRedundancy(repoPath: string, projects: Project[]): Repo
     }
     pairs.sort((a, b) => b.similarity - a.similarity);
     const limited = pairs.slice(0, 50);
+
+    // Build connected components for grouping
+    const adj = new Map<string, Set<string>>();
+    for (const pair of limited) {
+        if (!adj.has(pair.aSourceId)) adj.set(pair.aSourceId, new Set());
+        if (!adj.has(pair.bSourceId)) adj.set(pair.bSourceId, new Set());
+        adj.get(pair.aSourceId)!.add(pair.bSourceId);
+        adj.get(pair.bSourceId)!.add(pair.aSourceId);
+    }
+
+    const groups: RepoRedundancyReport['groups'] = [];
+    const visited = new Set<string>();
+    let groupIdx = 1;
+
+    for (const sourceId of adj.keys()) {
+        if (visited.has(sourceId)) continue;
+        const component: string[] = [];
+        const queue = [sourceId];
+        visited.add(sourceId);
+        while (queue.length > 0) {
+            const curr = queue.shift()!;
+            component.push(curr);
+            const moveNeighbors = adj.get(curr);
+            if (moveNeighbors) {
+                for (const next of moveNeighbors) {
+                    if (!visited.has(next)) {
+                        visited.add(next);
+                        queue.push(next);
+                    }
+                }
+            }
+        }
+        if (component.length > 1) {
+            groups.push({
+                groupId: `group-${groupIdx++}`,
+                sourceIds: component.sort(),
+                summary: `Redundant cluster of ${component.length} projects`,
+            });
+        }
+    }
+
     return {
         repoPath,
         pairs: limited,
-        groups: limited.map((pair, idx) => ({
-            groupId: `group-${idx + 1}`,
-            sourceIds: [pair.aSourceId, pair.bSourceId],
-            summary: `${pair.overlapType} overlap (${Math.round(pair.similarity * 100)}%)`,
-        })),
+        groups,
         createdAt: Date.now(),
     };
 }

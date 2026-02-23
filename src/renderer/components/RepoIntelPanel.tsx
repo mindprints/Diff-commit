@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Brain, FileSearch, Sparkles, X } from 'lucide-react';
 import { Button } from './Button';
 import { useProject, useRepoIntel } from '../contexts';
+import type { AIPrompt } from '../types';
+import type { RepoIntelPromptTask } from '../services/repoIntelPromptConfig';
+import { getDefaultRepoIntelPromptConfig, updateRepoIntelPromptConfig } from '../services/repoIntelPromptConfig';
 
 interface RepoIntelPanelProps {
     isOpen: boolean;
@@ -26,6 +29,7 @@ export function RepoIntelPanel({ isOpen, onClose, onOpenProject }: RepoIntelPane
         history,
     } = useRepoIntel();
     const [question, setQuestion] = useState('');
+    const [newPromptTask, setNewPromptTask] = useState<RepoIntelPromptTask>('ask_repo');
 
     useEffect(() => {
         if (isOpen && repositoryPath) {
@@ -40,6 +44,35 @@ export function RepoIntelPanel({ isOpen, onClose, onOpenProject }: RepoIntelPane
     }, [repositoryPath]);
 
     if (!isOpen) return null;
+
+    const openRepoIntelPromptTemplateInEditor = (task: RepoIntelPromptTask) => {
+        const template = getDefaultRepoIntelPromptConfig(task);
+        const promptLike: AIPrompt = {
+            id: `repo-intel:${task}`,
+            name: template.name,
+            systemInstruction: template.systemInstruction,
+            promptTask: template.promptTask,
+            isBuiltIn: true,
+            order: 0,
+            color: 'bg-yellow-400',
+            isImageMode: false,
+        };
+
+        const event = new CustomEvent('load-prompt-to-editor', {
+            detail: {
+                prompt: promptLike,
+                onSavePromptEdits: async (_promptId: string, updates: Partial<AIPrompt>) => {
+                    updateRepoIntelPromptConfig(task, {
+                        ...(typeof updates.name === 'string' ? { name: updates.name } : {}),
+                        ...(typeof updates.systemInstruction === 'string' ? { systemInstruction: updates.systemInstruction } : {}),
+                        ...(typeof updates.promptTask === 'string' ? { promptTask: updates.promptTask } : {}),
+                    });
+                },
+            },
+        });
+        window.dispatchEvent(event);
+        onClose();
+    };
 
     return (
         <div className="fixed inset-0 z-[130] flex items-center justify-center">
@@ -62,6 +95,31 @@ export function RepoIntelPanel({ isOpen, onClose, onOpenProject }: RepoIntelPane
 
                 <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_1fr]">
                     <div className="border-r border-gray-200 dark:border-slate-800 p-4 flex flex-col gap-4 overflow-y-auto">
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold text-gray-600 dark:text-slate-300">Repo Intel Prompt</label>
+                            <select
+                                value={newPromptTask}
+                                onChange={(e) => setNewPromptTask(e.target.value as RepoIntelPromptTask)}
+                                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
+                            >
+                                <option value="ask_repo">Ask Repo</option>
+                                <option value="summarize_repo">Summarize Repo</option>
+                                <option value="map_topics">Map Topics</option>
+                            </select>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { clearError(); openRepoIntelPromptTemplateInEditor(newPromptTask); }}
+                                disabled={isBusy}
+                                className="w-full justify-start"
+                            >
+                                Create New
+                            </Button>
+                            <div className="text-[11px] text-gray-500 dark:text-slate-400">
+                                Opens a fresh template and saves into the selected Repo Intel task prompt.
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
                             <Button
                                 variant="outline"
@@ -218,4 +276,3 @@ export function RepoIntelPanel({ isOpen, onClose, onOpenProject }: RepoIntelPane
         </div>
     );
 }
-

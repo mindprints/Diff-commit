@@ -72,12 +72,17 @@ const COLORS = [
     { value: 'bg-pink-400', label: 'Pink' },
 ];
 
-function layoutNodes(promptIds: string[]): PromptNodeState[] {
+function isRepoIntelPrompt(prompt: AIPrompt): boolean {
+    return prompt.id.startsWith('repo-intel:');
+}
+
+function layoutNodes(promptIds: string[], startIndex = 0, totalCount = promptIds.length + startIndex): PromptNodeState[] {
     if (promptIds.length === 0) return [];
-    const cols = Math.max(1, Math.ceil(Math.sqrt(promptIds.length)));
+    const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, totalCount))));
     return promptIds.map((id, index) => {
-        const col = index % cols;
-        const row = Math.floor(index / cols);
+        const absoluteIndex = startIndex + index;
+        const col = absoluteIndex % cols;
+        const row = Math.floor(absoluteIndex / cols);
         return {
             id,
             x: 40 + col * (NODE_WIDTH + NODE_GAP_X),
@@ -149,12 +154,10 @@ export function PromptGraphModal({
     const [isSaving, setIsSaving] = useState(false);
 
     // Drop zone hover states
-    const [dropZoneHighlight, setDropZoneHighlight] = useState<'pin' | 'trash' | 'edit' | null>(null);
+    const [dropZoneHighlight, setDropZoneHighlight] = useState<'pin' | null>(null);
 
     // Refs for drop zone hit-testing (use actual DOM positions)
     const pinZoneRef = useRef<HTMLDivElement>(null);
-    const trashZoneRef = useRef<HTMLDivElement>(null);
-    const editZoneRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLDivElement>(null);
 
     const promptsById = useMemo(() => {
@@ -193,7 +196,7 @@ export function PromptGraphModal({
         const known = new Set(saved.map((n) => n.id));
         const valid = saved.filter((n) => promptsById.has(n.id));
         const missing = prompts.filter((p) => !known.has(p.id)).map((p) => p.id);
-        const merged = [...valid, ...layoutNodes(missing)];
+        const merged = [...valid, ...layoutNodes(missing, valid.length, prompts.length)];
         setNodes(merged);
         setScale(1);
         setOffset({ x: 0, y: 0 });
@@ -228,15 +231,13 @@ export function PromptGraphModal({
     }, [isOpen]);
 
     // Hit-test against actual DOM rects of drop-zone refs
-    const getDropZone = useCallback((clientX: number, clientY: number): 'pin' | 'trash' | 'edit' | null => {
+    const getDropZone = useCallback((clientX: number, clientY: number): 'pin' | null => {
         const hitTest = (ref: React.RefObject<HTMLDivElement | null>) => {
             if (!ref.current) return false;
             const r = ref.current.getBoundingClientRect();
             return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
         };
         if (hitTest(pinZoneRef)) return 'pin';
-        if (hitTest(trashZoneRef)) return 'trash';
-        if (hitTest(editZoneRef)) return 'edit';
         return null;
     }, []);
 
@@ -337,27 +338,16 @@ export function PromptGraphModal({
         if (draggingNode) {
             const zone = getDropZone(e.clientX, e.clientY);
             const prompt = promptsById.get(draggingNode);
+            const repoIntel = prompt ? isRepoIntelPrompt(prompt) : false;
 
-            if (zone === 'pin' && prompt) {
+            if (zone === 'pin' && prompt && !repoIntel) {
                 await onUpdatePrompt(prompt.id, { pinned: !prompt.pinned });
-            } else if (zone === 'trash' && prompt) {
-                if (prompt.isBuiltIn) {
-                    if (confirm(`Reset "${prompt.name}" to default values?`)) {
-                        await onResetBuiltIn(prompt.id);
-                    }
-                } else {
-                    if (confirm(`Delete prompt "${prompt.name}"?`)) {
-                        await onDeletePrompt(prompt.id);
-                    }
-                }
-            } else if (zone === 'edit' && prompt) {
-                handleEditInFrontpageEditor(prompt);
             }
         }
         setDraggingNode(null);
         setDraggingCanvas(false);
         setDropZoneHighlight(null);
-    }, [draggingNode, getDropZone, promptsById, onUpdatePrompt, onDeletePrompt, onResetBuiltIn]);
+    }, [draggingNode, getDropZone, promptsById, onUpdatePrompt]);
 
     // Send prompt to frontpage editor for editing (shared by drag-to-edit-zone + edit icon click)
     const handleEditInFrontpageEditor = useCallback((prompt: AIPrompt) => {
@@ -473,6 +463,7 @@ export function PromptGraphModal({
             >
                 {/* Prompt node cards */}
                 {renderedNodes.map(({ node, prompt, isPinned, isDragging }) => {
+                    const isRepoIntel = isRepoIntelPrompt(prompt);
                     const isDefault = prompt.id === defaultPromptId;
                     const badge = modelBadge(prompt, selectedModel, selectedImageModel);
                     const zIndex = isDragging ? 90 : isPinned ? 60 : selectedId === node.id ? 50 : 30;
@@ -485,7 +476,10 @@ export function PromptGraphModal({
                             className={clsx(
                                 // Distinct prompt pill background colors (different from project pills)
                                 'prompt-node-pill',
-                                prompt.isBuiltIn
+                                isRepoIntel && 'repo-intel-node',
+                                isRepoIntel
+                                    ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50/80 dark:bg-yellow-950/30'
+                                    : prompt.isBuiltIn
                                     ? 'border-violet-300 dark:border-violet-700 bg-violet-50/60 dark:bg-violet-950/30'
                                     : 'border-teal-300 dark:border-teal-700 bg-teal-50/60 dark:bg-teal-950/30',
                                 selectedId === node.id && 'selected ring-2 ring-indigo-400 dark:ring-indigo-500',
@@ -501,7 +495,9 @@ export function PromptGraphModal({
                                 setSelectedId(node.id);
                                 setContextMenu({ x: e.clientX, y: e.clientY, id: node.id });
                             }}
-                            onDoubleClick={() => onSetDefault(prompt.id)}
+                            onDoubleClick={() => {
+                                if (!isRepoIntel) onSetDefault(prompt.id);
+                            }}
                             onMenuClick={(e) => {
                                 e.stopPropagation();
                                 setContextMenu({ x: e.clientX, y: e.clientY, id: node.id });
@@ -514,7 +510,7 @@ export function PromptGraphModal({
                             }
                             body={
                                 <div className="project-node-meta space-y-1">
-                                    <div>{prompt.isBuiltIn ? 'Built-in' : 'Custom'}</div>
+                                    <div>{isRepoIntel ? 'Repo Intel' : (prompt.isBuiltIn ? 'Built-in' : 'Custom')}</div>
                                     <div>{prompt.isImageMode ? 'Image mode' : 'Text mode'}</div>
                                     <div title={badge} className="truncate">{badge}</div>
                                 </div>
@@ -524,11 +520,11 @@ export function PromptGraphModal({
                                     {isPinned && (
                                         <Pin className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                                     )}
-                                    {isDefault && (
+                                    {isDefault && !isRepoIntel && (
                                         <Star className="w-4 h-4 text-amber-500 fill-current" />
                                     )}
                                     {/* Quick action: trash icon — deletes custom prompts */}
-                                    {!prompt.isBuiltIn && (
+                                    {!prompt.isBuiltIn && !isRepoIntel && (
                                         <button
                                             className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-all"
                                             onClick={(e) => {
@@ -575,7 +571,7 @@ export function PromptGraphModal({
             </GraphCanvas>
 
             {/* Drop zones — fixed position overlays, OUTSIDE the canvas transform */}
-            <div className="absolute right-6 top-28 bottom-6 z-[60] flex flex-col gap-3 pointer-events-none">
+            <div className="absolute right-6 top-28 z-[60] flex flex-col gap-3 pointer-events-none">
                 {/* Pin Zone */}
                 <div
                     ref={pinZoneRef}
@@ -611,43 +607,6 @@ export function PromptGraphModal({
                     )}
                 </div>
 
-                {/* Trash Zone */}
-                <div
-                    ref={trashZoneRef}
-                    className={clsx(
-                        'w-52 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto',
-                        dropZoneHighlight === 'trash'
-                            ? 'border-red-400 bg-red-50/90 dark:bg-red-900/40 scale-105 shadow-lg shadow-red-200/50'
-                            : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
-                    )}
-                >
-                    <div className="flex items-center gap-2 mb-2">
-                        <Trash2 className={clsx("w-4 h-4", dropZoneHighlight === 'trash' ? 'text-red-500' : 'text-gray-400 dark:text-slate-500')} />
-                        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">Delete</span>
-                    </div>
-                    <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
-                        Drag custom prompts here to delete them
-                    </p>
-                </div>
-
-                {/* Edit Zone */}
-                <div
-                    ref={editZoneRef}
-                    className={clsx(
-                        'w-52 rounded-xl border-2 border-dashed p-4 transition-all duration-200 backdrop-blur-sm pointer-events-auto',
-                        dropZoneHighlight === 'edit'
-                            ? 'border-indigo-400 bg-indigo-50/90 dark:bg-indigo-900/40 scale-105 shadow-lg shadow-indigo-200/50'
-                            : 'border-gray-300 dark:border-slate-600 bg-white/70 dark:bg-slate-800/70'
-                    )}
-                >
-                    <div className="flex items-center gap-2 mb-2">
-                        <Edit3 className={clsx("w-4 h-4", dropZoneHighlight === 'edit' ? 'text-indigo-500' : 'text-gray-400 dark:text-slate-500')} />
-                        <span className="text-xs font-semibold text-gray-600 dark:text-slate-300">Edit</span>
-                    </div>
-                    <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
-                        Drag a prompt here to edit it in the main editor
-                    </p>
-                </div>
             </div>
 
             {isCreating && (
@@ -732,6 +691,7 @@ export function PromptGraphModal({
                 (() => {
                     const prompt = promptsById.get(contextMenu.id);
                     if (!prompt) return null;
+                    const repoIntel = isRepoIntelPrompt(prompt);
                     return (
                         <GraphContextMenu
                             x={contextMenu.x}
@@ -739,25 +699,27 @@ export function PromptGraphModal({
                             minWidthClassName="min-w-[170px]"
                             zIndexClassName="z-[120]"
                             items={[
-                                {
-                                    key: 'default',
-                                    label: 'Set Default',
-                                    icon: <Star className="w-3.5 h-3.5" />,
-                                    tone: 'warning',
-                                    onClick: () => {
-                                        onSetDefault(prompt.id);
-                                        setContextMenu(null);
+                                ...(!repoIntel ? [
+                                    {
+                                        key: 'default',
+                                        label: 'Set Default',
+                                        icon: <Star className="w-3.5 h-3.5" />,
+                                        tone: 'warning' as const,
+                                        onClick: () => {
+                                            onSetDefault(prompt.id);
+                                            setContextMenu(null);
+                                        },
                                     },
-                                },
-                                {
-                                    key: 'pin',
-                                    label: prompt.pinned ? 'Unpin from Dropdown' : 'Pin to Dropdown',
-                                    icon: prompt.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />,
-                                    onClick: async () => {
-                                        await handleTogglePin(prompt);
-                                        setContextMenu(null);
+                                    {
+                                        key: 'pin',
+                                        label: prompt.pinned ? 'Unpin from Dropdown' : 'Pin to Dropdown',
+                                        icon: prompt.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />,
+                                        onClick: async () => {
+                                            await handleTogglePin(prompt);
+                                            setContextMenu(null);
+                                        },
                                     },
-                                },
+                                ] : []),
                                 {
                                     key: 'edit',
                                     label: 'Edit in Editor',
@@ -770,7 +732,7 @@ export function PromptGraphModal({
                                 prompt.isBuiltIn
                                     ? {
                                         key: 'reset',
-                                        label: 'Reset',
+                                        label: repoIntel ? 'Reset Repo Intel Prompt' : 'Reset',
                                         icon: <RotateCcw className="w-3.5 h-3.5" />,
                                         onClick: async () => {
                                             await handleReset(prompt);

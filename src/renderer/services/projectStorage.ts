@@ -175,7 +175,13 @@ export async function getProjects(repoPath?: string): Promise<Project[]> {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
                 if (repoPath) {
-                    return parsed.filter((p: Project) => p.repositoryPath === repoPath);
+                    const browserRepo = getBrowserRepository();
+                    return parsed.filter((p: Project) => {
+                        if (p.repositoryPath === repoPath) return true;
+                        // Legacy fallback: if project has no repo path and we're looking at the current browser repo, include it
+                        if (!p.repositoryPath && browserRepo?.path === repoPath) return true;
+                        return false;
+                    });
                 }
                 return parsed;
             }
@@ -222,12 +228,14 @@ export async function createProject(name: string, content: string = '', repoPath
 
     // Browser / Legacy Mode
     const projects = await getProjects();
+    const browserRepo = getBrowserRepository();
     const newProject: Project = {
         id: crypto.randomUUID(),
         name: name.trim() || getFormattedTimestamp(),
         content,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        repositoryPath: repoPath || browserRepo?.path,
     };
 
     const updatedProjects = [...projects, newProject];
