@@ -84,13 +84,12 @@ interface AIContextType {
     cancelAIOperation: () => void;
     handlePolishSelection: (polishMode: PolishMode) => Promise<void>;
     handleSaveAsPrompt: () => void;
-    handleSavePromptSubmit: (prompt: AIPrompt) => Promise<void>;
-    handleRate: (id: string, rating: number, feedback?: string) => Promise<void>;
+    handleSavePromptSubmit: (prompt: Partial<AIPrompt>) => Promise<void>; handleRate: (id: string, rating: number, feedback?: string) => Promise<void>;
 
     // Image Generation
     isGeneratingImage: boolean;
     generatedImage: { data: string; prompt: string } | null;
-    handleImageGeneration: (prompt: string, base64Image?: string) => Promise<void>;
+    handleImageGeneration: (prompt: string, base64Image?: string, skipExtraction?: boolean) => Promise<void>;
     handleImageRegenerate: (additionalInstructions?: string) => Promise<void>;
     handleImageSave: () => Promise<void>;
     clearGeneratedImage: () => void;
@@ -105,6 +104,47 @@ interface AIContextType {
 }
 
 const AIContext = createContext<AIContextType | undefined>(undefined);
+
+// Initialize text model from localStorage or fallback to first model
+const getInitialModel = (): Model => {
+    try {
+        const stored = localStorage.getItem('diff-commit-default-model');
+        if (stored) {
+            const found = MODELS.find(m => m.id === stored);
+            if (found) return found;
+        }
+    } catch (e) {
+        console.warn('Failed to read default model from localStorage:', e);
+    }
+    return MODELS[0];
+};
+
+// Initialize image model from localStorage - only check built-in MODELS
+// (importedModels isn't populated yet during useState initialization)
+const getInitialImageModel = (): Model | null => {
+    try {
+        const stored = localStorage.getItem('diff-commit-default-image-model');
+        if (stored) {
+            // Only check built-in models during initialization
+            const found = MODELS.find(m => m.id === stored);
+            if (found) return found;
+        }
+    } catch (e) {
+        console.warn('Failed to read default image model from localStorage:', e);
+    }
+    return null;
+};
+
+// Initialize prompt from localStorage or fallback to 'grammar'
+const getInitialPromptId = (): string => {
+    try {
+        const stored = localStorage.getItem('diff-commit-default-prompt');
+        if (stored) return stored;
+    } catch (e) {
+        console.warn('Failed to read default prompt from localStorage:', e);
+    }
+    return 'grammar';
+};
 
 export function AIProvider({ children }: { children: ReactNode }) {
     const {
@@ -132,36 +172,6 @@ export function AIProvider({ children }: { children: ReactNode }) {
         return Array.from(byId.values());
     }, [importedModels]);
 
-    // Initialize text model from localStorage or fallback to first model
-    const getInitialModel = (): Model => {
-        try {
-            const stored = localStorage.getItem('diff-commit-default-model');
-            if (stored) {
-                const found = MODELS.find(m => m.id === stored);
-                if (found) return found;
-            }
-        } catch (e) {
-            console.warn('Failed to read default model from localStorage:', e);
-        }
-        return MODELS[0];
-    };
-
-    // Initialize image model from localStorage - only check built-in MODELS
-    // (importedModels isn't populated yet during useState initialization)
-    const getInitialImageModel = (): Model | null => {
-        try {
-            const stored = localStorage.getItem('diff-commit-default-image-model');
-            if (stored) {
-                // Only check built-in models during initialization
-                const found = MODELS.find(m => m.id === stored);
-                if (found) return found;
-            }
-        } catch (e) {
-            console.warn('Failed to read default image model from localStorage:', e);
-        }
-        return null;
-    };
-
     const [selectedModel, setSelectedModel] = useState<Model>(getInitialModel);
     const [selectedImageModel, setSelectedImageModel] = useState<Model | null>(getInitialImageModel);
     const [sessionCost, setSessionCost] = useState(0);
@@ -170,35 +180,34 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const [factCheckProgress, setFactCheckProgress] = useState('');
     const [pendingPromptText, setPendingPromptText] = useState('');
 
-    // Initialize prompt from localStorage or fallback to 'grammar'
-    const getInitialPromptId = (): string => {
-        try {
-            const stored = localStorage.getItem('diff-commit-default-prompt');
-            if (stored) return stored;
-        } catch (e) {
-            console.warn('Failed to read default prompt from localStorage:', e);
-        }
-        return 'grammar';
-    };
-
     const [activePromptId, setActivePromptId] = useState(getInitialPromptId);
+    const restoredDefaultModelRef = useRef(false);
 
     // Restore selectedModel from imported models once they have loaded.
     // Initial state can only resolve built-in MODELS because importedModels
     // are populated asynchronously after the provider mounts.
     React.useEffect(() => {
+        if (restoredDefaultModelRef.current || allAvailableModels.length === 0) return;
+
         try {
             const stored = localStorage.getItem('diff-commit-default-model');
-            if (!stored || stored === selectedModel.id) return;
-
-            const restored = allAvailableModels.find((model) => model.id === stored);
-            if (restored) {
-                setSelectedModel(restored);
+            if (stored) {
+                const restored = allAvailableModels.find((model) => model.id === stored);
+                if (restored) {
+                    setSelectedModel(restored);
+                    restoredDefaultModelRef.current = true;
+                }
+                // If stored exists but not found yet, we don't set the ref to true,
+                // allowing a retry when allAvailableModels updates (e.g. after imported models load).
+            } else {
+                // No stored ID means nothing to restore
+                restoredDefaultModelRef.current = true;
             }
         } catch (e) {
             console.warn('Failed to restore text model from importedModels:', e);
+            restoredDefaultModelRef.current = true;
         }
-    }, [allAvailableModels, selectedModel.id]);
+    }, [allAvailableModels]);
 
     // Restore selectedImageModel from importedModels when they become available
     React.useEffect(() => {
@@ -246,12 +255,54 @@ export function AIProvider({ children }: { children: ReactNode }) {
         isLoading: promptsLoading,
     } = usePrompts();
 
-    const updateCost = useCallback((usage?: { inputTokens: number; outputTokens: number }) => {
+    const updateCost = useCallback((usage?: { inputTokens: number; outputTokens: number }, modelOverride?: Model) => {
         if (!usage) return;
-        const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
-            (usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
+        const targetModel = modelOverride || selectedModel;
+        const cost = (usage.inputTokens / 1_000_000 * targetModel.inputPrice) +
+            (usage.outputTokens / 1_000_000 * targetModel.outputPrice);
         setSessionCost(prev => prev + cost);
+        return cost; // Return the calculated cost for reuse in logging
     }, [selectedModel]);
+
+    const persistLogEntry = useCallback(async (
+        taskType: string,
+        model: Model,
+        usage: { inputTokens: number; outputTokens: number },
+        durationMs: number,
+        sessionId?: string
+    ) => {
+        // Calculate and update session cost via helper
+        const cost = updateCost(usage, model) || 0;
+
+        const logEntry: AILogEntry = {
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            modelId: model.id,
+            modelName: model.name,
+            taskType,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cost,
+            durationMs,
+            sessionId
+        };
+
+        if (window.electron && window.electron.logUsage) {
+            await window.electron.logUsage(logEntry);
+        } else {
+            try {
+                const stored = localStorage.getItem('diff-commit-logs');
+                const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
+                logs.push(logEntry);
+                while (logs.length > 1000) logs.shift();
+                localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
+            } catch (e) {
+                console.warn('Failed to save log to localStorage:', e);
+            }
+        }
+        setActiveLogId(logEntry.id);
+        return logEntry;
+    }, [updateCost, setActiveLogId]);
 
     // Set default text model
     const setDefaultModel = useCallback((model: Model) => {
@@ -358,35 +409,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         getPrompt,
         onCostUpdate: updateCost,
         onLog: (taskName, usage, durationMs) => {
-            const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
-                (usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
-
-            const logEntry: AILogEntry = {
-                id: crypto.randomUUID(),
-                timestamp: Date.now(),
-                modelId: selectedModel.id,
-                modelName: selectedModel.name,
-                taskType: taskName,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                cost,
-                durationMs
-            };
-
-            if (window.electron && window.electron.logUsage) {
-                window.electron.logUsage(logEntry);
-            } else {
-                try {
-                    const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
-                    logs.push(logEntry);
-                    if (logs.length > 1000) logs.shift();
-                    localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
-                } catch (e) {
-                    console.warn('Failed to save log to localStorage:', e);
-                }
-            }
-            setActiveLogId(logEntry.id);
+            persistLogEntry(taskName, selectedModel, usage, durationMs);
         },
         onError: setErrorMessage,
         onDiffUpdate: (original, modified) => {
@@ -502,7 +525,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
         // Check if this is an image generation request
         if (isImageGenerationRequest(promptIdOrInstruction)) {
-            return handleImageGeneration(promptIdOrInstruction);
+            return handleImageGenerationRef.current(promptIdOrInstruction);
         }
 
         // Check for task mismatch: trying to use a text task on an image-only model
@@ -591,7 +614,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
                 console.error('Failed to start custom AI instruction:', e);
             }
         }
-    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt, isImageOnlyModel, selectedModel]);
+    }, [handleLocalSpellCheck, previewTextareaRef, previewTextRef, startOperation, setErrorMessage, builtInPrompts, customPrompts, frozenSelection, setFrozenSelection, createPrompt, isImageOnlyModel, selectedModel, handleImageGenerationRef]);
 
     const handlePromptPanelInstruction = useCallback(async (instruction: string, useAnalysisContext: boolean) => {
         if (!useAnalysisContext || !latestAnalysisArtifact) {
@@ -663,34 +686,7 @@ ${instruction}`;
             }
 
             if (response.usage) {
-                updateCost(response.usage);
-                const cost = (response.usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
-                    (response.usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
-                const logEntry: AILogEntry = {
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    modelId: selectedModel.id,
-                    modelName: selectedModel.name,
-                    taskType: type === 'critical_review' ? 'critical-review' : 'analysis',
-                    inputTokens: response.usage.inputTokens,
-                    outputTokens: response.usage.outputTokens,
-                    cost,
-                    durationMs
-                };
-                try {
-                    if (window.electron && window.electron.logUsage) {
-                        await window.electron.logUsage(logEntry);
-                    } else {
-                        const stored = localStorage.getItem('diff-commit-logs');
-                        const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
-                        logs.push(logEntry);
-                        if (logs.length > 1000) logs.shift();
-                        localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
-                    }
-                    setActiveLogId(logEntry.id);
-                } catch (e) {
-                    console.warn('Failed to persist analysis log:', e);
-                }
+                persistLogEntry(type === 'critical_review' ? 'critical-review' : 'analysis', selectedModel, response.usage, durationMs);
             }
         } catch (error) {
             if (error instanceof DOMException && error.name === 'AbortError') {
@@ -810,52 +806,10 @@ ${instruction}`;
                 const resolvedModels = models || factCheckModels;
                 const extractionTokens = stageUsage?.extraction || { inputTokens: Math.round(usage.inputTokens * 0.2), outputTokens: Math.round(usage.outputTokens * 0.2) };
                 const verificationTokens = stageUsage?.verification || { inputTokens: usage.inputTokens - extractionTokens.inputTokens, outputTokens: usage.outputTokens - extractionTokens.outputTokens };
-                const extractionCost = (extractionTokens.inputTokens / 1_000_000 * resolvedModels.extraction.inputPrice) +
-                    (extractionTokens.outputTokens / 1_000_000 * resolvedModels.extraction.outputPrice);
-                const verificationCost = (verificationTokens.inputTokens / 1_000_000 * resolvedModels.verification.inputPrice) +
-                    (verificationTokens.outputTokens / 1_000_000 * resolvedModels.verification.outputPrice);
-                setSessionCost(prev => prev + extractionCost + verificationCost);
 
                 const sessionId = crypto.randomUUID();
-                const extractionLog: AILogEntry = {
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    modelId: resolvedModels.extraction.id,
-                    modelName: resolvedModels.extraction.name,
-                    taskType: 'fact-check-extraction',
-                    inputTokens: extractionTokens.inputTokens,
-                    outputTokens: extractionTokens.outputTokens,
-                    cost: extractionCost,
-                    sessionId
-                };
-
-                const verificationLog: AILogEntry = {
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    modelId: resolvedModels.verification.id,
-                    modelName: resolvedModels.verification.name,
-                    taskType: 'fact-check-verification',
-                    inputTokens: verificationTokens.inputTokens,
-                    outputTokens: verificationTokens.outputTokens,
-                    cost: verificationCost,
-                    sessionId
-                };
-
-                try {
-                    if (window.electron && window.electron.logUsage) {
-                        await window.electron.logUsage(extractionLog);
-                        await window.electron.logUsage(verificationLog);
-                    } else {
-                        const stored = localStorage.getItem('diff-commit-logs');
-                        const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
-                        logs.push(extractionLog, verificationLog);
-                        while (logs.length > 1000) logs.shift();
-                        localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
-                    }
-                    setActiveLogId(verificationLog.id);
-                } catch (e) {
-                    console.warn('Failed to persist fact-check logs:', e);
-                }
+                await persistLogEntry('fact-check-extraction', resolvedModels.extraction, extractionTokens, 0, sessionId);
+                await persistLogEntry('fact-check-verification', resolvedModels.verification, verificationTokens, 0, sessionId);
             }
 
             const artifact = addAnalysisArtifact({
@@ -939,76 +893,50 @@ ${instruction}`;
         setErrorMessage(null);
 
         const startTime = Date.now();
-        const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRanges(
-            [{ id: 'selection', text: selectedText }],
-            polishMode,
-            selectedModel,
-            abortControllerRef.current.signal
-        );
-        const durationMs = Date.now() - startTime;
+        try {
+            const { results, usage, isError, isCancelled, errorMessage: aiError } = await polishMultipleRanges(
+                [{ id: 'selection', text: selectedText }],
+                polishMode,
+                selectedModel,
+                abortControllerRef.current.signal
+            );
+            const durationMs = Date.now() - startTime;
 
-        if (isCancelled) {
+            if (isCancelled) {
+                return;
+            }
+
+            if (isError) {
+                setErrorMessage(aiError || 'AI polish failed.');
+                return;
+            }
+            updateCost(usage);
+            const taskName = polishMode === 'spelling' ? 'Spelling (Selection)'
+                : polishMode === 'grammar' ? 'Grammar (Selection)'
+                    : polishMode === 'prompt' ? 'Prompt Expansion (Selection)'
+                        : 'Full Polish (Selection)';
+
+            if (usage) {
+                persistLogEntry(taskName, selectedModel, usage, durationMs);
+            }
+
+            if (results.length > 0) {
+                const result = results[0].result;
+                // Use originalTextAtStart snapshot to ensure indices match the text structure
+                const newText = originalTextAtStart.slice(0, start) + result + originalTextAtStart.slice(end);
+
+                setOriginalText(originalTextAtStart);
+                setModifiedText(newText);
+                performDiff(originalTextAtStart, newText);
+                setMode(ViewMode.DIFF);
+            }
+        } catch (e) {
+            console.error('Failed to run AI polish:', e);
+            setErrorMessage(e instanceof Error ? e.message : 'An unexpected error occurred during AI polish.');
+        } finally {
             setIsPolishing(false);
             abortControllerRef.current = null;
-            return;
         }
-
-        if (isError) {
-            setErrorMessage(aiError || 'AI polish failed.');
-            setIsPolishing(false);
-            return;
-        }
-        updateCost(usage);
-        const taskName = polishMode === 'spelling' ? 'Spelling (Selection)'
-            : polishMode === 'grammar' ? 'Grammar (Selection)'
-                : polishMode === 'prompt' ? 'Prompt Expansion (Selection)'
-                    : 'Full Polish (Selection)';
-
-        if (usage) {
-            const cost = (usage.inputTokens / 1_000_000 * selectedModel.inputPrice) +
-                (usage.outputTokens / 1_000_000 * selectedModel.outputPrice);
-
-            const logEntry: AILogEntry = {
-                id: crypto.randomUUID(),
-                timestamp: Date.now(),
-                modelId: selectedModel.id,
-                modelName: selectedModel.name,
-                taskType: taskName,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                cost,
-                durationMs
-            };
-
-            if (window.electron && window.electron.logUsage) {
-                await window.electron.logUsage(logEntry);
-            } else {
-                try {
-                    const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
-                    logs.push(logEntry);
-                    if (logs.length > 1000) logs.shift();
-                    localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
-                } catch (e) {
-                    console.warn('Failed to save log to localStorage:', e);
-                }
-            }
-            setActiveLogId(logEntry.id);
-        }
-
-        if (results.length > 0) {
-            const result = results[0].result;
-            // Use originalTextAtStart snapshot to ensure indices match the text structure
-            const newText = originalTextAtStart.slice(0, start) + result + originalTextAtStart.slice(end);
-
-            setOriginalText(originalTextAtStart);
-            setModifiedText(newText);
-            performDiff(originalTextAtStart, newText);
-            setMode(ViewMode.DIFF);
-        }
-
-        setIsPolishing(false);
-        abortControllerRef.current = null;
     }, [previewTextareaRef, previewTextRef, cancelAIOperation, selectedModel, updateCost, setActiveLogId, setOriginalText, setModifiedText, performDiff, setMode, setErrorMessage, isImageOnlyModel]);
 
     const handleSaveAsPrompt = useCallback(() => {
@@ -1083,7 +1011,7 @@ ${instruction}`;
     /**
      * Handle image generation request
      */
-    const handleImageGeneration = useCallback(async (prompt: string, base64Image?: string) => {
+    const handleImageGeneration = useCallback(async (prompt: string, base64Image?: string, skipExtraction = false) => {
         const imageModel = findImageCapableModel();
 
         if (!imageModel) {
@@ -1093,8 +1021,8 @@ ${instruction}`;
             return;
         }
 
-        // Extract the actual image prompt
-        const imagePrompt = extractImagePrompt(prompt);
+        // Extract the actual image prompt or use as-is
+        const imagePrompt = skipExtraction ? prompt : extractImagePrompt(prompt);
         if (!imagePrompt.trim()) {
             setErrorMessage('Please provide a description for the image.');
             return;
@@ -1142,37 +1070,7 @@ ${instruction}`;
 
         // Log usage and cost
         if (response.usage) {
-            updateCost(response.usage);
-
-            const cost = (response.usage.inputTokens / 1_000_000 * imageModel.inputPrice) +
-                (response.usage.outputTokens / 1_000_000 * imageModel.outputPrice);
-
-            const logEntry: AILogEntry = {
-                id: crypto.randomUUID(),
-                timestamp: Date.now(),
-                modelId: imageModel.id,
-                modelName: imageModel.name,
-                taskType: 'image-generation',
-                inputTokens: response.usage.inputTokens,
-                outputTokens: response.usage.outputTokens,
-                cost,
-                durationMs
-            };
-
-            if (window.electron && window.electron.logUsage) {
-                await window.electron.logUsage(logEntry);
-            } else {
-                try {
-                    const stored = localStorage.getItem('diff-commit-logs');
-                    const logs: AILogEntry[] = stored ? JSON.parse(stored) : [];
-                    logs.push(logEntry);
-                    if (logs.length > 1000) logs.shift();
-                    localStorage.setItem('diff-commit-logs', JSON.stringify(logs));
-                } catch (e) {
-                    console.warn('Failed to save log to localStorage:', e);
-                }
-            }
-            setActiveLogId(logEntry.id);
+            persistLogEntry('image-generation', imageModel, response.usage, durationMs);
         }
     }, [findImageCapableModel, previewTextRef, setErrorMessage, setShowImageViewer, updateCost, setActiveLogId]);
 
@@ -1198,7 +1096,7 @@ ${instruction}`;
             baseImage = generatedImage?.data || undefined;
         }
 
-        await handleImageGeneration(`image: ${finalPrompt}`, baseImage);
+        await handleImageGeneration(finalPrompt, baseImage, true);
     }, [handleImageGeneration, generatedImage]);
 
     /**

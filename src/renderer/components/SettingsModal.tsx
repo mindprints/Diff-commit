@@ -125,8 +125,8 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
             setFactCheckVerificationModelIdState(getFactCheckVerificationModelId());
             try {
                 setAutoModelPingAuditEnabled(localStorage.getItem(AUTO_MODEL_PING_AUDIT_KEY) !== 'false');
-            } catch (error) {
-                console.warn('Failed to read auto model ping audit preference:', error);
+            } catch (err) {
+                console.warn('Failed to read auto model ping audit preference:', err);
                 setAutoModelPingAuditEnabled(true);
             }
             setActiveSection('api');
@@ -402,8 +402,8 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         setAutoModelPingAuditEnabled(enabled);
         try {
             localStorage.setItem(AUTO_MODEL_PING_AUDIT_KEY, enabled ? 'true' : 'false');
-        } catch (error) {
-            console.warn('Failed to save auto model ping audit preference:', error);
+        } catch (err) {
+            console.warn('Failed to save auto model ping audit preference:', err);
         }
     };
 

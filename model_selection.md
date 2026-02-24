@@ -65,7 +65,7 @@ $1/M input tokens $5/M output tokens
 
 Created Dec 2, 2025 1,000,000 context
 
-$0.30/M input tokens$2.50/M output tokens
+$0.30/M input tokens $2.50/M output tokens
 
 ---
 

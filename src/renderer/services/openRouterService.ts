@@ -15,6 +15,7 @@ import {
     type OpenRouterModel,
     type ParsedModel,
 } from '../../shared/openRouterModels';
+import { ChatCompletionPayload } from '../electron';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
@@ -125,7 +126,7 @@ export async function pingModel(modelId: string): Promise<{ ok: boolean; latency
         throw new Error('Model ID is required');
     }
 
-    const payload = {
+    const payload: ChatCompletionPayload = {
         model: modelId,
         messages: [{ role: 'user', content: 'Reply with only: PONG' }],
         temperature: 0,

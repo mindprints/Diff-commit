@@ -1,12 +1,6 @@
-type ChatPayload = {
-    model: string;
-    messages: Array<{ role: string; content: unknown }>;
-    modalities?: string[];
-    temperature?: number;
-    response_format?: unknown;
-    generation_config?: unknown;
-    plugins?: Array<{ id: string; [key: string]: unknown }>;
-};
+import { ChatCompletionPayload } from '../electron';
+
+export type ChatPayload = ChatCompletionPayload;
 
 function createRequestId(): string {
     return `or_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;

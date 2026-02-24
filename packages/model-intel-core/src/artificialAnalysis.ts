@@ -136,8 +136,8 @@ function extractModelTokens(name: string): string[] {
 
 function providerAliases(provider: string): string[] {
     const p = normalizeProviderForMatch(provider);
-    const aliases = new Set<string>([p]);
     if (!p) return [];
+    const aliases = new Set<string>([p]);
 
     const map: Record<string, string[]> = {
         'x ai': ['xai'],
@@ -197,9 +197,12 @@ export function matchBenchmark(
 
     for (const benchmark of benchmarks) {
         const creatorNorm = normalizeProviderForMatch(benchmark.creator);
-        const creatorMatch = providerCandidates.length > 0 && providerCandidates.some((candidate) =>
-            candidate && (creatorNorm.includes(candidate) || candidate.includes(creatorNorm))
-        );
+        const creatorMatch = providerCandidates.length > 0 && providerCandidates.some((candidate) => (
+            candidate && (
+                (candidate.length >= 3 && creatorNorm.includes(candidate)) ||
+                (creatorNorm.length >= 3 && candidate.includes(creatorNorm))
+            )
+        ));
         const nameSimilarity = calculateSimilarity(modelName, benchmark.modelName);
         const idSimilarity = calculateSimilarity(modelId.split('/')[1] || modelName, benchmark.modelName);
         const baseSimilarity = Math.max(nameSimilarity, idSimilarity);

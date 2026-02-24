@@ -23,6 +23,18 @@ interface HierarchyAPI {
     } | null>;
 }
 
+type Modality = 'text' | 'audio' | 'image' | (string & NonNullable<unknown>);
+
+type ChatCompletionPayload = {
+    model: string;
+    messages: Array<{ role: string; content: unknown }>;
+    modalities?: Modality[];
+    temperature?: number;
+    response_format?: unknown;
+    generation_config?: unknown;
+    plugins?: Array<{ id: string;[key: string]: unknown }>;
+};
+
 // Type definitions for the OpenRouter sub-API
 interface OpenRouterAPI {
     fetchModels: () => Promise<Array<{
@@ -38,24 +50,8 @@ interface OpenRouterAPI {
         capabilities?: string[];
     }>>;
     fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
-    chatCompletions: (payload: {
-        model: string;
-        messages: Array<{ role: string; content: unknown }>;
-        modalities?: string[];
-        temperature?: number;
-        response_format?: unknown;
-        generation_config?: unknown;
-        plugins?: Array<{ id: string;[key: string]: unknown }>;
-    }) => Promise<unknown>;
-    chatCompletionsStart: (requestId: string, payload: {
-        model: string;
-        messages: Array<{ role: string; content: unknown }>;
-        modalities?: string[];
-        temperature?: number;
-        response_format?: unknown;
-        generation_config?: unknown;
-        plugins?: Array<{ id: string;[key: string]: unknown }>;
-    }) => Promise<unknown>;
+    chatCompletions: (payload: ChatCompletionPayload) => Promise<unknown>;
+    chatCompletionsStart: (requestId: string, payload: ChatCompletionPayload) => Promise<unknown>;
     chatCompletionsCancel: (requestId: string) => Promise<boolean>;
 }
 

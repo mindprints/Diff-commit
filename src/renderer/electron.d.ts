@@ -8,6 +8,16 @@ import type {
     RepoRedundancyReport,
 } from '../shared/repoIntelTypes';
 
+export type ChatCompletionPayload = {
+    model: string;
+    messages: Array<{ role: string; content: unknown }>;
+    modalities?: Array<'text' | 'audio' | 'image' | (string & NonNullable<unknown>)>;
+    temperature?: number;
+    response_format?: unknown;
+    generation_config?: unknown;
+    plugins?: Array<{ id: string;[key: string]: unknown }>;
+};
+
 export interface IElectronAPI {
     platform: string;
     resourcesPath: string;
@@ -87,24 +97,8 @@ export interface IElectronAPI {
             description?: string;
         }>>;
         fetchPricing: (modelId: string) => Promise<{ inputPrice: number; outputPrice: number }>;
-        chatCompletions: (payload: {
-            model: string;
-            messages: Array<{ role: string; content: unknown }>;
-            modalities?: string[];
-            temperature?: number;
-            response_format?: unknown;
-            generation_config?: unknown;
-            plugins?: Array<{ id: string;[key: string]: unknown }>;
-        }) => Promise<unknown>;
-        chatCompletionsStart?: (requestId: string, payload: {
-            model: string;
-            messages: Array<{ role: string; content: unknown }>;
-            modalities?: string[];
-            temperature?: number;
-            response_format?: unknown;
-            generation_config?: unknown;
-            plugins?: Array<{ id: string;[key: string]: unknown }>;
-        }) => Promise<unknown>;
+        chatCompletions: (payload: ChatCompletionPayload) => Promise<unknown>;
+        chatCompletionsStart?: (requestId: string, payload: ChatCompletionPayload) => Promise<unknown>;
         chatCompletionsCancel?: (requestId: string) => Promise<boolean>;
     };
 

@@ -31,7 +31,8 @@ export default function App() {
 
   useEffect(() => {
     if (!window.electron?.setWindowDirtyState) return;
-    void window.electron.setWindowDirtyState(hasUnpersistedChanges || hasStagedPromptChanges);
+    window.electron.setWindowDirtyState(hasUnpersistedChanges || hasStagedPromptChanges)
+      .catch(err => console.error('setWindowDirtyState failed:', err));
   }, [hasUnpersistedChanges, hasStagedPromptChanges]);
 
   // --- Keyboard Shortcuts ---

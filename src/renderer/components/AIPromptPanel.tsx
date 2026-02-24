@@ -5,11 +5,11 @@ import { useAI } from '../contexts';
 const UNKNOWN_COMMAND_MESSAGE = 'Unknown slash command. Use /review, /critique, /analyze, /factcheck, /rewrite, /compress, /expand, or /edit.';
 const PROMPT_STARTER_PILLS: Array<{ label: string; value: string }> = [
     { label: 'Review', value: '/review Focus on clarity, structure, and argument strength. Concentrate on use of metaphors.' },
-    { label: 'Analyze', value: '/analyze Analyze the text for themes, assumptions, and rhetorical strategies. Focus on...' },
+    { label: 'Analyze', value: '/analyze Analyze the text for themes, assumptions, and rhetorical strategies. Identify core patterns and evaluate overall coherence.' },
     { label: 'Fact-check', value: '/factcheck' },
     { label: 'Rewrite', value: '/rewrite Rewrite this text in a clearer, more concise style while preserving meaning.' },
-    { label: 'Compress', value: '/compress Preserve key meaning and tone. Make it more compact.' },
-    { label: 'Expand', value: '/expand Add helpful detail, examples, and transitions while preserving intent.' },
+    { label: 'Compress', value: '/compress Make it more compact.' },
+    { label: 'Expand', value: '/expand Add transitions and examples.' },
     { label: 'Compose', value: 'Compose a five-stanza poem about chipmunks with vivid imagery and a playful tone.' },
     { label: 'Edit', value: "/edit Improve flow, rhythm, and readability. Keep the author's voice." },
 ];

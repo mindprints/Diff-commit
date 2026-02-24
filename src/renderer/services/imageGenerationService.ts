@@ -4,7 +4,7 @@
  */
 
 import { Model } from '../constants/models';
-import { requestOpenRouterChatCompletions } from './openRouterBridge';
+import { requestOpenRouterChatCompletions, ChatPayload } from './openRouterBridge';
 import { supportsImageGeneration } from './openRouterService';
 
 /**
@@ -42,10 +42,7 @@ export function isImageCapableModel(modelId: string): boolean {
     }
 
     // Check against known image models list
-    return KNOWN_IMAGE_MODELS.some(id =>
-        lowerId.includes(id.toLowerCase()) ||
-        id.toLowerCase().includes(lowerId)
-    );
+    return KNOWN_IMAGE_MODELS.some(id => lowerId === id.toLowerCase() || lowerId.includes(id.toLowerCase()));
 }
 
 /**
@@ -146,9 +143,7 @@ interface OpenRouterImageResponse {
 /**
  * Generate an image using OpenRouter's image generation API
  * 
- * @param editorContent - Optional content from the editor to include in context
- * @param base64Image - Optional original image data for modification (base64 data URL)
- * @param signal - Optional AbortSignal for cancellation * @param prompt - The image generation prompt
+ * @param prompt - The image generation prompt
  * @param model - The model to use (must be image-capable)
  * @param editorContent - Optional content from the editor to include in context
  * @param base64Image - Optional original image data for modification (base64 data URL)
@@ -201,7 +196,6 @@ export async function generateImage(
         // OpenRouter uses chat/completions for all models including image generation
         const requestBody: Record<string, unknown> = {
             model: model.id,
-            modalities: ['image'],
             messages: [
                 {
                     role: 'user',
@@ -210,22 +204,21 @@ export async function generateImage(
             ],
         };
 
-        // For Gemini image models, we need to set response modalities
-        // OpenRouter should pass these through to Google
-        if (model.id.toLowerCase().includes('gemini') && model.id.toLowerCase().includes('image')) {
-            // Request image generation explicitly
+        const lowerId = model.id.toLowerCase();
+
+        // For Gemini image models, we need to set response modalities in generation_config
+        // OpenRouter passes these through to Google's specialized API format
+        if (lowerId.includes('gemini') && isImageCapable(model)) {
             requestBody['generation_config'] = {
                 response_modalities: ['image', 'text'],
             };
         }
+        // For pure image models (FLUX, DALL-E, etc.), we omit the top-level modalities
+        // and allow OpenRouter's model-specific routing to handle it correctly.
 
         let data: OpenRouterImageResponse;
         if (hasElectronProxy && window.electron?.openRouter?.chatCompletions) {
-            data = await requestOpenRouterChatCompletions(requestBody as {
-                model: string;
-                messages: Array<{ role: string; content: unknown }>;
-                generation_config?: unknown;
-            }, signal);
+            data = await requestOpenRouterChatCompletions(requestBody as ChatPayload, signal);
         } else {
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -238,9 +231,6 @@ export async function generateImage(
                 body: JSON.stringify(requestBody),
                 signal,
             });
-            if (signal?.aborted) {
-                return { imageData: null, isCancelled: true };
-            }
 
             if (!response.ok) {
                 const contentType = response.headers.get('content-type') || '';
@@ -278,7 +268,8 @@ export async function generateImage(
                     imageData = message.content;
                 }
                 // Check if it's a raw base64 string (no data: prefix)
-                else if (/^[A-Za-z0-9+/]+=*$/.test(message.content.substring(0, 100))) {
+                // Strict check: must be long enough (>512 chars) and match base64 format exactly (no whitespace)
+                else if (message.content.length > 512 && /^[A-Za-z0-9+/]+={0,2}$/.test(message.content)) {
                     imageData = `data:image/png;base64,${message.content}`;
                 }
             } else if (Array.isArray(message.content)) {
@@ -358,11 +349,11 @@ export async function generateImage(
         }
 
         if (!imageData) {
-            console.error('[ImageGen] No image found in response.');
+            console.error('[ImageGen] No image found in response. Full response:', data);
             return {
                 imageData: null,
                 isError: true,
-                errorMessage: 'No image was generated. Check the console for the response structure.',
+                errorMessage: 'No image was generated. The raw API response has been logged to the console for debugging.',
             };
         }
 

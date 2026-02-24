@@ -80,7 +80,7 @@
 
 ## Validation run
 - `npx tsc --noEmit` ✅
-- `npx vitest run src/shared/openRouterModels.test.ts` could not run in sandbox (`spawn EPERM`) despite test patch landing.
+- `npx vitest run src/shared/openRouterModels.test.ts` ⚠️ **UNVERIFIED** (FAILED with `spawn EPERM` in sandbox environment; see blockers below).
 
 ## Known caveats / follow-up
 - Prompt soft staging means prompt edits are not persisted until save/close. Crash/force-close can lose staged prompt changes.
@@ -88,11 +88,14 @@
 - Some image-capable models may still have no Artificial Analysis scores if AA does not provide matching benchmark entries or uses image-specific metrics we do not yet parse/render.
 
 ## Suggested first checks tomorrow
-1. Manually test Flux/OpenRouter image generation after `modalities: ["image"]` patch.
+1. **BLOCKER: Fix and verify test execution.** The command `npx vitest run src/shared/openRouterModels.test.ts` failed with `spawn EPERM`. This must be resolved (check permissions/environment) and the test must pass before relying on the `openRouterModels.ts` changes.
+2. Manually test Flux/OpenRouter image generation after `modalities: ["image"]` patch.
 2. Confirm close-save dialog behavior for prompt-only edits:
    - create/edit prompts
    - close app
    - verify Save / Don't Save / Cancel semantics
 3. Verify Prompt Graph sort actions + left-side pin dropzone on small and large windows.
-4. Optional: add explicit UI indicator for staged prompt changes (e.g. `Staged prompts` badge / `Save prompts now` action).
+4. **Tracked: Staged prompt crash-loss mitigation.** Current soft staging can lose edits on crash/force-quit. Implement an autosave-to-temp/draft store (e.g., `localStorage` or a draft file) with periodic background saves. 
+    - Implementation: Check for persisted draft key on launch and show recovery prompt.
+    - UI Support: Implement the `Staged prompts` badge/indicator and add a manual `Save prompts now` fallback action in the header/graph.
 
