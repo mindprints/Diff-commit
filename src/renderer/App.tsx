@@ -19,15 +19,20 @@ export default function App() {
   } = useUI();
 
   const {
-    handleCommitClick, handleAccept
+    handleCommitClick, handleAccept, hasUnpersistedChanges
   } = useProject();
 
   const {
-    handleQuickSend
+    handleQuickSend, hasStagedPromptChanges
   } = useAI();
 
   // --- Hooks ---
   useElectronMenu();
+
+  useEffect(() => {
+    if (!window.electron?.setWindowDirtyState) return;
+    void window.electron.setWindowDirtyState(hasUnpersistedChanges || hasStagedPromptChanges);
+  }, [hasUnpersistedChanges, hasStagedPromptChanges]);
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {

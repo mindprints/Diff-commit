@@ -16,7 +16,8 @@ export function useElectronMenu() {
     } = useProject();
 
     const {
-        handleAIEdit, handleFactCheck
+        handleAIEdit, handleFactCheck,
+        hasStagedPromptChanges, saveStagedPrompts, discardStagedPrompts
     } = useAI();
 
     const {
@@ -94,6 +95,9 @@ export function useElectronMenu() {
                 if (currentProject) {
                     await saveCurrentProject(previewText);
                 }
+                if (hasStagedPromptChanges) {
+                    await saveStagedPrompts();
+                }
                 success = true;
             } catch (error) {
                 console.error('Failed to save before close:', error);
@@ -102,6 +106,9 @@ export function useElectronMenu() {
                     await window.electron.respondSaveBeforeClose(requestId, success);
                 }
             }
+        }) || (() => { }));
+        unsubscribers.push(window.electron.onDiscardPromptsBeforeClose?.(() => {
+            discardStagedPrompts();
         }) || (() => { }));
 
         // Edit menu handlers
@@ -138,5 +145,5 @@ export function useElectronMenu() {
 
         // Cleanup listeners on unmount
         return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject, saveCurrentProject, setErrorMessage]);
+    }, [mode, previewText, originalText, commits, isDarkMode, setIsDarkMode, setShowHelp, setShowLogs, setShowCommitHistory, handleAIEdit, handleFactCheck, hasStagedPromptChanges, saveStagedPrompts, discardStagedPrompts, setShowPromptsModal, setShowProjectsPanel, setShowModelsModal, setShowSettingsModal, setShowRepoPicker, handleFileOpen, handleClearAll, createRepository, handleNewProject, setCommits, setFontSize, setFontFamily, currentProject, saveCurrentProject, setErrorMessage]);
 }

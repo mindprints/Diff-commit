@@ -235,9 +235,9 @@ function createWindow() {
             buttons: ['Save', "Don't Save", 'Cancel'],
             defaultId: 0,
             cancelId: 2,
-            title: 'Unsaved Project Changes',
-            message: 'You have unsaved project changes.',
-            detail: 'Choose Save to persist the current draft before closing.',
+            title: 'Unsaved Changes',
+            message: 'You have unsaved changes.',
+            detail: 'Choose Save to persist current project changes and staged prompt changes before closing.',
             noLink: true,
         });
 
@@ -249,6 +249,7 @@ function createWindow() {
             lifecycle.bypassCloseGuard = true;
             lifecycle.hasUnsavedChanges = false;
             createdWindow.webContents.send('discard-draft-before-close');
+            createdWindow.webContents.send('discard-prompts-before-close');
             createdWindow.close();
             return;
         }
@@ -1776,6 +1777,7 @@ ${body}
         payload: {
             model: string;
             messages: Array<{ role: string; content: unknown }>;
+            modalities?: string[];
             temperature?: number;
             response_format?: unknown;
             generation_config?: unknown;
@@ -1937,6 +1939,7 @@ ${body}
     ipcMain.handle('openrouter:chat-completions', async (_event, payload: {
         model: string;
         messages: Array<{ role: string; content: unknown }>;
+        modalities?: string[];
         temperature?: number;
         response_format?: unknown;
         generation_config?: unknown;
@@ -1946,6 +1949,7 @@ ${body}
     ipcMain.handle('openrouter:chat-completions-start', async (_event, requestId: string, payload: {
         model: string;
         messages: Array<{ role: string; content: unknown }>;
+        modalities?: string[];
         temperature?: number;
         response_format?: unknown;
         generation_config?: unknown;

@@ -52,7 +52,7 @@ export function RepoIntelPanel({ isOpen, onClose, onOpenProject }: RepoIntelPane
             name: template.name,
             systemInstruction: template.systemInstruction,
             promptTask: template.promptTask,
-            isBuiltIn: true,
+            isBuiltIn: false,
             order: 0,
             color: 'bg-yellow-400',
             isImageMode: false,

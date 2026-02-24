@@ -159,11 +159,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }, [currentProject, currentDraftSnapshotKey]);
 
     useEffect(() => {
-        if (!window.electron?.setWindowDirtyState) return;
-        void window.electron.setWindowDirtyState(hasUnpersistedChanges);
-    }, [hasUnpersistedChanges]);
-
-    useEffect(() => {
         if (!currentProject || !currentDraftSnapshotKey) return;
         if (!hasUnpersistedChanges) {
             removeDraftSnapshot(currentDraftSnapshotKey);

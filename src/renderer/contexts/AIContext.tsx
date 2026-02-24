@@ -41,6 +41,10 @@ interface AIContextType {
     deletePrompt: (id: string) => Promise<void>;
     resetBuiltIn: (id: string) => Promise<void>;
     promptsLoading: boolean;
+    hasStagedPromptChanges: boolean;
+    sessionCreatedPromptCount: number;
+    saveStagedPrompts: () => Promise<void>;
+    discardStagedPrompts: () => void;
 
     // useAsyncAI
     pendingOperations: PendingOperation[];
@@ -179,6 +183,23 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
     const [activePromptId, setActivePromptId] = useState(getInitialPromptId);
 
+    // Restore selectedModel from imported models once they have loaded.
+    // Initial state can only resolve built-in MODELS because importedModels
+    // are populated asynchronously after the provider mounts.
+    React.useEffect(() => {
+        try {
+            const stored = localStorage.getItem('diff-commit-default-model');
+            if (!stored || stored === selectedModel.id) return;
+
+            const restored = allAvailableModels.find((model) => model.id === stored);
+            if (restored) {
+                setSelectedModel(restored);
+            }
+        } catch (e) {
+            console.warn('Failed to restore text model from importedModels:', e);
+        }
+    }, [allAvailableModels, selectedModel.id]);
+
     // Restore selectedImageModel from importedModels when they become available
     React.useEffect(() => {
         // Skip if we already have a selectedImageModel set
@@ -218,6 +239,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
         updatePrompt,
         deletePrompt,
         resetBuiltIn,
+        saveStagedChanges: saveStagedPrompts,
+        discardStagedChanges: discardStagedPrompts,
+        hasStagedChanges: hasStagedPromptChanges,
+        sessionCreatedPromptCount,
         isLoading: promptsLoading,
     } = usePrompts();
 
@@ -1221,6 +1246,7 @@ ${instruction}`;
     return (
         <AIContext.Provider value={{
             aiPrompts, builtInPrompts, customPrompts, getPrompt, createPrompt, updatePrompt, deletePrompt, resetBuiltIn, promptsLoading,
+            hasStagedPromptChanges, sessionCreatedPromptCount, saveStagedPrompts, discardStagedPrompts,
             pendingOperations, startOperation, cancelAsyncOperations,
             isPolishing, isFactChecking, factCheckProgress, setFactCheckProgress,
             pendingPromptText, setPendingPromptText,

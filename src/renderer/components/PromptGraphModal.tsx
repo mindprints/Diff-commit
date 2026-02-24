@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AIPrompt } from '../types';
 import { Model } from '../constants/models';
-import { ArrowLeft, Check, Edit3, Pin, PinOff, RotateCcw, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Edit3, Pin, PinOff, RotateCcw, Star, Trash2 } from 'lucide-react';
 import { Button } from './Button';
 import clsx from 'clsx';
 import { GraphModalShell } from './graph/GraphModalShell';
@@ -49,7 +49,7 @@ interface PromptFormState {
 }
 
 const LAYOUT_KEY = 'diff-commit-prompt-graph-layout-v1';
-const NODE_WIDTH = 260;
+const NODE_WIDTH = 320;
 const NODE_HEIGHT = 130;
 const NODE_GAP_X = 36;
 const NODE_GAP_Y = 30;
@@ -152,6 +152,7 @@ export function PromptGraphModal({
     const [isCreating, setIsCreating] = useState(false);
     const [formState, setFormState] = useState<PromptFormState>(EMPTY_FORM);
     const [isSaving, setIsSaving] = useState(false);
+    const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
     // Drop zone hover states
     const [dropZoneHighlight, setDropZoneHighlight] = useState<'pin' | null>(null);
@@ -159,6 +160,7 @@ export function PromptGraphModal({
     // Refs for drop zone hit-testing (use actual DOM positions)
     const pinZoneRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLDivElement>(null);
+    const sortMenuRef = useRef<HTMLDivElement>(null);
 
     const promptsById = useMemo(() => {
         const map = new Map<string, AIPrompt>();
@@ -229,6 +231,17 @@ export function PromptGraphModal({
         canvas.addEventListener('wheel', handleWheel, { passive: false });
         return () => canvas.removeEventListener('wheel', handleWheel);
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!sortMenuOpen) return;
+        const handlePointerDown = (event: MouseEvent) => {
+            if (!sortMenuRef.current?.contains(event.target as Node)) {
+                setSortMenuOpen(false);
+            }
+        };
+        window.addEventListener('mousedown', handlePointerDown);
+        return () => window.removeEventListener('mousedown', handlePointerDown);
+    }, [sortMenuOpen]);
 
     // Hit-test against actual DOM rects of drop-zone refs
     const getDropZone = useCallback((clientX: number, clientY: number): 'pin' | null => {
@@ -419,6 +432,34 @@ export function PromptGraphModal({
         await onUpdatePrompt(prompt.id, { pinned: !prompt.pinned });
     }, [onUpdatePrompt]);
 
+    const relayoutNodes = useCallback((sortBy: 'name' | 'type' | 'pinned' | 'order') => {
+        const sortedPrompts = [...prompts].sort((a, b) => {
+            if (sortBy === 'name') {
+                return a.name.localeCompare(b.name);
+            }
+            if (sortBy === 'order') {
+                return (a.order || 0) - (b.order || 0);
+            }
+            if (sortBy === 'pinned') {
+                const aPinned = a.pinned ? 1 : 0;
+                const bPinned = b.pinned ? 1 : 0;
+                if (aPinned !== bPinned) return bPinned - aPinned;
+                return a.name.localeCompare(b.name);
+            }
+
+            const typeRank = (p: AIPrompt) => isRepoIntelPrompt(p) ? 0 : p.isBuiltIn ? 1 : 2;
+            const rankDelta = typeRank(a) - typeRank(b);
+            if (rankDelta !== 0) return rankDelta;
+            return a.name.localeCompare(b.name);
+        });
+
+        const laidOut = layoutNodes(sortedPrompts.map((p) => p.id), 0, sortedPrompts.length);
+        setNodes(laidOut);
+        setOffset({ x: 0, y: 0 });
+        setScale(1);
+        setSortMenuOpen(false);
+    }, [prompts]);
+
     if (!isOpen) return null;
 
     return (
@@ -439,17 +480,56 @@ export function PromptGraphModal({
                         placeholder="Search prompts..."
                         inputClassName="text-gray-800 dark:text-slate-100"
                     />
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            setScale(1);
-                            setOffset({ x: 0, y: 0 });
-                        }}
-                        icon={<RotateCcw className="w-3.5 h-3.5" />}
-                    >
-                        Reset View
-                    </Button>
+                    <div className="relative" ref={sortMenuRef}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSortMenuOpen((prev) => !prev)}
+                            icon={<ChevronDown className={clsx('w-3.5 h-3.5 transition-transform', sortMenuOpen && 'rotate-180')} />}
+                        >
+                            Sort
+                        </Button>
+                        {sortMenuOpen && (
+                            <div className="absolute right-0 top-10 z-[120] w-44 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg p-1">
+                                <button
+                                    className="w-full text-left px-3 py-2 text-sm rounded-md text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
+                                    onClick={() => relayoutNodes('name')}
+                                >
+                                    Sort by Name
+                                </button>
+                                <button
+                                    className="w-full text-left px-3 py-2 text-sm rounded-md text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
+                                    onClick={() => relayoutNodes('type')}
+                                >
+                                    Sort by Type
+                                </button>
+                                <button
+                                    className="w-full text-left px-3 py-2 text-sm rounded-md text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
+                                    onClick={() => relayoutNodes('pinned')}
+                                >
+                                    Sort by Pinned
+                                </button>
+                                <button
+                                    className="w-full text-left px-3 py-2 text-sm rounded-md text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
+                                    onClick={() => relayoutNodes('order')}
+                                >
+                                    Sort by Order
+                                </button>
+                                <div className="my-1 h-px bg-gray-200 dark:bg-slate-700" />
+                                <button
+                                    className="w-full text-left px-3 py-2 text-sm rounded-md text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 flex items-center gap-2"
+                                    onClick={() => {
+                                        setScale(1);
+                                        setOffset({ x: 0, y: 0 });
+                                        setSortMenuOpen(false);
+                                    }}
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    Reset View
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </>
             }
         >
@@ -571,7 +651,7 @@ export function PromptGraphModal({
             </GraphCanvas>
 
             {/* Drop zones — fixed position overlays, OUTSIDE the canvas transform */}
-            <div className="absolute right-6 top-28 z-[60] flex flex-col gap-3 pointer-events-none">
+            <div className="absolute left-6 top-28 z-[60] flex flex-col gap-3 pointer-events-none">
                 {/* Pin Zone */}
                 <div
                     ref={pinZoneRef}

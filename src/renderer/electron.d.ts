@@ -90,6 +90,7 @@ export interface IElectronAPI {
         chatCompletions: (payload: {
             model: string;
             messages: Array<{ role: string; content: unknown }>;
+            modalities?: string[];
             temperature?: number;
             response_format?: unknown;
             generation_config?: unknown;
@@ -98,6 +99,7 @@ export interface IElectronAPI {
         chatCompletionsStart?: (requestId: string, payload: {
             model: string;
             messages: Array<{ role: string; content: unknown }>;
+            modalities?: string[];
             temperature?: number;
             response_format?: unknown;
             generation_config?: unknown;
@@ -135,6 +137,7 @@ export interface IElectronAPI {
     onMenuExportProjectBundle: (callback: () => void) => () => void;
     onRequestSaveBeforeClose: (callback: (requestId: string) => void) => () => void;
     onDiscardDraftBeforeClose: (callback: () => void) => () => void;
+    onDiscardPromptsBeforeClose?: (callback: () => void) => () => void;
     setWindowDirtyState: (hasUnsavedChanges: boolean) => Promise<boolean>;
     respondSaveBeforeClose: (requestId: string, success: boolean) => Promise<boolean>;
 

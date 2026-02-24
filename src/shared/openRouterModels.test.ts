@@ -38,6 +38,7 @@ describe('openRouterModels', () => {
             architecture: { modality: 'Text->Text' },
             supported_parameters: ['tools'],
             capabilities: ['search'],
+            supported_generation_methods: ['text'],
         });
 
         expect(normalized).toMatchObject({
@@ -49,6 +50,7 @@ describe('openRouterModels', () => {
             modality: 'text->text',
             supportedParams: ['tools'],
             capabilities: ['search'],
+            supportedGenerationMethods: ['text'],
         });
     });
 
@@ -58,6 +60,7 @@ describe('openRouterModels', () => {
         expect(supportsTools(['tools', 'temperature'])).toBe(true);
         expect(supportsFileInput('text+image->text', undefined)).toBe(true);
         expect(supportsImageGeneration('text->image')).toBe(true);
+        expect(supportsImageGeneration(undefined, 'vendor/model', 'Model', undefined, ['image'])).toBe(true);
         expect(supportsSearchCapability('perplexity/sonar-pro', 'Sonar Pro', [], [])).toBe(true);
     });
 });

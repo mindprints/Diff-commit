@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Key, Save, Check, AlertCircle, Eye, EyeOff, ExternalLink, FolderOpen, Type as TypeIcon, Link2, Palette, Moon, Sun, BarChart3, History, HelpCircle } from 'lucide-react';
+import { X, Key, Save, Check, AlertCircle, Eye, EyeOff, ExternalLink, FolderOpen, Type as TypeIcon, Link2, Palette, Moon, Sun, BarChart3, History, HelpCircle, Radio } from 'lucide-react';
 import { getFactCheckSearchMode, OpenRouterSearchMode, setFactCheckSearchMode } from '../services/openRouterSearch';
 import {
     getFactCheckExtractionModelId,
@@ -52,6 +52,8 @@ const SETTINGS_SECTION_TABS: Array<{ id: SettingsSectionId; label: string }> = [
     { id: 'factcheck', label: 'Fact-check' },
     { id: 'workspace', label: 'Workspace' },
 ];
+const MODEL_PING_AUDIT_EVENT = 'run-model-selection-ping-audit';
+const AUTO_MODEL_PING_AUDIT_KEY = 'diff-commit-auto-model-ping-audit-enabled';
 
 export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsModalProps) {
     const {
@@ -83,6 +85,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
     const [factCheckExtractionModelId, setFactCheckExtractionModelIdState] = useState('');
     const [factCheckVerificationModelId, setFactCheckVerificationModelIdState] = useState('');
     const [showSearchCapableOnly, setShowSearchCapableOnly] = useState(false);
+    const [autoModelPingAuditEnabled, setAutoModelPingAuditEnabled] = useState(true);
     const [activeSection, setActiveSection] = useState<SettingsSectionId>('api');
 
     // Refs for cleanup
@@ -120,6 +123,12 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
             setFactCheckSearchModeState(getFactCheckSearchMode());
             setFactCheckExtractionModelIdState(getFactCheckExtractionModelId());
             setFactCheckVerificationModelIdState(getFactCheckVerificationModelId());
+            try {
+                setAutoModelPingAuditEnabled(localStorage.getItem(AUTO_MODEL_PING_AUDIT_KEY) !== 'false');
+            } catch (error) {
+                console.warn('Failed to read auto model ping audit preference:', error);
+                setAutoModelPingAuditEnabled(true);
+            }
             setActiveSection('api');
         }
     }, [isOpen]);
@@ -387,6 +396,15 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
 
     const toggleShowKey = (provider: string) => {
         setShowKeys(prev => ({ ...prev, [provider]: !prev[provider] }));
+    };
+
+    const setAutoModelPingAuditPreference = (enabled: boolean) => {
+        setAutoModelPingAuditEnabled(enabled);
+        try {
+            localStorage.setItem(AUTO_MODEL_PING_AUDIT_KEY, enabled ? 'true' : 'false');
+        } catch (error) {
+            console.warn('Failed to save auto model ping audit preference:', error);
+        }
     };
 
     if (!isOpen) return null;
@@ -664,6 +682,30 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
                                             </span>
                                         )}
                                     </button>
+                                    <button
+                                        onClick={() => {
+                                            window.dispatchEvent(new Event(MODEL_PING_AUDIT_EVENT));
+                                            onClose();
+                                        }}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-slate-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                    >
+                                        <Radio className="w-4 h-4 text-emerald-500" />
+                                        Run Model Ping Audit
+                                    </button>
+                                    <label className="flex items-start gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-slate-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                        <input
+                                            type="checkbox"
+                                            checked={autoModelPingAuditEnabled}
+                                            onChange={(e) => setAutoModelPingAuditPreference(e.target.checked)}
+                                            className="mt-0.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span>
+                                            <span className="block">Auto-run Model Ping Audit on app launch</span>
+                                            <span className="block text-xs text-gray-500 dark:text-gray-400">
+                                                Runs once at startup and shows the results popup when complete.
+                                            </span>
+                                        </span>
+                                    </label>
                                     <button
                                         onClick={() => {
                                             setShowHelp(true);

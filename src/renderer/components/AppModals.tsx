@@ -13,7 +13,7 @@ import { SettingsModal } from './SettingsModal';
 import { UniversalGraphModal } from './UniversalGraphModal';
 import { RepoPickerDialog } from './RepoPickerDialog';
 import { RepoIntelPanel } from './RepoIntelPanel';
-import { X, Volume2, Shield, Save } from 'lucide-react';
+import { X, Volume2, Shield, Save, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { AIPrompt } from '../types';
 import {
     getRepoIntelPromptConfigs,
@@ -21,9 +21,25 @@ import {
     updateRepoIntelPromptConfig,
 } from '../services/repoIntelPromptConfig';
 
-import { useUI, useProject, useAI, useEditor } from '../contexts';
+import { useUI, useProject, useAI, useEditor, useModels } from '../contexts';
 
 const REPO_INTEL_PROMPT_PREFIX = 'repo-intel:';
+const MODEL_PING_AUDIT_EVENT = 'run-model-selection-ping-audit';
+const AUTO_MODEL_PING_AUDIT_KEY = 'diff-commit-auto-model-ping-audit-enabled';
+
+interface ModelPingAuditRow {
+    modelId: string;
+    modelName: string;
+    ok: boolean;
+    latencyMs: number | null;
+    message: string;
+}
+
+interface ModelPingAuditReport {
+    startedAt: number;
+    finishedAt: number;
+    rows: ModelPingAuditRow[];
+}
 
 function isRepoIntelPromptId(id: string): boolean {
     return id.startsWith(REPO_INTEL_PROMPT_PREFIX);
@@ -36,6 +52,9 @@ function toRepoIntelPromptNodeOrder(index: number, aiPromptCount: number): numbe
 export function AppModals() {
     const [projectsPanelStartInCreateMode, setProjectsPanelStartInCreateMode] = React.useState(false);
     const [repoIntelPromptVersion, setRepoIntelPromptVersion] = React.useState(0);
+    const [isRunningModelPingAudit, setIsRunningModelPingAudit] = React.useState(false);
+    const [modelPingAuditReport, setModelPingAuditReport] = React.useState<ModelPingAuditReport | null>(null);
+    const hasAutoRunModelPingAuditRef = React.useRef(false);
     const {
         showHelp, setShowHelp,
         showLogs, setShowLogs,
@@ -74,6 +93,85 @@ export function AppModals() {
         selectedImageModel, setDefaultImageModel,
         activePromptId, setDefaultPrompt
     } = useAI();
+    const { models, pingModel } = useModels();
+
+    const runModelSelectionPingAudit = React.useCallback(async () => {
+        if (isRunningModelPingAudit) return;
+        if (models.length === 0) return;
+
+        setIsRunningModelPingAudit(true);
+        const startedAt = Date.now();
+
+        try {
+            const targets = [...models];
+            const rows: ModelPingAuditRow[] = [];
+
+            for (const target of targets) {
+                let result: { ok: boolean; latencyMs: number | null; message: string };
+                try {
+                    const ping = await pingModel(target.id);
+                    result = { ok: ping.ok, latencyMs: ping.latencyMs, message: ping.message };
+                } catch (error) {
+                    result = {
+                        ok: false,
+                        latencyMs: null,
+                        message: error instanceof Error ? error.message : 'Ping failed',
+                    };
+                }
+                rows.push({
+                    modelId: target.id,
+                    modelName: target.name,
+                    ok: result.ok,
+                    latencyMs: result.latencyMs,
+                    message: result.message,
+                });
+            }
+
+            rows.sort((a, b) => {
+                if (a.ok !== b.ok) return a.ok ? -1 : 1; // successes first
+                if (!a.ok && !b.ok) return a.modelName.localeCompare(b.modelName);
+
+                const aLatency = a.latencyMs ?? Number.POSITIVE_INFINITY;
+                const bLatency = b.latencyMs ?? Number.POSITIVE_INFINITY;
+                if (aLatency !== bLatency) return aLatency - bLatency; // fastest first
+
+                return a.modelName.localeCompare(b.modelName);
+            });
+
+            setModelPingAuditReport({
+                startedAt,
+                finishedAt: Date.now(),
+                rows,
+            });
+        } finally {
+            setIsRunningModelPingAudit(false);
+        }
+    }, [isRunningModelPingAudit, models, pingModel]);
+
+    React.useEffect(() => {
+        const handler = () => {
+            void runModelSelectionPingAudit();
+        };
+        window.addEventListener(MODEL_PING_AUDIT_EVENT, handler);
+        return () => window.removeEventListener(MODEL_PING_AUDIT_EVENT, handler);
+    }, [runModelSelectionPingAudit]);
+
+    React.useEffect(() => {
+        if (hasAutoRunModelPingAuditRef.current) return;
+        if (models.length === 0) return;
+
+        let enabled = true;
+        try {
+            const stored = localStorage.getItem(AUTO_MODEL_PING_AUDIT_KEY);
+            enabled = stored !== 'false';
+        } catch (error) {
+            console.warn('Failed to read auto model ping audit preference:', error);
+        }
+
+        hasAutoRunModelPingAuditRef.current = true;
+        if (!enabled) return;
+        void runModelSelectionPingAudit();
+    }, [models.length, runModelSelectionPingAudit]);
 
     const promptGraphPrompts = React.useMemo<AIPrompt[]>(() => {
         const repoIntelPromptNodes: AIPrompt[] = getRepoIntelPromptConfigs().map((prompt, index) => ({
@@ -126,8 +224,100 @@ export function AppModals() {
         setDefaultPrompt(id);
     }, [setDefaultPrompt]);
 
+    const failedModelPings = modelPingAuditReport?.rows.filter((row) => !row.ok) ?? [];
+    const totalModelPings = modelPingAuditReport?.rows.length ?? 0;
+    const durationMs = modelPingAuditReport
+        ? modelPingAuditReport.finishedAt - modelPingAuditReport.startedAt
+        : 0;
+
     return (
         <>
+            {/* Hidden-trigger model ping audit status + report */}
+            {isRunningModelPingAudit && (
+                <div className="fixed top-6 right-6 z-[70] animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg px-4 py-3 flex items-center gap-3">
+                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                        <div className="text-sm text-gray-800 dark:text-slate-200">
+                            Running model ping audit...
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {modelPingAuditReport && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-black/50"
+                        onClick={() => setModelPingAuditReport(null)}
+                    />
+                    <div className="relative w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-2xl">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    {failedModelPings.length === 0 ? (
+                                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                    ) : (
+                                        <AlertTriangle className="w-5 h-5 text-amber-500" />
+                                    )}
+                                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100">
+                                        AI Model Ping Audit
+                                    </h3>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                    {totalModelPings} available models checked in {durationMs}ms
+                                    {failedModelPings.length > 0 ? ` • ${failedModelPings.length} failed` : ' • all passed'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setModelPingAuditReport(null)}
+                                className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                                title="Close"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="max-h-[65vh] overflow-y-auto p-4 space-y-2">
+                            {modelPingAuditReport.rows.map((row, index) => (
+                                <div
+                                    key={`${row.modelId}-${index}`}
+                                    className={`rounded-xl border p-3 ${row.ok
+                                        ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/20'
+                                        : 'border-red-200 dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/20'
+                                        }`}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                {row.ok ? (
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                                ) : (
+                                                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                                                )}
+                                                <span className="text-sm font-medium text-gray-900 dark:text-slate-100">
+                                                    {row.modelName}
+                                                </span>
+                                            </div>
+                                            <div className="text-[11px] text-gray-500 dark:text-slate-400 font-mono truncate">
+                                                {row.modelId}
+                                            </div>
+                                            {!row.ok && (
+                                                <div className="text-xs text-red-700 dark:text-red-300 mt-2">
+                                                    {row.message}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className={`text-sm font-semibold shrink-0 ${row.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                                            {row.ok ? `${row.latencyMs ?? '-'}ms` : 'Failed'}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Rating Prompt Toast */}
             {activeLogId && (
                 <div className="fixed bottom-6 right-6 z-50">

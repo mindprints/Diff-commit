@@ -105,7 +105,7 @@ export function PromptDropdownButton({
                     ) : (
                         <span className={clsx('w-2.5 h-2.5 rounded-full ring-1 ring-black/10', promptColor)} />
                     )}
-                    <span className="truncate max-w-[110px]">{displayName}</span>
+                    <span className="truncate max-w-[180px]">{displayName}</span>
                 </button>
 
                 {/* Divider */}

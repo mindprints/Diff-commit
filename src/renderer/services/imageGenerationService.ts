@@ -102,6 +102,7 @@ type ImageCapabilityCandidate = Pick<Model, 'id'> & {
     name?: string;
     modality?: string;
     capabilities?: string[];
+    supportedGenerationMethods?: string[];
 };
 
 export function isImageCapable(candidate: ImageCapabilityCandidate | null | undefined): boolean {
@@ -110,7 +111,8 @@ export function isImageCapable(candidate: ImageCapabilityCandidate | null | unde
         candidate.modality,
         candidate.id,
         candidate.name,
-        candidate.capabilities
+        candidate.capabilities,
+        candidate.supportedGenerationMethods
     ) || isImageCapableModel(candidate.id);
 }
 
@@ -199,6 +201,7 @@ export async function generateImage(
         // OpenRouter uses chat/completions for all models including image generation
         const requestBody: Record<string, unknown> = {
             model: model.id,
+            modalities: ['image'],
             messages: [
                 {
                     role: 'user',
@@ -240,12 +243,15 @@ export async function generateImage(
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[ImageGen] API error:', response.status, errorText);
+                const contentType = response.headers.get('content-type') || '';
+                const errorBody = contentType.includes('application/json')
+                    ? JSON.stringify(await response.json())
+                    : await response.text();
+                console.error('[ImageGen] API error:', response.status, errorBody);
                 return {
                     imageData: null,
                     isError: true,
-                    errorMessage: `Image generation failed: ${response.status} - ${errorText}`,
+                    errorMessage: `Image generation failed: ${response.status} - ${errorBody}`,
                 };
             }
             data = await response.json();

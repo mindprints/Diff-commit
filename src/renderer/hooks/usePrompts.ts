@@ -10,8 +10,11 @@ import * as storage from '../services/promptStorage';
  */
 export function usePrompts() {
     const [prompts, setPrompts] = useState<AIPrompt[]>([]);
+    const [persistedPrompts, setPersistedPrompts] = useState<AIPrompt[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [hasStagedChanges, setHasStagedChanges] = useState(false);
+    const [sessionCreatedPromptIds, setSessionCreatedPromptIds] = useState<Set<string>>(new Set());
 
     // Load prompts on mount
     useEffect(() => {
@@ -40,10 +43,16 @@ export function usePrompts() {
             await storage.savePrompts(merged);
 
             setPrompts(merged);
+            setPersistedPrompts(merged);
+            setHasStagedChanges(false);
+            setSessionCreatedPromptIds(new Set());
         } catch (err) {
             console.error('Failed to load prompts:', err);
             setError('Failed to load prompts');
             setPrompts(DEFAULT_PROMPTS);
+            setPersistedPrompts(DEFAULT_PROMPTS);
+            setHasStagedChanges(false);
+            setSessionCreatedPromptIds(new Set());
         } finally {
             setIsLoading(false);
         }
@@ -68,27 +77,31 @@ export function usePrompts() {
             order: Math.max(...prompts.map(p => p.order), 0) + 1,
         };
 
-        try {
-            const updated = await storage.addPrompt(newPrompt);
-            setPrompts(updated);
-            return newPrompt;
-        } catch (err) {
-            console.error('Failed to create prompt:', err);
-            throw err;
-        }
+        setPrompts(prev => [...prev, newPrompt].sort((a, b) => a.order - b.order));
+        setHasStagedChanges(true);
+        setSessionCreatedPromptIds(prev => {
+            const next = new Set(prev);
+            next.add(newPrompt.id);
+            return next;
+        });
+        return newPrompt;
     }, [prompts]);
 
     /**
      * Update an existing prompt.
      */
     const updatePrompt = useCallback(async (id: string, updates: Partial<AIPrompt>): Promise<void> => {
-        try {
-            const updated = await storage.updatePrompt(id, updates);
-            setPrompts(updated);
-        } catch (err) {
-            console.error('Failed to update prompt:', err);
-            throw err;
-        }
+        setPrompts(prev => {
+            const index = prev.findIndex(p => p.id === id);
+            if (index === -1) {
+                throw new Error(`Prompt with ID "${id}" not found`);
+            }
+            const next = [...prev];
+            const { isBuiltIn, ...safeUpdates } = updates;
+            next[index] = { ...next[index], ...safeUpdates };
+            return next;
+        });
+        setHasStagedChanges(true);
     }, []);
 
     /**
@@ -100,40 +113,54 @@ export function usePrompts() {
             throw new Error('Cannot delete built-in prompts');
         }
 
-        try {
-            const updated = await storage.deletePrompt(id);
-            setPrompts(updated);
-        } catch (err) {
-            console.error('Failed to delete prompt:', err);
-            throw err;
-        }
+        setPrompts(prev => prev.filter(p => p.id !== id));
+        setHasStagedChanges(true);
+        setSessionCreatedPromptIds(prev => {
+            if (!prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
     }, [prompts]);
 
     /**
      * Reset a built-in prompt to its default values.
      */
     const resetBuiltIn = useCallback(async (id: string): Promise<void> => {
-        try {
-            const updated = await storage.resetBuiltInPrompt(id);
-            setPrompts(updated);
-        } catch (err) {
-            console.error('Failed to reset prompt:', err);
-            throw err;
+        const defaultPrompt = DEFAULT_PROMPTS.find(p => p.id === id);
+        if (!defaultPrompt) {
+            throw new Error(`No default prompt found for ID: ${id}`);
         }
+        setPrompts(prev => prev.map(p => p.id === id ? { ...defaultPrompt } : p));
+        setHasStagedChanges(true);
     }, []);
 
     /**
      * Reset all prompts to defaults (removes all custom prompts).
      */
     const resetAll = useCallback(async (): Promise<void> => {
+        setPrompts(DEFAULT_PROMPTS);
+        setHasStagedChanges(true);
+        setSessionCreatedPromptIds(new Set());
+    }, []);
+
+    const saveStagedChanges = useCallback(async (): Promise<void> => {
         try {
-            const updated = await storage.resetAllPrompts();
-            setPrompts(updated);
+            await storage.savePrompts(prompts);
+            setPersistedPrompts(prompts);
+            setHasStagedChanges(false);
+            setSessionCreatedPromptIds(new Set());
         } catch (err) {
-            console.error('Failed to reset all prompts:', err);
+            console.error('Failed to save staged prompts:', err);
             throw err;
         }
-    }, []);
+    }, [prompts]);
+
+    const discardStagedChanges = useCallback((): void => {
+        setPrompts(persistedPrompts);
+        setHasStagedChanges(false);
+        setSessionCreatedPromptIds(new Set());
+    }, [persistedPrompts]);
 
     /**
      * Get prompts sorted by order for display.
@@ -165,6 +192,10 @@ export function usePrompts() {
         deletePrompt,
         resetBuiltIn,
         resetAll,
+        saveStagedChanges,
+        discardStagedChanges,
+        hasStagedChanges,
+        sessionCreatedPromptCount: sessionCreatedPromptIds.size,
 
         // Reload
         reload: loadPrompts,

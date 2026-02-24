@@ -1,6 +1,7 @@
 type ChatPayload = {
     model: string;
     messages: Array<{ role: string; content: unknown }>;
+    modalities?: string[];
     temperature?: number;
     response_format?: unknown;
     generation_config?: unknown;

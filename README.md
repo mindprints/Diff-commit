@@ -204,8 +204,9 @@ The tool uses a git-style "commit" system to ensure you never lose a draft while
 
 ---
 
-## 🛠️ TerminologyTo avoid confusion during development:
-*   **Editor (Left)**: The editable "Working Copy" where you type and edit.
+## 🛠️ Terminology
+
+To avoid confusion during development:*   **Editor (Left)**: The editable "Working Copy" where you type and edit.
 *   **Diff View (Right)**: Shows the comparison between Original and your edits, with accept/reject toggles.
 *   **Original**: The immutable baseline text you are comparing against.
 *   **Commit**: Saving the current state to history and making it the new baseline.
@@ -285,6 +286,21 @@ The tool uses a git-style "commit" system to ensure you never lose a draft while
 *   V1 backend/indexing scans project `content.md` files across the repo.
 *   Grounded AI summarize/ask flows use retrieved repo excerpts and return source citations (retrieval-derived).
 *   Renderer fallback path exists when the new Electron preload bridge is not yet loaded (restart Electron to use the full main-process repo-intel path).
+
+### Prompting UX + Prompt Persistence (latest prototype work)
+*   **Prompt Panel Starter Pills**: Clickable starters (`Review`, `Analyze`, `Fact-check`, `Rewrite`, `Compress`, `Expand`, `Compose`, `Edit`) seed the prompt panel with editable text/commands.
+*   **Prompt Graph Sort Dropdown**: Prompt graph now has graph-aligned sorting controls (`name`, `type`, `pinned`, `order`, `reset view`).
+*   **Prompt Soft Staging**: Prompt CRUD changes are staged in-session (not immediately persisted) and can be saved/discarded via the app close flow.
+*   **Prompt Title Space**: Wider prompt graph nodes and wider active-prompt label area reduce truncation.
+
+### Model Manager / Diagnostics
+*   **Imported Text Model Restore**: Default text model now restores correctly when the selected model is an imported OpenRouter model.
+*   **Model Ping Audit**: Settings can run a full model ping audit (all available models), with optional auto-run at startup and a results popup sorted by latency.
+*   **Import Browser Clarity**: Added `Show Imported` toggle, `Imported` badges, and search hints when matches are hidden because they are already imported.
+
+### OpenRouter Image Generation Compatibility
+*   **Image `modalities` support**: Image generation requests now include `modalities: ["image"]` for OpenRouter `/chat/completions` calls (important for Flux-style image models).
+*   **Improved Error Details**: Image-generation errors now surface JSON response bodies when available.
 
 ---
 

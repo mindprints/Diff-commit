@@ -13,6 +13,7 @@ export interface ExtendedModel extends Model {
     description?: string;
     supportedParams?: string[];
     capabilities?: string[];
+    supportedGenerationMethods?: string[];
     isImported?: boolean;
     // Benchmark data from Artificial Analysis
     intelligenceIndex?: number;
@@ -52,6 +53,7 @@ function parsedToExtended(parsed: ParsedModel): ExtendedModel {
         description: parsed.description,
         supportedParams: parsed.supportedParams,
         capabilities: parsed.capabilities,
+        supportedGenerationMethods: parsed.supportedGenerationMethods,
         isImported: true,
     };
 }

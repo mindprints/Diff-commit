@@ -119,12 +119,47 @@ function normalizeForMatch(str: string): string {
         .trim();
 }
 
+function normalizeProviderForMatch(str: string): string {
+    return normalizeForMatch(str)
+        .replace(/\b(ai|labs|lab|research|inc|llc|corp|corporation)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function extractModelTokens(name: string): string[] {
     const normalized = normalizeForMatch(name);
-    const stopWords = new Set(['ai', 'model', 'v1', 'free', 'pro', 'plus', 'chat', 'instruct', 'preview']);
+    const stopWords = new Set(['ai', 'model', 'v1', 'v2', 'v3', 'free', 'pro', 'plus', 'chat', 'instruct', 'preview', 'latest']);
     return normalized
         .split(' ')
         .filter((token) => token.length > 1 && !stopWords.has(token));
+}
+
+function providerAliases(provider: string): string[] {
+    const p = normalizeProviderForMatch(provider);
+    const aliases = new Set<string>([p]);
+    if (!p) return [];
+
+    const map: Record<string, string[]> = {
+        'x ai': ['xai'],
+        xai: ['x ai'],
+        'z ai': ['zai'],
+        zai: ['z ai'],
+        'stability ai': ['stability'],
+        stability: ['stability ai'],
+        'black forest': ['black forest labs', 'bfl'],
+        'black forest labs': ['black forest', 'bfl'],
+        google: ['google deepmind', 'gemini'],
+        openai: ['open ai'],
+        'open ai': ['openai'],
+    };
+
+    for (const [key, values] of Object.entries(map)) {
+        if (p === key) {
+            values.forEach((v) => aliases.add(v));
+        }
+    }
+
+    return Array.from(aliases);
 }
 
 function calculateSimilarity(name1: string, name2: string): number {
@@ -155,14 +190,20 @@ export function matchBenchmark(
     if (!benchmarks.length) return undefined;
 
     const provider = modelId.split('/')[0]?.toLowerCase() || '';
+    const normalizedProvider = normalizeProviderForMatch(provider);
+    const providerCandidates = providerAliases(normalizedProvider);
     let bestMatch: ModelBenchmark | undefined;
     let bestScore = 0;
 
     for (const benchmark of benchmarks) {
-        const creatorLower = benchmark.creator.toLowerCase();
-        const creatorMatch = provider.length > 0 && (creatorLower.includes(provider) || provider.includes(creatorLower));
+        const creatorNorm = normalizeProviderForMatch(benchmark.creator);
+        const creatorMatch = providerCandidates.length > 0 && providerCandidates.some((candidate) =>
+            candidate && (creatorNorm.includes(candidate) || candidate.includes(creatorNorm))
+        );
         const nameSimilarity = calculateSimilarity(modelName, benchmark.modelName);
-        const score = creatorMatch ? nameSimilarity * 1.2 : nameSimilarity;
+        const idSimilarity = calculateSimilarity(modelId.split('/')[1] || modelName, benchmark.modelName);
+        const baseSimilarity = Math.max(nameSimilarity, idSimilarity);
+        const score = creatorMatch ? baseSimilarity * 1.25 : baseSimilarity;
 
         if (score > bestScore && score >= minMatchThreshold) {
             bestScore = score;

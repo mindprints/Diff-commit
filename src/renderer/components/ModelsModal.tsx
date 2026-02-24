@@ -67,6 +67,7 @@ function ImportBrowser({
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [capabilityFilters, setCapabilityFilters] = useState<Set<string>>(new Set());
     const [rankBy, setRankBy] = useState<ImportRankCategory>('intelligence');
+    const [showImported, setShowImported] = useState(false);
 
     const toggleFilter = (filter: string) => {
         const newSet = new Set(capabilityFilters);
@@ -84,8 +85,8 @@ function ImportBrowser({
     }), [availableModels, benchmarks]);
 
     const filtered = candidates.filter(({ model: m }) => {
-        // Exclude already imported
-        if (existingIds.has(m.id)) return false;
+        // Exclude already imported unless user chooses to show them
+        if (!showImported && existingIds.has(m.id)) return false;
 
         // Text search
         const matchesSearch = !search ||
@@ -99,12 +100,26 @@ function ImportBrowser({
         if (capabilityFilters.has('vision') && !supportsVision(m.modality)) return false;
         if (capabilityFilters.has('audio') && !supportsAudio(m.modality)) return false;
         if (capabilityFilters.has('tools') && !supportsTools(m.supportedParams)) return false;
-        if (capabilityFilters.has('image-gen') && !supportsImageGeneration(m.modality, m.id, m.name, m.capabilities)) return false;
+        if (capabilityFilters.has('image-gen') && !supportsImageGeneration(m.modality, m.id, m.name, m.capabilities, m.supportedGenerationMethods)) return false;
         if (capabilityFilters.has('search') && !supportsSearchCapability(m.id, m.name, m.capabilities, m.supportedParams)) return false;
         if (capabilityFilters.has('pdf') && !supportsFileInput(m.modality, m.supportedParams)) return false;
 
         return true;
     });
+
+    const hiddenImportedSearchMatches = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q || showImported) return 0;
+
+        return candidates.filter(({ model: m }) => {
+            if (!existingIds.has(m.id)) return false;
+            return (
+                m.name.toLowerCase().includes(q) ||
+                m.provider.toLowerCase().includes(q) ||
+                m.id.toLowerCase().includes(q)
+            );
+        }).length;
+    }, [candidates, existingIds, search, showImported]);
 
     const sorted = useMemo(() => {
         if (rankBy === 'default') return filtered;
@@ -175,7 +190,7 @@ function ImportBrowser({
                     <div>
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Import from OpenRouter</h3>
                         <p className="text-xs text-gray-500 dark:text-slate-400">
-                            {filtered.length} models available • {selected.size} selected
+                            {filtered.length} models shown • {selected.size} selected
                         </p>
                     </div>
                     <button onClick={handleCloseImport} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 rounded-lg">
@@ -186,6 +201,15 @@ function ImportBrowser({
                 {/* Capability Filters */}
                 <div className="px-6 py-3 border-b border-gray-100 dark:border-slate-800">
                     <div className="flex flex-wrap gap-2">
+                        <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
+                            <input
+                                type="checkbox"
+                                checked={showImported}
+                                onChange={(e) => setShowImported(e.target.checked)}
+                                className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            Show Imported
+                        </label>
                         <button
                             onClick={() => toggleFilter('vision')}
                             title="Can process images as input (vision/multimodal)"
@@ -307,9 +331,16 @@ function ImportBrowser({
                             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                         </div>
                     ) : sorted.length === 0 ? (
-                        <p className="text-center text-gray-500 dark:text-slate-400 py-8">
-                            {search ? 'No models match your search' : 'All available models already imported'}
-                        </p>
+                        <div className="py-8 text-center">
+                            <p className="text-gray-500 dark:text-slate-400">
+                                {search ? 'No models match your search' : 'All available models already imported'}
+                            </p>
+                            {search && hiddenImportedSearchMatches > 0 && (
+                                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                                    {hiddenImportedSearchMatches} matching model{hiddenImportedSearchMatches === 1 ? '' : 's'} already imported. Enable `Show Imported` to see them.
+                                </p>
+                            )}
+                        </div>
                     ) : (
                         <div className="grid gap-2">
                             {sorted.map(({ model, benchmark }) => (
@@ -328,13 +359,20 @@ function ImportBrowser({
                                         "w-full text-left p-3 rounded-lg border transition-all",
                                         selected.has(model.id)
                                             ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-700"
-                                            : "bg-white dark:bg-slate-800/50 border-gray-100 dark:border-slate-700 hover:border-indigo-200"
+                                            : existingIds.has(model.id)
+                                                ? "bg-gray-50 dark:bg-slate-800/30 border-gray-200 dark:border-slate-700/80 hover:border-gray-300 dark:hover:border-slate-600"
+                                                : "bg-white dark:bg-slate-800/50 border-gray-100 dark:border-slate-700 hover:border-indigo-200"
                                     )}
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-medium text-sm text-gray-900 dark:text-slate-100">{model.name}</span>
+                                                {existingIds.has(model.id) && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300">
+                                                        Imported
+                                                    </span>
+                                                )}
                                                 {supportsVision(model.modality) && (
                                                     <Eye className="w-3.5 h-3.5 text-purple-500" title="Supports vision" />
                                                 )}
@@ -344,7 +382,7 @@ function ImportBrowser({
                                                 {supportsTools(model.supportedParams) && (
                                                     <Wrench className="w-3.5 h-3.5 text-blue-500" title="Supports tools/functions" />
                                                 )}
-                                                {supportsImageGeneration(model.modality, model.id, model.name, model.capabilities) && (
+                                                {supportsImageGeneration(model.modality, model.id, model.name, model.capabilities, model.supportedGenerationMethods) && (
                                                     <Image className="w-3.5 h-3.5 text-pink-500" title="Image generation" />
                                                 )}
                                             </div>
@@ -438,7 +476,7 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
     const sortedModels = useMemo(() => {
         // Capability-based filtering (not sorting)
         if (taskCategory === 'image-gen') {
-            return models.filter(m => supportsImageGeneration(m.modality, m.id, m.name, m.capabilities));
+            return models.filter(m => supportsImageGeneration(m.modality, m.id, m.name, m.capabilities, m.supportedGenerationMethods));
         }
         if (taskCategory === 'files') {
             return models.filter(m => supportsFileInput(m.modality, m.supportedParams));
@@ -644,7 +682,7 @@ export function ModelsModal({ isOpen, onClose, selectedModel, selectedImageModel
                             {sortedModels.map((model) => {
                                 const isSelected = model.id === selectedModel.id;
                                 const isImageSelected = selectedImageModel?.id === model.id;
-                                const isImageCapable = supportsImageGeneration(model.modality, model.id, model.name, model.capabilities);
+                                const isImageCapable = supportsImageGeneration(model.modality, model.id, model.name, model.capabilities, model.supportedGenerationMethods);
                                 const isSearchCapable = supportsSearchCapability(model.id, model.name, model.capabilities, model.supportedParams);
                                 const tierColor = getCostTierColor(model);
                                 const isRefreshing = refreshingId === model.id;

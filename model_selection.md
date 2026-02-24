@@ -66,3 +66,13 @@ $1/M input tokens $5/M output tokens
 Created Dec 2, 2025 1,000,000 context
 
 $0.30/M input tokens$2.50/M output tokens
+
+---
+
+## 2026-02-24 Debug Notes (OpenRouter import/catalog)
+
+- Direct checks against OpenRouter `/api/v1/models` in this environment returned ~337-338 models.
+- `bytedance-seed/*` models were present (e.g. `seed-1.6`, `seed-1.6-flash`).
+- `black-forest-labs/*` and `sourceful/*` were **not present** in the API response (authenticated and unauthenticated checks).
+- Conclusion: those providers cannot currently be imported by the app because the upstream catalog response is not returning them.
+- Separate runtime fix landed: image generation requests now send `modalities: ["image"]` for OpenRouter image-generation calls.

@@ -32,6 +32,7 @@ export interface ParsedModel {
     description?: string;
     supportedParams?: string[];
     capabilities?: string[];
+    supportedGenerationMethods?: string[];
 }
 
 const PROVIDER_MAP: Record<string, string> = {
@@ -86,6 +87,7 @@ export function normalizeOpenRouterModel(model: OpenRouterModel): ParsedModel {
         description: model.description,
         supportedParams: model.supported_parameters,
         capabilities: model.capabilities,
+        supportedGenerationMethods: model.supported_generation_methods,
     };
 }
 
@@ -107,11 +109,26 @@ export function supportsImageGeneration(
     modality?: string,
     modelId?: string,
     modelName?: string,
-    capabilities?: string[]
+    capabilities?: string[],
+    supportedGenerationMethods?: string[]
 ): boolean {
+    if (supportedGenerationMethods && supportedGenerationMethods.length > 0) {
+        const methods = supportedGenerationMethods.map((m) => m.toLowerCase().trim());
+        if (methods.some((m) => m === 'image' || m.includes('image'))) {
+            return true;
+        }
+    }
+
     if (capabilities && capabilities.length > 0) {
         const capLower = capabilities.map((c) => c.toLowerCase());
-        if (capLower.some((c) => c.includes('image-generation') || c.includes('image') || c === 'images')) {
+        if (capLower.some((c) =>
+            c.includes('image-generation') ||
+            c.includes('image generation') ||
+            c === 'image' ||
+            c === 'images' ||
+            c.includes('text-to-image') ||
+            c.includes('image-to-image')
+        )) {
             return true;
         }
     }
@@ -126,6 +143,7 @@ export function supportsImageGeneration(
         'image', 'flux', 'dall-e', 'dalle', 'stable-diffusion', 'sd-', 'sdxl',
         'midjourney', 'imagen', 'ideogram', 'playground', 'kandinsky',
         'dreamshaper', 'deliberate', 'proteus', 'juggernaut',
+        'recraft', 'gpt-image', 'seedream', 'hidream', 'nano-banana', 'lumina',
     ];
 
     return imageGenKeywords.some((kw) => combined.includes(kw));
