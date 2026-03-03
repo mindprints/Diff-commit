@@ -6,6 +6,7 @@ interface GraphNodeTooltipProps {
     subtitle?: string;
     persistent?: boolean;
     children: React.ReactNode;
+    style?: React.CSSProperties;
 }
 
 export function GraphNodeTooltip({
@@ -13,10 +14,12 @@ export function GraphNodeTooltip({
     subtitle,
     persistent = false,
     children,
+    style,
 }: GraphNodeTooltipProps) {
     return (
         <div
             className={clsx('node-tooltip', persistent && 'persistent')}
+            style={style}
             onMouseDown={(e) => e.stopPropagation()}
         >
             <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-xs flex justify-between items-center">

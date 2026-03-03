@@ -125,6 +125,8 @@ export function UniversalGraphModal({
                 .filter((n) => {
                     const project = projectById.get(n.id);
                     if (!project) return false;
+                    const isTooltipSelected = selectedNodeId === node.id;
+
                     return (
                         project.name.toLowerCase().includes(q) ||
                         (project.content ?? '').toLowerCase().includes(q)
@@ -605,6 +607,7 @@ export function UniversalGraphModal({
                                 : hoveredNodeId === node.id
                                     ? 60
                                     : 30;
+                    const isTooltipSelected = selectedNodeId === node.id;
 
                     return (
                         <GraphNodeCard
@@ -660,13 +663,21 @@ export function UniversalGraphModal({
                             tooltip={!draggingNodeId && (hoveredNodeId === node.id || selectedNodeId === node.id) ? (
                                 <GraphNodeTooltip
                                     title="Project"
-                                    subtitle={selectedNodeId === node.id ? 'Selected' : 'Preview'}
-                                    persistent={selectedNodeId === node.id}
+                                    subtitle={isTooltipSelected ? 'Selected' : 'Preview'}
+                                    persistent={isTooltipSelected}
+                                    style={{ overflowY: isTooltipSelected ? 'auto' : 'hidden' }}
                                 >
                                     <>
                                         <div className="text-[11px] font-semibold mb-1">Content Preview</div>
-                                        <div className="whitespace-pre-wrap">
-                                            {(project?.content || '(Empty)').slice(0, 600)}
+                                        <div
+                                            className={clsx(
+                                                'whitespace-pre-wrap',
+                                                isTooltipSelected ? 'max-h-80 overflow-y-auto pr-1' : 'max-h-40 overflow-hidden'
+                                            )}
+                                        >
+                                            {isTooltipSelected
+                                                ? (project?.content || '(Empty)')
+                                                : (project?.content || '(Empty)').slice(0, 600)}
                                         </div>
                                     </>
                                 </GraphNodeTooltip>

@@ -69,12 +69,17 @@ export function ProjectsPanel({
 
     const handleCreate = async () => {
         if (!newProjectName.trim()) return;
-        // Create new project with EMPTY content - don't inherit residue from previous session
-        await onCreateProject(newProjectName.trim(), '');
-        setNewProjectName('');
-        setIsCreating(false);
-        onExitToEditor?.();
-        onClose(); // Close the panel after creating and switching to the new project
+        setRenameError(null);
+        try {
+            // Create new project with EMPTY content - don't inherit residue from previous session
+            await onCreateProject(newProjectName.trim(), '');
+            setNewProjectName('');
+            setIsCreating(false);
+            onExitToEditor?.();
+            onClose(); // Close the panel after creating and switching to the new project
+        } catch (err) {
+            setRenameError(err instanceof Error ? err.message : 'Failed to create project');
+        }
     };
 
     const handleLoad = async (id: string) => {
@@ -252,25 +257,45 @@ export function ProjectsPanel({
                             <input
                                 type="text"
                                 value={newProjectName}
-                                onChange={(e) => setNewProjectName(e.target.value)}
+                                onChange={(e) => {
+                                    setNewProjectName(e.target.value);
+                                    setRenameError(null);
+                                }}
                                 placeholder="Project name..."
-                                className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-slate-100"
+                                className={clsx(
+                                    "flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-800 border rounded-lg focus:outline-none focus:ring-2 text-gray-900 dark:text-slate-100",
+                                    renameError
+                                        ? "border-red-300 dark:border-red-700 focus:ring-red-500"
+                                        : "border-gray-200 dark:border-slate-700 focus:ring-indigo-500"
+                                )}
                                 autoFocus
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleCreate();
-                                    if (e.key === 'Escape') setIsCreating(false);
+                                    if (e.key === 'Escape') {
+                                        setIsCreating(false);
+                                        setRenameError(null);
+                                    }
                                 }}
                             />
                             <Button variant="primary" size="sm" onClick={handleCreate}>
                                 Create
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setIsCreating(false)}>
+                            <Button variant="ghost" size="sm" onClick={() => {
+                                setIsCreating(false);
+                                setRenameError(null);
+                            }}>
                                 Cancel
                             </Button>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-slate-500 mt-2">
-                            New projects start with a clean slate.
-                        </p>
+                        {renameError ? (
+                            <p className="text-xs text-red-500 dark:text-red-400 mt-2">
+                                {renameError}
+                            </p>
+                        ) : (
+                            <p className="text-xs text-gray-500 dark:text-slate-500 mt-2">
+                                New projects start with a clean slate.
+                            </p>
+                        )}
                     </div>
                 )}
 

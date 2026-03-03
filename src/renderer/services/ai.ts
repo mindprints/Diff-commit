@@ -26,7 +26,7 @@ export function clearApiKeyCache(): void {
 }
 
 const SITE_URL = 'http://localhost:5173';
-const SITE_NAME = 'Diff & Commit AI';
+const SITE_NAME = 'Diff and Commit AI';
 
 
 interface AIResponse {
