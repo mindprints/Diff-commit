@@ -14,6 +14,7 @@ import {
     assertRepositoryPath as assertRepositoryPathBase,
 } from './pathValidators';
 import { readProjectBundleSource } from './projectBundle';
+import { GoogleDriveSyncService } from './googleDriveSync';
 import {
     normalizeOpenRouterModel,
     tokenPriceToMillionPrice,
@@ -121,6 +122,7 @@ function getSecureApiKey(provider: string): string | undefined {
 
 let mainWindow = null;
 let folderInitializer: AppFolderInitializer | null = null;
+let googleDriveSync: GoogleDriveSyncService | null = null;
 
 interface WindowLifecycleState {
     hasUnsavedChanges: boolean;
@@ -845,6 +847,62 @@ ${body}
     const COMMITS_FILE = 'commits.json';
     const METADATA_FILE = 'metadata.json';
 
+    googleDriveSync = new GoogleDriveSyncService(store, getReposRootPath, {
+        projectContentFile: PROJECT_CONTENT_FILE,
+        diffCommitDir: DIFF_COMMIT_DIR,
+        commitsFile: COMMITS_FILE,
+        metadataFile: METADATA_FILE,
+    });
+
+    try {
+        const restored = await googleDriveSync.restoreIfRemoteIsNewer();
+        if (restored) {
+            console.log('[GoogleDrive] Restored newer project snapshot before repository load.');
+        }
+    } catch (e) {
+        console.warn('[GoogleDrive] Startup restore skipped:', e);
+    }
+
+    function scheduleGoogleDriveAutoSync(): void {
+        googleDriveSync?.scheduleAutoUpload();
+    }
+
+    ipcMain.handle('google-drive:get-status', async () => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        return await googleDriveSync.getStatus();
+    });
+
+    ipcMain.handle('google-drive:set-credentials', async (_event, clientId: string, clientSecret: string) => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        googleDriveSync.setCredentials(clientId, clientSecret);
+        return await googleDriveSync.getStatus();
+    });
+
+    ipcMain.handle('google-drive:set-auto-sync', async (_event, enabled: boolean) => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        return await googleDriveSync.setAutoSync(enabled);
+    });
+
+    ipcMain.handle('google-drive:start-auth', async () => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        return await googleDriveSync.startAuth();
+    });
+
+    ipcMain.handle('google-drive:poll-auth', async (_event, deviceCode: string) => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        return await googleDriveSync.pollAuth(deviceCode);
+    });
+
+    ipcMain.handle('google-drive:sync-now', async () => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        return await googleDriveSync.uploadSnapshot();
+    });
+
+    ipcMain.handle('google-drive:restore', async () => {
+        if (!googleDriveSync) throw new Error('Google Drive sync is not initialized.');
+        return await googleDriveSync.restoreSnapshot();
+    });
+
     interface ProjectMetadata {
         createdAt: number;
         id?: string; // Stable UUID — persists across renames
@@ -1070,6 +1128,7 @@ ${body}
             console.warn('Failed to update repository metadata:', e);
         }
 
+        scheduleGoogleDriveAutoSync();
         return getRepositoryInfo(newPath);
     });
 
@@ -1091,6 +1150,7 @@ ${body}
         }
 
         await fs.promises.rm(repoPath, { recursive: true, force: true });
+        scheduleGoogleDriveAutoSync();
         return true;
     });
 
@@ -1223,6 +1283,7 @@ ${body}
             writeProjectMetadata(diffCommitPath, { createdAt: now, id: projectId });
 
             console.log('[Hierarchy] Created project with metadata:', projectPath);
+            scheduleGoogleDriveAutoSync();
             return {
                 id: projectId,
                 name: projectName,
@@ -1317,6 +1378,7 @@ ${body}
             console.log('[Project] Renamed project:', validatedProjectPath, '->', newPath);
 
             // Return complete project object
+            scheduleGoogleDriveAutoSync();
             return {
                 id: renamedProjectId,
                 name: trimmedName,
@@ -1407,6 +1469,7 @@ ${body}
             const metadata = readProjectMetadata(diffCommitPath);
             const stats = await fs.promises.stat(targetProjectPath);
 
+            scheduleGoogleDriveAutoSync();
             return {
                 id: metadata?.id || projectName,
                 name: projectName,
@@ -1429,6 +1492,7 @@ ${body}
             const validatedProjectPath = assertProjectPath(projectPath);
             const contentPath = path.join(validatedProjectPath, PROJECT_CONTENT_FILE);
             fs.writeFileSync(contentPath, content, 'utf-8');
+            scheduleGoogleDriveAutoSync();
             return true;
         } catch (e) {
             console.error('Failed to save project content:', e);
@@ -1484,6 +1548,7 @@ ${body}
                 fs.mkdirSync(diffCommitPath, { recursive: true });
             }
             fs.writeFileSync(commitsPath, JSON.stringify(commits, null, 2), 'utf-8');
+            scheduleGoogleDriveAutoSync();
             return true;
         } catch (e) {
             console.error('Failed to save commits:', e);
@@ -1498,6 +1563,7 @@ ${body}
             const validatedProjectPath = assertProjectPath(projectPath);
             await fs.promises.rm(validatedProjectPath, { recursive: true, force: true });
             console.log('[Project] Deleted project:', validatedProjectPath);
+            scheduleGoogleDriveAutoSync();
             return true;
         } catch (e) {
             console.error('Failed to delete project:', e);
@@ -1673,6 +1739,7 @@ ${body}
                 repositoryPath: repoPath
             };
 
+            scheduleGoogleDriveAutoSync();
             return { path: repoPath, projects: [defaultProject] };
         } catch (e) {
             console.error('Failed to create repository:', e);

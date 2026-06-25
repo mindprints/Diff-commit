@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Key, Save, Check, AlertCircle, Eye, EyeOff, ExternalLink, FolderOpen, Type as TypeIcon, Link2, Palette, Moon, Sun, BarChart3, History, HelpCircle, Radio } from 'lucide-react';
+import { X, Key, Save, Check, AlertCircle, Eye, EyeOff, ExternalLink, FolderOpen, Type as TypeIcon, Link2, Palette, Moon, Sun, BarChart3, History, HelpCircle, Radio, Cloud, RefreshCw, Download } from 'lucide-react';
 import { getFactCheckSearchMode, OpenRouterSearchMode, setFactCheckSearchMode } from '../services/openRouterSearch';
 import {
     getFactCheckExtractionModelId,
@@ -43,13 +43,33 @@ const API_KEY_FIELDS: ApiKeyField[] = [
     }
 ];
 
-type SettingsSectionId = 'api' | 'appearance' | 'tools' | 'factcheck' | 'workspace';
+type SettingsSectionId = 'api' | 'appearance' | 'tools' | 'factcheck' | 'sync' | 'workspace';
+
+interface GoogleDriveStatus {
+    configured: boolean;
+    connected: boolean;
+    autoSync: boolean;
+    lastSyncAt: number | null;
+    lastRestoreAt: number | null;
+    lastError: string | null;
+    remoteModifiedTime: string | null;
+}
+
+interface GoogleDriveAuthStart {
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    verificationUrlComplete?: string;
+    expiresIn: number;
+    interval: number;
+}
 
 const SETTINGS_SECTION_TABS: Array<{ id: SettingsSectionId; label: string }> = [
     { id: 'api', label: 'API Keys' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'tools', label: 'Tools' },
     { id: 'factcheck', label: 'Fact-check' },
+    { id: 'sync', label: 'Sync' },
     { id: 'workspace', label: 'Workspace' },
 ];
 const MODEL_PING_AUDIT_EVENT = 'run-model-selection-ping-audit';
@@ -87,6 +107,13 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
     const [showSearchCapableOnly, setShowSearchCapableOnly] = useState(false);
     const [autoModelPingAuditEnabled, setAutoModelPingAuditEnabled] = useState(true);
     const [activeSection, setActiveSection] = useState<SettingsSectionId>('api');
+    const [googleClientId, setGoogleClientId] = useState('');
+    const [googleClientSecret, setGoogleClientSecret] = useState('');
+    const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null);
+    const [googleDriveAuth, setGoogleDriveAuth] = useState<GoogleDriveAuthStart | null>(null);
+    const [googleDriveBusy, setGoogleDriveBusy] = useState(false);
+    const [googleDriveMessage, setGoogleDriveMessage] = useState<string | null>(null);
+    const [googleDriveError, setGoogleDriveError] = useState<string | null>(null);
 
     // Refs for cleanup
     const isMounted = useRef(true);
@@ -98,6 +125,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         appearance: null,
         tools: null,
         factcheck: null,
+        sync: null,
         workspace: null,
     });
 
@@ -120,6 +148,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
         if (isOpen) {
             loadKeys();
             loadWorkspace();
+            loadGoogleDriveStatus();
             setFactCheckSearchModeState(getFactCheckSearchMode());
             setFactCheckExtractionModelIdState(getFactCheckExtractionModelId());
             setFactCheckVerificationModelIdState(getFactCheckVerificationModelId());
@@ -258,6 +287,149 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
             }
         } catch (e) {
             console.error('Failed to load workspace path:', e);
+        }
+    };
+
+    const loadGoogleDriveStatus = async () => {
+        setGoogleDriveError(null);
+        try {
+            if (window.electron?.googleDrive?.getStatus) {
+                const status = await window.electron.googleDrive.getStatus();
+                if (isMounted.current) {
+                    setGoogleDriveStatus(status);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load Google Drive status:', e);
+            if (isMounted.current) {
+                setGoogleDriveError('Failed to load Google Drive status.');
+            }
+        }
+    };
+
+    const formatSyncTime = (value: number | string | null | undefined) => {
+        if (!value) return 'Never';
+        const date = typeof value === 'number' ? new Date(value) : new Date(value);
+        if (Number.isNaN(date.getTime())) return 'Unknown';
+        return date.toLocaleString();
+    };
+
+    const handleGoogleCredentialsSave = async () => {
+        if (!window.electron?.googleDrive?.setCredentials) return;
+        if (!googleClientId.trim() || !googleClientSecret.trim()) {
+            setGoogleDriveError('Google OAuth client ID and secret are required.');
+            return;
+        }
+        setGoogleDriveBusy(true);
+        setGoogleDriveError(null);
+        setGoogleDriveMessage(null);
+        try {
+            const status = await window.electron.googleDrive.setCredentials(googleClientId, googleClientSecret);
+            if (isMounted.current) {
+                setGoogleDriveStatus(status);
+                setGoogleClientId('');
+                setGoogleClientSecret('');
+                setGoogleDriveMessage('Google OAuth credentials saved.');
+            }
+        } catch (e) {
+            console.error('Failed to save Google credentials:', e);
+            if (isMounted.current) setGoogleDriveError('Failed to save Google OAuth credentials.');
+        } finally {
+            if (isMounted.current) setGoogleDriveBusy(false);
+        }
+    };
+
+    const handleGoogleConnect = async () => {
+        if (!window.electron?.googleDrive?.startAuth) return;
+        setGoogleDriveBusy(true);
+        setGoogleDriveError(null);
+        setGoogleDriveMessage(null);
+        try {
+            const auth = await window.electron.googleDrive.startAuth();
+            if (isMounted.current) {
+                setGoogleDriveAuth(auth);
+                setGoogleDriveMessage('Enter this code in Google, then return here and finish connecting.');
+            }
+        } catch (e) {
+            console.error('Failed to start Google Drive auth:', e);
+            if (isMounted.current) setGoogleDriveError('Failed to start Google authorization. Check the OAuth credentials.');
+        } finally {
+            if (isMounted.current) setGoogleDriveBusy(false);
+        }
+    };
+
+    const handleGooglePoll = async () => {
+        if (!window.electron?.googleDrive?.pollAuth || !googleDriveAuth) return;
+        setGoogleDriveBusy(true);
+        setGoogleDriveError(null);
+        try {
+            const result = await window.electron.googleDrive.pollAuth(googleDriveAuth.deviceCode);
+            if ('pending' in result) {
+                if (isMounted.current) {
+                    setGoogleDriveMessage(result.slowDown ? 'Google asked us to wait longer before checking again.' : 'Authorization is still pending.');
+                }
+                return;
+            }
+            if (isMounted.current) {
+                setGoogleDriveStatus(result);
+                setGoogleDriveAuth(null);
+                setGoogleDriveMessage('Google Drive connected.');
+            }
+        } catch (e) {
+            console.error('Failed to finish Google Drive auth:', e);
+            if (isMounted.current) setGoogleDriveError('Google authorization was not completed.');
+        } finally {
+            if (isMounted.current) setGoogleDriveBusy(false);
+        }
+    };
+
+    const handleGoogleAutoSyncChange = async (enabled: boolean) => {
+        if (!window.electron?.googleDrive?.setAutoSync) return;
+        setGoogleDriveError(null);
+        try {
+            const status = await window.electron.googleDrive.setAutoSync(enabled);
+            if (isMounted.current) setGoogleDriveStatus(status);
+        } catch (e) {
+            console.error('Failed to update Google Drive auto sync:', e);
+            if (isMounted.current) setGoogleDriveError('Failed to update auto-sync setting.');
+        }
+    };
+
+    const handleGoogleSyncNow = async () => {
+        if (!window.electron?.googleDrive?.syncNow) return;
+        setGoogleDriveBusy(true);
+        setGoogleDriveError(null);
+        setGoogleDriveMessage(null);
+        try {
+            const status = await window.electron.googleDrive.syncNow();
+            if (isMounted.current) {
+                setGoogleDriveStatus(status);
+                setGoogleDriveMessage('Projects synced to Google Drive.');
+            }
+        } catch (e) {
+            console.error('Failed to sync to Google Drive:', e);
+            if (isMounted.current) setGoogleDriveError('Failed to sync to Google Drive.');
+        } finally {
+            if (isMounted.current) setGoogleDriveBusy(false);
+        }
+    };
+
+    const handleGoogleRestore = async () => {
+        if (!window.electron?.googleDrive?.restore) return;
+        setGoogleDriveBusy(true);
+        setGoogleDriveError(null);
+        setGoogleDriveMessage(null);
+        try {
+            const status = await window.electron.googleDrive.restore();
+            if (isMounted.current) {
+                setGoogleDriveStatus(status);
+                setGoogleDriveMessage('Projects restored from Google Drive. Reopen the repository to refresh the list.');
+            }
+        } catch (e) {
+            console.error('Failed to restore from Google Drive:', e);
+            if (isMounted.current) setGoogleDriveError('Failed to restore from Google Drive.');
+        } finally {
+            if (isMounted.current) setGoogleDriveBusy(false);
         }
     };
 
@@ -793,7 +965,7 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
 
                             <div className="border-t border-gray-200 dark:border-gray-700 pt-4" />
 
-                            <div ref={(el) => { sectionRefs.current.workspace = el; }} className="space-y-3 scroll-mt-20">
+                            <div className="space-y-3 scroll-mt-20">
                                 <div className="flex items-center gap-2">
                                     <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
                                         <Key className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -824,7 +996,151 @@ export function SettingsModal({ isOpen, onClose, isFirstRun = false }: SettingsM
 
                             <div className="border-t border-gray-200 dark:border-gray-700 pt-4" />
 
-                            <div className="space-y-3">
+                            <div ref={(el) => { sectionRefs.current.sync = el; }} className="space-y-3 scroll-mt-20">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+                                        <Cloud className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Google Drive Sync</h3>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">Backs up all repositories to Drive app data and restores newer snapshots on launch.</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                                        <span className="block text-gray-500 dark:text-gray-400">Status</span>
+                                        <span className="font-medium text-gray-800 dark:text-gray-100">
+                                            {googleDriveStatus?.connected ? 'Connected' : googleDriveStatus?.configured ? 'Configured' : 'Not configured'}
+                                        </span>
+                                    </div>
+                                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                                        <span className="block text-gray-500 dark:text-gray-400">Last Sync</span>
+                                        <span className="font-medium text-gray-800 dark:text-gray-100">{formatSyncTime(googleDriveStatus?.lastSyncAt)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">OAuth Client ID</label>
+                                    <input
+                                        type="text"
+                                        value={googleClientId}
+                                        onChange={(e) => setGoogleClientId(e.target.value)}
+                                        placeholder={googleDriveStatus?.configured ? 'Configured (enter to replace)' : 'Google OAuth client ID'}
+                                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">OAuth Client Secret</label>
+                                    <input
+                                        type="password"
+                                        value={googleClientSecret}
+                                        onChange={(e) => setGoogleClientSecret(e.target.value)}
+                                        placeholder={googleDriveStatus?.configured ? 'Configured (enter to replace)' : 'Google OAuth client secret'}
+                                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                    />
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        onClick={handleGoogleCredentialsSave}
+                                        disabled={googleDriveBusy || !googleClientId.trim() || !googleClientSecret.trim()}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Save className="w-4 h-4" />
+                                        Save Credentials
+                                    </button>
+                                    <button
+                                        onClick={handleGoogleConnect}
+                                        disabled={googleDriveBusy || !googleDriveStatus?.configured}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Cloud className="w-4 h-4" />
+                                        Connect
+                                    </button>
+                                </div>
+
+                                {googleDriveAuth && (
+                                    <div className="space-y-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-3">
+                                        <div className="text-xs text-gray-600 dark:text-gray-300">Enter this code at Google:</div>
+                                        <div className="text-lg font-semibold tracking-wider text-gray-900 dark:text-white">{googleDriveAuth.userCode}</div>
+                                        <a
+                                            href={googleDriveAuth.verificationUrlComplete || googleDriveAuth.verificationUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-1 text-xs text-indigo-700 dark:text-indigo-300 hover:underline"
+                                        >
+                                            Open Google authorization
+                                            <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                        <div>
+                                            <button
+                                                onClick={handleGooglePoll}
+                                                disabled={googleDriveBusy}
+                                                className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                <Check className="w-4 h-4" />
+                                                Finish Connecting
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <label className="flex items-start gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-slate-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={googleDriveStatus?.autoSync ?? true}
+                                        onChange={(e) => handleGoogleAutoSyncChange(e.target.checked)}
+                                        className="mt-0.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span>
+                                        <span className="block">Auto-sync project changes</span>
+                                        <span className="block text-xs text-gray-500 dark:text-gray-400">
+                                            Uploads after project saves and restores newer Drive snapshots when the app starts.
+                                        </span>
+                                    </span>
+                                </label>
+
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        onClick={handleGoogleSyncNow}
+                                        disabled={googleDriveBusy || !googleDriveStatus?.connected}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                        Sync Now
+                                    </button>
+                                    <button
+                                        onClick={handleGoogleRestore}
+                                        disabled={googleDriveBusy || !googleDriveStatus?.connected}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Restore
+                                    </button>
+                                </div>
+
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    Remote snapshot: {formatSyncTime(googleDriveStatus?.remoteModifiedTime)}
+                                </div>
+
+                                {googleDriveMessage && (
+                                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                                        <Check className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                        <p className="text-sm text-green-700 dark:text-green-300">{googleDriveMessage}</p>
+                                    </div>
+                                )}
+                                {(googleDriveError || googleDriveStatus?.lastError) && (
+                                    <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                                        <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                        <p className="text-sm text-red-600 dark:text-red-400">{googleDriveError || googleDriveStatus?.lastError}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="border-t border-gray-200 dark:border-gray-700 pt-4" />
+
+                            <div ref={(el) => { sectionRefs.current.workspace = el; }} className="space-y-3 scroll-mt-20">
                                 <div className="flex items-center gap-2">
                                     <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
                                         <FolderOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />

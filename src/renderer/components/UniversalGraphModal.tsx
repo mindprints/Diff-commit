@@ -125,8 +125,6 @@ export function UniversalGraphModal({
                 .filter((n) => {
                     const project = projectById.get(n.id);
                     if (!project) return false;
-                    const isTooltipSelected = selectedNodeId === node.id;
-
                     return (
                         project.name.toLowerCase().includes(q) ||
                         (project.content ?? '').toLowerCase().includes(q)

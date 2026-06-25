@@ -110,6 +110,71 @@ export interface IElectronAPI {
         findRedundancy: (repoPath: string, options?: { threshold?: number; topK?: number }) => Promise<RepoRedundancyReport>;
     };
 
+    googleDrive?: {
+        getStatus: () => Promise<{
+            configured: boolean;
+            connected: boolean;
+            autoSync: boolean;
+            lastSyncAt: number | null;
+            lastRestoreAt: number | null;
+            lastError: string | null;
+            remoteModifiedTime: string | null;
+        }>;
+        setCredentials: (clientId: string, clientSecret: string) => Promise<{
+            configured: boolean;
+            connected: boolean;
+            autoSync: boolean;
+            lastSyncAt: number | null;
+            lastRestoreAt: number | null;
+            lastError: string | null;
+            remoteModifiedTime: string | null;
+        }>;
+        setAutoSync: (enabled: boolean) => Promise<{
+            configured: boolean;
+            connected: boolean;
+            autoSync: boolean;
+            lastSyncAt: number | null;
+            lastRestoreAt: number | null;
+            lastError: string | null;
+            remoteModifiedTime: string | null;
+        }>;
+        startAuth: () => Promise<{
+            deviceCode: string;
+            userCode: string;
+            verificationUrl: string;
+            verificationUrlComplete?: string;
+            expiresIn: number;
+            interval: number;
+        }>;
+        pollAuth: (deviceCode: string) => Promise<{
+            configured: boolean;
+            connected: boolean;
+            autoSync: boolean;
+            lastSyncAt: number | null;
+            lastRestoreAt: number | null;
+            lastError: string | null;
+            remoteModifiedTime: string | null;
+        } | { pending: true; slowDown?: boolean }>;
+        syncNow: () => Promise<{
+            configured: boolean;
+            connected: boolean;
+            autoSync: boolean;
+            lastSyncAt: number | null;
+            lastRestoreAt: number | null;
+            lastError: string | null;
+            remoteModifiedTime: string | null;
+        }>;
+        restore: () => Promise<{
+            configured: boolean;
+            connected: boolean;
+            autoSync: boolean;
+            lastSyncAt: number | null;
+            lastRestoreAt: number | null;
+            lastError: string | null;
+            remoteModifiedTime: string | null;
+        }>;
+    };
+
     // Menu event listeners
     onFileOpened: (callback: (content: string, path: string) => void) => () => void;
     onRequestSave: (callback: (format: 'md' | 'html' | 'txt') => void) => () => void;

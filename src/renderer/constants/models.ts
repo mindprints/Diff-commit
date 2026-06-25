@@ -58,8 +58,8 @@ export const MODELS: Model[] = [
         outputPrice: 1.75
     },
     {
-        id: "google/gemini-3-pro-preview",
-        name: "Gemini 3 Pro Preview",
+        id: "google/gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
         provider: "Google",
         contextWindow: 1048576,
         inputPrice: 2.00,
@@ -82,8 +82,8 @@ export const MODELS: Model[] = [
         outputPrice: 2.50
     },
     {
-        id: "google/gemini-3-flash-preview",
-        name: "Gemini 3 Flash Preview",
+        id: "google/gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
         provider: "Google",
         contextWindow: 1000000,
         inputPrice: 0.50,

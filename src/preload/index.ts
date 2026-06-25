@@ -78,6 +78,25 @@ interface RepoIntelAPI {
     findRedundancy: (repoPath: string, options?: { threshold?: number; topK?: number }) => Promise<RepoRedundancyReport>;
 }
 
+interface GoogleDriveSyncStatus {
+    configured: boolean;
+    connected: boolean;
+    autoSync: boolean;
+    lastSyncAt: number | null;
+    lastRestoreAt: number | null;
+    lastError: string | null;
+    remoteModifiedTime: string | null;
+}
+
+interface GoogleDriveAuthStart {
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    verificationUrlComplete?: string;
+    expiresIn: number;
+    interval: number;
+}
+
 // Full ElectronAPI interface
 export interface ElectronAPI {
     platform: string;
@@ -132,6 +151,16 @@ export interface ElectronAPI {
 
     // Repo Intelligence (repo-scoped analysis/indexing)
     repoIntel: RepoIntelAPI;
+
+    googleDrive: {
+        getStatus: () => Promise<GoogleDriveSyncStatus>;
+        setCredentials: (clientId: string, clientSecret: string) => Promise<GoogleDriveSyncStatus>;
+        setAutoSync: (enabled: boolean) => Promise<GoogleDriveSyncStatus>;
+        startAuth: () => Promise<GoogleDriveAuthStart>;
+        pollAuth: (deviceCode: string) => Promise<GoogleDriveSyncStatus | { pending: true; slowDown?: boolean }>;
+        syncNow: () => Promise<GoogleDriveSyncStatus>;
+        restore: () => Promise<GoogleDriveSyncStatus>;
+    };
 
     // AI Prompts CRUD
     getPrompts: () => Promise<AIPrompt[]>;
@@ -264,6 +293,16 @@ const electronAPI: ElectronAPI = {
         clearIndex: (repoPath: string) => ipcRenderer.invoke('repo-intel:clear-index', repoPath),
         queryIndex: (repoPath: string, query: string, options?: RepoIntelQueryOptions) => ipcRenderer.invoke('repo-intel:query-index', repoPath, query, options),
         findRedundancy: (repoPath: string, options?: { threshold?: number; topK?: number }) => ipcRenderer.invoke('repo-intel:find-redundancy', repoPath, options),
+    },
+
+    googleDrive: {
+        getStatus: () => ipcRenderer.invoke('google-drive:get-status'),
+        setCredentials: (clientId: string, clientSecret: string) => ipcRenderer.invoke('google-drive:set-credentials', clientId, clientSecret),
+        setAutoSync: (enabled: boolean) => ipcRenderer.invoke('google-drive:set-auto-sync', enabled),
+        startAuth: () => ipcRenderer.invoke('google-drive:start-auth'),
+        pollAuth: (deviceCode: string) => ipcRenderer.invoke('google-drive:poll-auth', deviceCode),
+        syncNow: () => ipcRenderer.invoke('google-drive:sync-now'),
+        restore: () => ipcRenderer.invoke('google-drive:restore'),
     },
 
     // Menu event listeners (from main process)

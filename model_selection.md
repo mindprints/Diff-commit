@@ -45,7 +45,7 @@ Created Sep 30, 2025 202,752 context
 
 $0.40/M input tokens $1.75/M output tokens
 
-### [google](https://openrouter.ai/google)/gemini-3-pro-preview
+### [google](https://openrouter.ai/google)/gemini-2.5-pro
 
 
 
